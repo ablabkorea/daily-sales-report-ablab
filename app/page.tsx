@@ -1,6 +1,4 @@
 "use client";
-export const dynamic = "force-dynamic";
-
 
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
@@ -3242,10 +3240,15 @@ function monthEnd(month: string) {
   return `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
 }
 
+function parseYmd(date: string) {
+  const [y, m, d] = date.split("-").map(Number);
+  return { y, m, d };
+}
+
 function addDays(date: string, days: number) {
-  const d = new Date(`${date}T00:00:00+09:00`);
-  d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const { y, m, d } = parseYmd(date);
+  const next = new Date(y, m - 1, d + days);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
 }
 
 function previousMonth(month: string) {
@@ -3352,7 +3355,8 @@ function monthText(v: unknown) {
 }
 
 function dayWeight(date: string, holidays: string[]) {
-  const day = new Date(`${date}T00:00:00+09:00`).getDay();
+  const { y, m, d } = parseYmd(date);
+  const day = new Date(y, m - 1, d).getDay();
   const isHoliday = holidays.includes(date);
   if (day === 0) return 0;
   if (day === 6) return 0.5;
@@ -3368,7 +3372,7 @@ function getTimeGone(month: string, date: string, timeConfigs: TimeConfig[]) {
   let totalDays = 0;
   let progressedDays = 0;
 
-  for (let d = start; d <= end; d = addDays(d, 1)) {
+  for (let d = start, guard = 0; d <= end && guard < 40; d = addDays(d, 1), guard += 1) {
     const w = dayWeight(d, holidays);
     totalDays += w;
     if (d <= date) progressedDays += w;
