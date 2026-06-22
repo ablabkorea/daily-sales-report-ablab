@@ -1,6 +1,8 @@
 "use client";
+export const dynamic = "force-dynamic";
 
-import { useEffect, useMemo, useState } from "react";
+
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
 type Channel = string;
@@ -3240,15 +3242,10 @@ function monthEnd(month: string) {
   return `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
 }
 
-function parseYmd(date: string) {
-  const [y, m, d] = date.split("-").map(Number);
-  return { y, m, d };
-}
-
 function addDays(date: string, days: number) {
-  const { y, m, d } = parseYmd(date);
-  const next = new Date(y, m - 1, d + days);
-  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+  const d = new Date(`${date}T00:00:00+09:00`);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function previousMonth(month: string) {
@@ -3355,8 +3352,7 @@ function monthText(v: unknown) {
 }
 
 function dayWeight(date: string, holidays: string[]) {
-  const { y, m, d } = parseYmd(date);
-  const day = new Date(y, m - 1, d).getDay();
+  const day = new Date(`${date}T00:00:00+09:00`).getDay();
   const isHoliday = holidays.includes(date);
   if (day === 0) return 0;
   if (day === 6) return 0.5;
@@ -3372,7 +3368,7 @@ function getTimeGone(month: string, date: string, timeConfigs: TimeConfig[]) {
   let totalDays = 0;
   let progressedDays = 0;
 
-  for (let d = start, guard = 0; d <= end && guard < 40; d = addDays(d, 1), guard += 1) {
+  for (let d = start; d <= end; d = addDays(d, 1)) {
     const w = dayWeight(d, holidays);
     totalDays += w;
     if (d <= date) progressedDays += w;
@@ -3450,19 +3446,150 @@ function makeSale(
   };
 }
 
+type AppStateRow<T> = {
+  id: string;
+  data: T;
+  updated_at?: string;
+};
+
+function supabaseConfig() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, "");
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+
+  if (!url || !key) return null;
+
+  return {
+    endpoint: `${url}/rest/v1/app_state`,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+  };
+}
+
+async function loadSharedState<T>(key: string): Promise<T | null> {
+  const config = supabaseConfig();
+  if (!config) return null;
+
+  const response = await fetch(`${config.endpoint}?id=eq.${encodeURIComponent(key)}&select=data&limit=1`, {
+    method: "GET",
+    headers: config.headers,
+    cache: "no-store",
+  });
+
+  if (!response.ok) throw new Error(`Supabase load failed: ${response.status}`);
+  const rows = (await response.json()) as AppStateRow<T>[];
+  return rows[0]?.data ?? null;
+}
+
+async function saveSharedState<T>(key: string, value: T) {
+  const config = supabaseConfig();
+  if (!config) return;
+
+  const response = await fetch(`${config.endpoint}?on_conflict=id`, {
+    method: "POST",
+    headers: {
+      ...config.headers,
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify({
+      id: key,
+      data: value,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+
+  if (!response.ok) throw new Error(`Supabase save failed: ${response.status}`);
+}
+
 function useLocal<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(initial);
   const [loaded, setLoaded] = useState(false);
+  const valueRef = useRef<T>(initial);
+  const skipNextRemoteSave = useRef(false);
+  const valueJson = JSON.stringify(value);
 
   useEffect(() => {
-    const saved = localStorage.getItem(key);
-    if (saved) setValue(JSON.parse(saved));
-    setLoaded(true);
+    valueRef.current = value;
+  }, [value]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrate() {
+      try {
+        const localSaved = window.localStorage.getItem(key);
+        if (localSaved && !cancelled) {
+          const parsed = JSON.parse(localSaved) as T;
+          valueRef.current = parsed;
+          setValue(parsed);
+        }
+
+        const remoteSaved = await loadSharedState<T>(key);
+        if (!cancelled && remoteSaved !== null) {
+          skipNextRemoteSave.current = true;
+          valueRef.current = remoteSaved;
+          setValue(remoteSaved);
+        }
+      } catch (error) {
+        console.warn("공유 데이터 불러오기 실패, 브라우저 저장소를 우선 사용합니다.", error);
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    }
+
+    hydrate();
+
+    return () => {
+      cancelled = true;
+    };
   }, [key]);
 
   useEffect(() => {
-    if (loaded) localStorage.setItem(key, JSON.stringify(value));
-  }, [key, value, loaded]);
+    if (!loaded) return;
+
+    window.localStorage.setItem(key, valueJson);
+
+    if (skipNextRemoteSave.current) {
+      skipNextRemoteSave.current = false;
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      saveSharedState(key, value).catch((error) => {
+        console.warn("공유 데이터 저장 실패, 브라우저 저장소에만 저장되었습니다.", error);
+      });
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [key, value, valueJson, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+
+    const syncFromRemote = async () => {
+      try {
+        if (typeof document !== "undefined" && document.hidden) return;
+        const remoteSaved = await loadSharedState<T>(key);
+        if (remoteSaved !== null && JSON.stringify(remoteSaved) !== JSON.stringify(valueRef.current)) {
+          skipNextRemoteSave.current = true;
+          valueRef.current = remoteSaved;
+          setValue(remoteSaved);
+        }
+      } catch {
+        // 네트워크가 잠시 끊겨도 로컬 화면은 계속 사용합니다.
+      }
+    };
+
+    const interval = window.setInterval(syncFromRemote, 2500);
+    window.addEventListener("focus", syncFromRemote);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", syncFromRemote);
+    };
+  }, [key, loaded]);
 
   return [value, setValue] as const;
 }
