@@ -3433,10 +3433,13 @@ function makeSale(
   salesAmount: number,
   costAmount: number,
   profitAmount: number,
-  stores: Store[]
+  stores: Store[],
+  uploadedProfitRate?: number
 ): SalesRecord {
   const s = storeMap(stores).get(storeCode);
-  const profitRate = salesAmount ? (profitAmount / salesAmount) * 100 : 0;
+  // 업로드 파일에 이익율/이익률 컬럼이 있으면 그 값을 그대로 사용합니다.
+  // 없을 때만 기존 방식대로 이익금액 / 매출금액으로 보정 계산합니다.
+  const profitRate = Number.isFinite(uploadedProfitRate) ? Number(uploadedProfitRate) : salesAmount ? (profitAmount / salesAmount) * 100 : 0;
   return {
     id: `${period}|${refMonth}|${saleDate}|${storeCode}|${itemCode}|${itemName}`,
     period,
@@ -3679,6 +3682,27 @@ function groupByKey(records: SalesRecord[], keyFn: (r: SalesRecord) => string) {
 
 function sum(records: SalesRecord[], key: keyof Pick<SalesRecord, "salesAmount" | "costAmount" | "profitAmount" | "quantity">) {
   return records.reduce((a, b) => a + Number(b[key] || 0), 0);
+}
+
+function profitRateValue(value: unknown) {
+  if (value === undefined || value === null || norm(value) === "") return undefined;
+
+  if (typeof value === "number") {
+    // 엑셀에서 % 서식으로 저장된 값은 0.25처럼 들어올 수 있어 화면 표시는 25.0%로 맞춥니다.
+    return Math.abs(value) > 0 && Math.abs(value) <= 1 ? value * 100 : value;
+  }
+
+  const text = norm(value);
+  const parsed = num(text);
+  return text.includes("%") ? parsed : Math.abs(parsed) > 0 && Math.abs(parsed) <= 1 ? parsed * 100 : parsed;
+}
+
+function weightedProfitRate(records: SalesRecord[]) {
+  const salesTotal = sum(records, "salesAmount");
+  if (!salesTotal) return 0;
+
+  const weighted = records.reduce((total, row) => total + Number(row.salesAmount || 0) * Number(row.profitRate || 0), 0);
+  return weighted / salesTotal;
 }
 
 function exportExcel(rows: Record<string, string | number>[], fileName: string) {
@@ -3947,7 +3971,7 @@ function Dashboard({ stores, sales, targets, ests, month, date, timeGone, codeMa
   const prevMonthSales = sum(prevMonth, "salesAmount");
   const prevYearSales = sum(prevYear, "salesAmount");
   const profitAmount = sum(current, "profitAmount");
-  const profitRate = currentSales ? (profitAmount / currentSales) * 100 : 0;
+  const profitRate = weightedProfitRate(current);
   const { storeTarget, nonStoreTarget, storeEst, nonStoreEst } = metricsByStoreType(stores, targets, ests, month);
   const targetTotal = storeTarget + nonStoreTarget;
   const estTotal = storeEst + nonStoreEst;
@@ -4222,7 +4246,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
     const prevMonthSales = sum(prevMonthRecords, "salesAmount");
     const prevYearSales = sum(prevYearRecords, "salesAmount");
     const profitAmount = sum(currentRecords, "profitAmount");
-    const profitRate = currentSales ? (profitAmount / currentSales) * 100 : 0;
+    const profitRate = weightedProfitRate(currentRecords);
     const prevMonthRate = prevMonthSales ? ((currentSales - prevMonthSales) / prevMonthSales) * 100 : 0;
     const prevYearRate = prevYearSales ? ((currentSales - prevYearSales) / prevYearSales) * 100 : 0;
     const est = estMap.get(key) || 0;
@@ -4853,7 +4877,7 @@ function ItemDrillModal({ itemCode, itemName, rows, onClose }: { itemCode: strin
   const totalQuantity = sum(rows, "quantity");
   const totalCost = sum(rows, "costAmount");
   const totalProfit = sum(rows, "profitAmount");
-  const totalProfitRate = totalSales ? (totalProfit / totalSales) * 100 : 0;
+  const totalProfitRate = weightedProfitRate(rows);
   const excelRows = orderRowsForExcel(rows);
 
   return (
@@ -5709,7 +5733,16 @@ function UploadPage({ stores, setStores, sales, setSales, month, timeConfigs, se
       const quantity = num(r["판매 수량"] ?? r["수량"]);
       const salesAmount = num(r["판매 금액"] ?? r["판매금액"] ?? r["매출금액"] ?? r["당월 매출"] ?? r["매출"]);
       const costAmount = num(r["원가 금액"] ?? r["원가금액"] ?? r["원가"]);
-      const profitAmount = num(r["이익 금액"] ?? r["이익금액"] ?? r["마진액"]);
+      const profitAmount = num(r["이익 금액"] ?? r["이익금액"] ?? r["매출 이익"] ?? r["매출이익"] ?? r["매출총이익"] ?? r["마진액"]);
+      const uploadedProfitRate = profitRateValue(
+        r["이익율"] ??
+        r["이익률"] ??
+        r["매출 이익율"] ??
+        r["매출 이익률"] ??
+        r["매출이익율"] ??
+        r["매출이익률"] ??
+        r["마진율"]
+      );
       const mapping = storeMap(stores).get(storeCode);
 
       return makeSale(
@@ -5724,7 +5757,8 @@ function UploadPage({ stores, setStores, sales, setSales, month, timeConfigs, se
         salesAmount,
         costAmount,
         profitAmount,
-        stores
+        stores,
+        uploadedProfitRate
       );
     }).filter((r) => r.saleDate && r.storeCode && r.salesAmount !== 0);
 
