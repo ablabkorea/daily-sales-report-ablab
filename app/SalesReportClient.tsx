@@ -4297,7 +4297,6 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
     전월대비: pct(r.prevMonthRate),
     "당일까지 매출": r.currentSales,
     "당월 전체 매출": r.fullMonthSales,
-    "TIME GONE": pct(r.timeGone),
     "TIME GONE 대비": pct(r.timeGoneGap),
     EST: r.est,
     "EST 달성률": pct(r.estRate),
@@ -4368,7 +4367,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
         )}
 
         <div className="max-h-[62vh] overflow-auto">
-          <table className="w-full min-w-[1420px] table-auto border border-slate-200 text-[12px] leading-tight">
+          <table className="w-full min-w-[1320px] table-auto border border-slate-200 text-[12px] leading-tight">
             <thead>
               <tr className="bg-slate-100">
                 <ThCompactSortable w="w-[10%]" sortKey="label" sortConfig={sortConfig} onSort={requestSort}>{view.replace("별", "")}</ThCompactSortable>
@@ -4379,7 +4378,6 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
                 <ThCompactSortable right tone="blue" sortKey="prevMonthRate" sortConfig={sortConfig} onSort={requestSort}>전월대비</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>당월 전체 매출</ThCompactSortable>
-                {!compact && <ThCompactSortable right tone="gray" sortKey="timeGone" sortConfig={sortConfig} onSort={requestSort}>TIME GONE</ThCompactSortable>}
                 <ThCompactSortable right tone="gray" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>TIME GONE 대비</ThCompactSortable>
                 <ThCompactSortable right tone="purple" sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
                 <ThCompactSortable right tone="purple" sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
@@ -4389,7 +4387,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
             </thead>
             <tbody>
               {sortedRows.length === 0 ? (
-                <tr><td colSpan={compact ? 12 : 13} className="border p-8 text-center text-slate-500">표시할 데이터가 없습니다.</td></tr>
+                <tr><td colSpan={compact ? 11 : view === "거래처별" ? 12 : 11} className="border p-8 text-center text-slate-500">표시할 데이터가 없습니다.</td></tr>
               ) : sortedRows.map((r) => (
                 <tr key={r.key}>
                   <TdCompact bold>{r.label}</TdCompact>
@@ -4407,7 +4405,6 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
                   <TdCompact right amount>{pct(r.prevMonthRate)}</TdCompact>
                   <ClickableAmountCell value={r.currentSales} onClick={() => openDrill(r, "current")} />
                   <ClickableAmountCell value={r.fullMonthSales} onClick={() => openDrill(r, "currentFullMonth")} />
-                  {!compact && <TdCompact right amount>{pct(r.timeGone)}</TdCompact>}
                   <TdCompact right amount>{pct(r.timeGoneGap)}</TdCompact>
                   <TdCompact right amount>{won(r.est)}</TdCompact>
                   <TdCompact right amount>{pct(r.estRate)}</TdCompact>
@@ -4437,35 +4434,9 @@ function ThCompactSortable({ children, sortKey, sortConfig, onSort, right = fals
   );
 }
 
-function InactiveOrdersModal({ stores, sales, month, onClose }: { stores: Store[]; sales: SalesRecord[]; month: string; onClose: () => void }) {
-  const [tab, setTab] = useState<InactiveOrderTab>("거래처별");
+function InactiveOrdersModal({ sales, month, onClose }: { stores: Store[]; sales: SalesRecord[]; month: string; onClose: () => void }) {
   const startDate = threeMonthStart(month);
   const endDate = monthEnd(month);
-  const activeStores = stores.filter((s) => s.status === "거래중");
-  const recentSales = sales.filter((s) => inRange(s.saleDate, startDate, endDate));
-  const recentStoreCodes = new Set(recentSales.map((s) => s.storeCode));
-  const latestSaleByStore = new Map<string, SalesRecord>();
-
-  sales.forEach((r) => {
-    const prev = latestSaleByStore.get(r.storeCode);
-    if (!prev || r.saleDate > prev.saleDate) latestSaleByStore.set(r.storeCode, r);
-  });
-
-  const inactiveStores = activeStores
-    .filter((s) => !recentStoreCodes.has(s.code))
-    .map((s) => {
-      const latest = latestSaleByStore.get(s.code);
-      return {
-        code: s.code,
-        name: s.name,
-        brand: s.brand,
-        manager: s.manager || "미지정",
-        channel: s.channel,
-        lastDate: latest?.saleDate || "-",
-        lastAmount: latest?.salesAmount || 0,
-      };
-    })
-    .sort((a, b) => String(a.lastDate).localeCompare(String(b.lastDate)) || a.name.localeCompare(b.name, "ko-KR"));
 
   const itemMap = new Map<string, { itemCode: string; itemName: string; latest?: SalesRecord; recent: boolean }>();
   sales.forEach((r) => {
@@ -4475,6 +4446,7 @@ function InactiveOrdersModal({ stores, sales, month, onClose }: { stores: Store[
     if (!current.latest || r.saleDate > current.latest.saleDate) current.latest = r;
     itemMap.set(key, current);
   });
+
   const inactiveItems = Array.from(itemMap.values())
     .filter((item) => !item.recent)
     .map((item) => ({
@@ -4486,15 +4458,6 @@ function InactiveOrdersModal({ stores, sales, month, onClose }: { stores: Store[
     }))
     .sort((a, b) => String(a.lastDate).localeCompare(String(b.lastDate)) || a.itemName.localeCompare(b.itemName, "ko-KR"));
 
-  const storeExcelRows = inactiveStores.map((r) => ({
-    거래처코드: r.code,
-    거래처명: r.name,
-    브랜드: r.brand,
-    담당자: r.manager,
-    채널: r.channel,
-    마지막주문일: r.lastDate,
-    마지막매출금액: r.lastAmount,
-  }));
   const itemExcelRows = inactiveItems.map((r) => ({
     상품코드: r.itemCode,
     상품명: r.itemName,
@@ -4507,22 +4470,20 @@ function InactiveOrdersModal({ stores, sales, month, onClose }: { stores: Store[
     const to = window.prompt("메일을 받을 주소를 입력하세요. 여러 명이면 쉼표로 구분해주세요.");
     if (!to) return;
 
-    const targetRows = tab === "거래처별" ? inactiveStores : inactiveItems;
-    const excelRows = tab === "거래처별" ? storeExcelRows : itemExcelRows;
-    const fileName = `3개월_미주문_${tab}_${month}`;
-    const subject = `[에이비랩] 3개월 미주문 ${tab} 현황_${month}`;
+    const fileName = `3개월_미주문_품목별_${month}`;
+    const subject = `[에이비랩] 3개월 미주문 품목별 현황_${month}`;
     const bodyLines = [
       "안녕하세요.",
       "",
-      `${startDate} ~ ${endDate} 기준 3개월 미주문 ${tab} 현황 공유드립니다.`,
-      `총 ${targetRows.length.toLocaleString("ko-KR")}건입니다.`,
+      `${startDate} ~ ${endDate} 기준 3개월 미주문 품목별 현황 공유드립니다.`,
+      `총 ${inactiveItems.length.toLocaleString("ko-KR")}건입니다.`,
       "",
       `방금 자동 다운로드된 ${fileName}.xlsx 파일을 첨부해서 전달드립니다.`,
       "",
       "확인 부탁드립니다.",
     ];
 
-    exportExcel(excelRows, fileName);
+    exportExcel(itemExcelRows, fileName);
     window.setTimeout(() => {
       window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyLines.join("\n"))}`;
     }, 300);
@@ -4530,17 +4491,17 @@ function InactiveOrdersModal({ stores, sales, month, onClose }: { stores: Store[
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
-      <div className="flex max-h-[88vh] w-full max-w-6xl flex-col rounded-2xl bg-white shadow-2xl">
+      <div className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl">
         <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">3개월 미주문 현황</h3>
-            <p className="mt-1 text-xs text-slate-500">기준 기간: {startDate} ~ {endDate}</p>
+            <h3 className="text-lg font-bold text-slate-900">3개월 미주문 품목 현황</h3>
+            <p className="mt-1 text-xs text-slate-500">기준 기간: {startDate} ~ {endDate} · 총 {inactiveItems.length.toLocaleString("ko-KR")}건</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={sendInactiveMail} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700">
               메일 전송(파일 다운로드)
             </button>
-            <button type="button" onClick={() => exportExcel(tab === "거래처별" ? storeExcelRows : itemExcelRows, `3개월_미주문_${tab}_${month}`)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700">
+            <button type="button" onClick={() => exportExcel(itemExcelRows, `3개월_미주문_품목별_${month}`)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700">
               엑셀 다운로드
             </button>
             <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
@@ -4549,78 +4510,36 @@ function InactiveOrdersModal({ stores, sales, month, onClose }: { stores: Store[
           </div>
         </div>
 
-        <div className="border-b border-slate-200 px-4 pt-3">
-          <div className="flex gap-2">
-            {(["거래처별", "품목별"] as InactiveOrderTab[]).map((item) => (
-              <button key={item} type="button" onClick={() => setTab(item)} className={`rounded-t-lg px-4 py-2 text-sm font-semibold ${tab === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
-                {item} {item === "거래처별" ? inactiveStores.length : inactiveItems.length}건
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="min-h-0 flex-1 overflow-auto p-4">
-          {tab === "거래처별" ? (
-            <table className="w-full min-w-[920px] border border-slate-200 text-xs">
-              <thead>
-                <tr className="bg-slate-100">
-                  <th className="border px-2 py-2 text-left font-bold">거래처코드</th>
-                  <th className="border px-2 py-2 text-left font-bold">거래처명</th>
-                  <th className="border px-2 py-2 text-left font-bold">브랜드</th>
-                  <th className="border px-2 py-2 text-left font-bold">담당자</th>
-                  <th className="border px-2 py-2 text-left font-bold">채널</th>
-                  <th className="border px-2 py-2 text-left font-bold">마지막 주문일</th>
-                  <th className="border px-2 py-2 text-right font-bold">마지막 매출금액</th>
+          <table className="w-full min-w-[860px] border border-slate-200 text-xs">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="border px-2 py-2 text-left font-bold">상품코드</th>
+                <th className="border px-2 py-2 text-left font-bold">상품명</th>
+                <th className="border px-2 py-2 text-left font-bold">마지막 주문일</th>
+                <th className="border px-2 py-2 text-left font-bold">마지막 거래처</th>
+                <th className="border px-2 py-2 text-right font-bold">마지막 매출금액</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inactiveItems.length === 0 ? (
+                <tr><td colSpan={5} className="border p-8 text-center text-slate-500">3개월 미주문 품목이 없습니다.</td></tr>
+              ) : inactiveItems.map((r) => (
+                <tr key={`${r.itemCode}|${r.itemName}`} className="hover:bg-slate-50">
+                  <td className="border px-2 py-2">{r.itemCode}</td>
+                  <td className="border px-2 py-2 font-semibold">{r.itemName}</td>
+                  <td className="border px-2 py-2">{r.lastDate}</td>
+                  <td className="border px-2 py-2">{r.lastStore}</td>
+                  <td className="border px-2 py-2 text-right font-semibold text-slate-900">{won(r.lastAmount)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {inactiveStores.length === 0 ? (
-                  <tr><td colSpan={7} className="border p-8 text-center text-slate-500">3개월 미주문 거래처가 없습니다.</td></tr>
-                ) : inactiveStores.map((r) => (
-                  <tr key={r.code} className="hover:bg-slate-50">
-                    <td className="border px-2 py-2">{r.code}</td>
-                    <td className="border px-2 py-2 font-semibold">{r.name}</td>
-                    <td className="border px-2 py-2">{r.brand}</td>
-                    <td className="border px-2 py-2">{r.manager}</td>
-                    <td className="border px-2 py-2">{r.channel}</td>
-                    <td className="border px-2 py-2">{r.lastDate}</td>
-                    <td className="border px-2 py-2 text-right font-semibold text-slate-900">{won(r.lastAmount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <table className="w-full min-w-[860px] border border-slate-200 text-xs">
-              <thead>
-                <tr className="bg-slate-100">
-                  <th className="border px-2 py-2 text-left font-bold">상품코드</th>
-                  <th className="border px-2 py-2 text-left font-bold">상품명</th>
-                  <th className="border px-2 py-2 text-left font-bold">마지막 주문일</th>
-                  <th className="border px-2 py-2 text-left font-bold">마지막 거래처</th>
-                  <th className="border px-2 py-2 text-right font-bold">마지막 매출금액</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inactiveItems.length === 0 ? (
-                  <tr><td colSpan={5} className="border p-8 text-center text-slate-500">3개월 미주문 품목이 없습니다.</td></tr>
-                ) : inactiveItems.map((r) => (
-                  <tr key={`${r.itemCode}|${r.itemName}`} className="hover:bg-slate-50">
-                    <td className="border px-2 py-2">{r.itemCode}</td>
-                    <td className="border px-2 py-2 font-semibold">{r.itemName}</td>
-                    <td className="border px-2 py-2">{r.lastDate}</td>
-                    <td className="border px-2 py-2">{r.lastStore}</td>
-                    <td className="border px-2 py-2 text-right font-semibold text-slate-900">{won(r.lastAmount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   );
 }
-
 
 function DormantAccountPage({ stores, sales, month }: { stores: Store[]; sales: SalesRecord[]; month: string }) {
   const [tab, setTab] = useState<InactiveOrderTab>("거래처별");
