@@ -1,7 +1,5 @@
-import ClientOnlySalesReport from "./ClientOnlySalesReport";
-
-export const dynamic = "force-dynamic";
+import SalesReportClient from "./SalesReportClient";
 
 export default function Page() {
-  return <ClientOnlySalesReport />;
+  return <SalesReportClient />;
 }
