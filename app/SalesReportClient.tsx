@@ -3311,7 +3311,22 @@ function pct(n: number) {
 }
 
 function num(v: unknown) {
-  return typeof v === "number" ? v : Number(String(v ?? "").replace(/,/g, "").replace("%", "")) || 0;
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+
+  const raw = String(v ?? "").trim();
+  if (!raw) return 0;
+
+  const isParenthesesNegative = /^\(.*\)$/.test(raw);
+
+  const cleaned = raw
+    .replace(/[,\s₩원%]/g, "")
+    .replace(/[−–—]/g, "-")
+    .replace(/[()]/g, "");
+
+  const parsed = Number(cleaned);
+  if (!Number.isFinite(parsed)) return 0;
+
+  return isParenthesesNegative ? -Math.abs(parsed) : parsed;
 }
 
 function norm(v: unknown) {
