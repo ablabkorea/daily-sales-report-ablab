@@ -3695,6 +3695,14 @@ function sum(records: SalesRecord[], key: keyof Pick<SalesRecord, "salesAmount" 
   return records.reduce((a, b) => a + Number(b[key] || 0), 0);
 }
 
+function weightedProfitRate(records: SalesRecord[]) {
+  const salesTotal = sum(records, "salesAmount");
+  if (!salesTotal) return 0;
+
+  const weighted = records.reduce((total, row) => total + Number(row.salesAmount || 0) * Number(row.profitRate || 0), 0);
+  return weighted / salesTotal;
+}
+
 function exportExcel(rows: Record<string, string | number>[], fileName: string) {
   if (!rows.length) {
     alert("다운로드할 데이터가 없습니다.");
