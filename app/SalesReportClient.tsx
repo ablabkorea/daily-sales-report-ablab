@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
 type Channel = string;
@@ -8,7 +8,7 @@ type Manager = string;
 type StoreType = string;
 type PeriodType = "current" | "prevMonth" | "prevYear";
 type SalesView = "거래처별" | "브랜드별" | "담당자별" | "채널별";
-type MonthStartTab = "거래처 매핑관리" | "Target 관리" | "EST 관리" | "업로드 관리";
+type MonthStartTab = "거래처 매핑관리" | "휴면거래처관리" | "Target 관리" | "EST 관리" | "업로드 관리";
 type DrillPeriod = "prevYear" | "prevMonth" | "current" | "currentFullMonth";
 type SalesStatusSortKey = "label" | "prevYearSales" | "prevYearRate" | "prevMonthSales" | "prevMonthRate" | "currentSales" | "fullMonthSales" | "timeGone" | "timeGoneGap" | "est" | "estRate" | "profitAmount" | "profitRate";
 type SortDirection = "asc" | "desc";
@@ -23,6 +23,15 @@ type Store = {
   storeType: StoreType;
   brand: string;
   status: "거래중" | "거래종료";
+};
+
+type StoreCodeMapping = {
+  id: string;
+  oldCode: string;
+  oldName: string;
+  currentCode: string;
+  currentName: string;
+  memo?: string;
 };
 
 type SalesRecord = {
@@ -68,7 +77,7 @@ type TimeConfig = {
 const CHANNELS: Channel[] = ["도매", "체인", "체인물류", "식자재마트", "제조", "권역배송", "온라인", "매장", "비매장", "기업", "매입", "본사"];
 const MANAGERS: Manager[] = ["SY", "KT", "SW", "NH", "Bomi", "BM", "bomi"];
 const SALES_VIEWS: SalesView[] = ["거래처별", "브랜드별", "담당자별", "채널별"];
-const MONTH_TABS: MonthStartTab[] = ["거래처 매핑관리", "Target 관리", "EST 관리", "업로드 관리"];
+const MONTH_TABS: MonthStartTab[] = ["거래처 매핑관리", "휴면거래처관리", "Target 관리", "EST 관리", "업로드 관리"];
 
 const initialStores: Store[] = [
   {
@@ -3231,10 +3240,15 @@ function monthEnd(month: string) {
   return `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
 }
 
+function parseYmd(date: string) {
+  const [y, m, d] = date.split("-").map(Number);
+  return { y, m, d };
+}
+
 function addDays(date: string, days: number) {
-  const d = new Date(`${date}T00:00:00+09:00`);
-  d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const { y, m, d } = parseYmd(date);
+  const next = new Date(y, m - 1, d + days);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
 }
 
 function previousMonth(month: string) {
@@ -3341,7 +3355,8 @@ function monthText(v: unknown) {
 }
 
 function dayWeight(date: string, holidays: string[]) {
-  const day = new Date(`${date}T00:00:00+09:00`).getDay();
+  const { y, m, d } = parseYmd(date);
+  const day = new Date(y, m - 1, d).getDay();
   const isHoliday = holidays.includes(date);
   if (day === 0) return 0;
   if (day === 6) return 0.5;
@@ -3357,7 +3372,7 @@ function getTimeGone(month: string, date: string, timeConfigs: TimeConfig[]) {
   let totalDays = 0;
   let progressedDays = 0;
 
-  for (let d = start; d <= end; d = addDays(d, 1)) {
+  for (let d = start, guard = 0; d <= end && guard < 40; d = addDays(d, 1), guard += 1) {
     const w = dayWeight(d, holidays);
     totalDays += w;
     if (d <= date) progressedDays += w;
@@ -3370,6 +3385,32 @@ function getTimeGone(month: string, date: string, timeConfigs: TimeConfig[]) {
 
 function storeMap(stores: Store[]) {
   return new Map(stores.map((s) => [s.code, s]));
+}
+
+function normalizeStoreNameKey(value: unknown) {
+  return norm(value)
+    .toLowerCase()
+    .replace(/\s/g, "")
+    .replace(/주식회사/g, "")
+    .replace(/\(주\)/g, "")
+    .replace(/㈜/g, "")
+    .replace(/[._-]/g, "");
+}
+
+function resolveStoreInfo(storeCode: string, fallbackName: string, fallback: Partial<Store>, stores: Store[]) {
+  const original = storeMap(stores).get(storeCode);
+
+  return {
+    code: storeCode || fallbackName || "미지정",
+    name: original?.name || fallbackName || storeCode || "미지정",
+    channel: original?.channel || fallback.channel || "미지정",
+    manager: original?.manager || fallback.manager || "미지정",
+    storeType: original?.storeType || fallback.storeType || "비매장",
+    brand: original?.brand || fallback.brand || "미지정",
+    status: original?.status || "거래중",
+    originalCode: storeCode,
+    originalName: original?.name || fallbackName || storeCode,
+  };
 }
 
 function makeSale(
@@ -3409,19 +3450,173 @@ function makeSale(
   };
 }
 
+type AppStateRow<T> = {
+  id: string;
+  data: T;
+  updated_at?: string;
+};
+
+function supabaseConfig() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, "");
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+
+  if (!url || !key) return null;
+
+  return {
+    endpoint: `${url}/rest/v1/app_state`,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+  };
+}
+
+async function loadSharedState<T>(key: string): Promise<T | null> {
+  const config = supabaseConfig();
+  if (!config) return null;
+
+  const response = await fetch(`${config.endpoint}?id=eq.${encodeURIComponent(key)}&select=data&limit=1`, {
+    method: "GET",
+    headers: config.headers,
+    cache: "no-store",
+  });
+
+  if (!response.ok) throw new Error(`Supabase load failed: ${response.status}`);
+  const rows = (await response.json()) as AppStateRow<T>[];
+  return rows[0]?.data ?? null;
+}
+
+async function saveSharedState<T>(key: string, value: T) {
+  const config = supabaseConfig();
+  if (!config) return;
+
+  const response = await fetch(`${config.endpoint}?on_conflict=id`, {
+    method: "POST",
+    headers: {
+      ...config.headers,
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify({
+      id: key,
+      data: value,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+
+  if (!response.ok) throw new Error(`Supabase save failed: ${response.status}`);
+}
+
 function useLocal<T>(key: string, initial: T) {
-  const [value, setValue] = useState<T>(initial);
+  const [value, rawSetValue] = useState<T>(initial);
   const [loaded, setLoaded] = useState(false);
+  const valueRef = useRef<T>(initial);
+  const saveTimerRef = useRef<number | null>(null);
+  const localEditUntilRef = useRef(0);
+  const lastSavedJsonRef = useRef("");
+  const keyRef = useRef(key);
 
   useEffect(() => {
-    const saved = localStorage.getItem(key);
-    if (saved) setValue(JSON.parse(saved));
-    setLoaded(true);
+    keyRef.current = key;
+  }, [key]);
+
+  const persistNow = (nextValue: T) => {
+    if (typeof window === "undefined") return;
+
+    const json = JSON.stringify(nextValue);
+    valueRef.current = nextValue;
+    lastSavedJsonRef.current = json;
+    localEditUntilRef.current = Date.now() + 6000;
+    window.localStorage.setItem(keyRef.current, json);
+
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      saveSharedState(keyRef.current, nextValue)
+        .then(() => {
+          // 업로드/수정 직후에는 다른 탭에서 이전 데이터를 가져와 덮어쓰지 않도록 잠시 보호합니다.
+          localEditUntilRef.current = Date.now() + 2500;
+        })
+        .catch((error) => {
+          console.warn("공유 데이터 저장 실패, 브라우저 저장소에만 저장되었습니다.", error);
+        });
+    }, 80);
+  };
+
+  const setValue: React.Dispatch<React.SetStateAction<T>> = (next) => {
+    rawSetValue((prev) => {
+      const resolved = typeof next === "function" ? (next as (prev: T) => T)(prev) : next;
+      persistNow(resolved);
+      return resolved;
+    });
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrate() {
+      try {
+        const localSaved = window.localStorage.getItem(key);
+        if (localSaved && !cancelled) {
+          const parsed = JSON.parse(localSaved) as T;
+          valueRef.current = parsed;
+          lastSavedJsonRef.current = JSON.stringify(parsed);
+          rawSetValue(parsed);
+        }
+
+        const remoteSaved = await loadSharedState<T>(key);
+        if (!cancelled && remoteSaved !== null) {
+          valueRef.current = remoteSaved;
+          lastSavedJsonRef.current = JSON.stringify(remoteSaved);
+          window.localStorage.setItem(key, lastSavedJsonRef.current);
+          rawSetValue(remoteSaved);
+        }
+      } catch (error) {
+        console.warn("공유 데이터 불러오기 실패, 브라우저 저장소를 우선 사용합니다.", error);
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    }
+
+    hydrate();
+
+    return () => {
+      cancelled = true;
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    };
   }, [key]);
 
   useEffect(() => {
-    if (loaded) localStorage.setItem(key, JSON.stringify(value));
-  }, [key, value, loaded]);
+    if (!loaded) return;
+
+    const syncFromRemote = async () => {
+      try {
+        if (typeof document !== "undefined" && document.hidden) return;
+        // 방금 업로드/수정한 데이터가 Supabase에 저장되는 동안 과거 원격값이 화면을 덮어쓰지 않도록 보호합니다.
+        if (Date.now() < localEditUntilRef.current) return;
+
+        const remoteSaved = await loadSharedState<T>(key);
+        if (remoteSaved === null) return;
+
+        const remoteJson = JSON.stringify(remoteSaved);
+        if (remoteJson !== JSON.stringify(valueRef.current) && remoteJson !== lastSavedJsonRef.current) {
+          valueRef.current = remoteSaved;
+          lastSavedJsonRef.current = remoteJson;
+          window.localStorage.setItem(key, remoteJson);
+          rawSetValue(remoteSaved);
+        }
+      } catch {
+        // 네트워크가 잠시 끊겨도 로컬 화면은 계속 사용합니다.
+      }
+    };
+
+    const interval = window.setInterval(syncFromRemote, 3000);
+    window.addEventListener("focus", syncFromRemote);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", syncFromRemote);
+    };
+  }, [key, loaded]);
 
   return [value, setValue] as const;
 }
@@ -3531,6 +3726,7 @@ export default function Home() {
   const [targets, setTargets] = useLocal<TargetRecord[]>("ablab_targets_v14", initialTargets);
   const [ests, setEsts] = useLocal<EstRecord[]>("ablab_ests_v14", initialEsts);
   const [timeConfigs, setTimeConfigs] = useLocal<TimeConfig[]>("ablab_time_configs_v14", initialTimeConfigs);
+  const [codeMappings, setCodeMappings] = useLocal<StoreCodeMapping[]>("ablab_code_mappings_v1", []);
   const [dashMonth, setDashMonth] = useState(thisMonth());
   const [dashDate, setDashDate] = useState(today());
 
@@ -3556,28 +3752,28 @@ export default function Home() {
   }
 
   return (
-    <main className="flex min-h-screen bg-slate-100 text-slate-900" style={{ fontFamily: '"Malgun Gothic", "맑은 고딕", sans-serif' }}>
-      <aside className="flex min-h-screen w-44 shrink-0 flex-col border-r border-slate-800 bg-slate-950 text-white">
-        <div className="border-b border-slate-800 p-4 text-base font-bold tracking-tight">에이비랩 코리아 Sales Report</div>
+    <main className="flex min-h-screen bg-orange-50 text-slate-900" style={{ fontFamily: '"Malgun Gothic", "맑은 고딕", sans-serif' }}>
+      <aside className="flex min-h-screen w-44 shrink-0 flex-col border-r border-orange-200 bg-orange-50 text-slate-900">
+        <div className="border-b border-orange-200 p-4 text-base font-bold tracking-tight text-orange-950">에이비랩 코리아 Sales Report</div>
         <nav className="space-y-2 p-3">
           {menus.map((m, index) => (
             <button
               key={m}
               onClick={() => setActive(m)}
               className={`w-full rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition ${
-                active === m ? "bg-blue-600 text-white shadow" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                active === m ? "bg-orange-500 text-white shadow" : "text-slate-700 hover:bg-orange-100 hover:text-orange-900"
               }`}
             >
               {index + 1}. {m}
             </button>
           ))}
         </nav>
-        <div className="mt-auto border-t border-slate-800 p-3">
+        <div className="mt-auto border-t border-orange-200 p-3">
           {isAdmin ? (
             <button
               type="button"
               onClick={() => { setIsAdmin(false); setActive("대시보드"); }}
-              className="w-full rounded-xl bg-slate-800 px-3 py-2 text-left text-xs font-semibold text-slate-200 hover:bg-slate-700"
+              className="w-full rounded-xl bg-orange-100 px-3 py-2 text-left text-xs font-semibold text-orange-900 hover:bg-orange-200"
             >
               관리자 모드 해제
             </button>
@@ -3585,7 +3781,7 @@ export default function Home() {
             <button
               type="button"
               onClick={adminLogin}
-              className="w-full rounded-xl bg-slate-800 px-3 py-2 text-left text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white"
+              className="w-full rounded-xl bg-orange-100 px-3 py-2 text-left text-xs font-semibold text-orange-900 hover:bg-orange-200"
             >
               관리자 로그인
             </button>
@@ -3597,9 +3793,7 @@ export default function Home() {
         <div className="mb-4 rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-sm backdrop-blur">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-500">Store Operation Dashboard</p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight">에이비랩 코리아 Sales Report</h1>
-              <p className="mt-2 text-sm text-slate-500">매출, Target, EST, 전월/전년동월 비교를 관리합니다.</p>
+              <h1 className="text-2xl font-bold tracking-tight">에이비랩 코리아 Sales Report</h1>
             </div>
 
             <div className="rounded-2xl border border-slate-200/70 bg-slate-50/75 p-3 shadow-sm backdrop-blur">
@@ -3641,6 +3835,7 @@ export default function Home() {
             month={dashMonth}
             date={dashDate}
             timeGone={tg}
+            codeMappings={codeMappings}
           />
         )}
         {active === "매출현황" && (
@@ -3652,6 +3847,7 @@ export default function Home() {
             month={dashMonth}
             date={dashDate}
             timeGone={tg}
+            codeMappings={codeMappings}
           />
         )}
         {isAdmin && active === "월초관리" && (
@@ -3667,6 +3863,8 @@ export default function Home() {
             month={dashMonth}
             timeConfigs={timeConfigs}
             setTimeConfigs={setTimeConfigs}
+            codeMappings={codeMappings}
+            setCodeMappings={setCodeMappings}
           />
         )}
       </section>
@@ -3730,7 +3928,7 @@ function metricsByStoreType(stores: Store[], targets: TargetRecord[], ests: EstR
   return { storeTarget, nonStoreTarget, storeEst, nonStoreEst };
 }
 
-function Dashboard({ stores, sales, targets, ests, month, date, timeGone }: { stores: Store[]; sales: SalesRecord[]; targets: TargetRecord[]; ests: EstRecord[]; month: string; date: string; timeGone: ReturnType<typeof getTimeGone> }) {
+function Dashboard({ stores, sales, targets, ests, month, date, timeGone, codeMappings }: { stores: Store[]; sales: SalesRecord[]; targets: TargetRecord[]; ests: EstRecord[]; month: string; date: string; timeGone: ReturnType<typeof getTimeGone>; codeMappings: StoreCodeMapping[] }) {
   const current = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), date));
   const currentFullMonth = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), monthEnd(month)));
   const prevMonth = sales.filter((s) => s.period === "prevMonth" && s.refMonth === month);
@@ -3768,15 +3966,6 @@ function Dashboard({ stores, sales, targets, ests, month, date, timeGone }: { st
 
   return (
     <>
-      <div className="mx-auto mb-3 flex max-w-7xl justify-end">
-        <button
-          onClick={() => exportExcel(dashboardExcelRows, `대시보드_${month}`)}
-          className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
-        >
-          대시보드 엑셀 다운로드
-        </button>
-      </div>
-
       <div className="mx-auto mb-4 grid max-w-7xl grid-cols-1 gap-3 xl:grid-cols-4">
         <KpiGroup items={[
           { title: "기준월", value: month },
@@ -3803,12 +3992,12 @@ function Dashboard({ stores, sales, targets, ests, month, date, timeGone }: { st
         ]} />
       </div>
 
-      <SalesStatus stores={stores} sales={sales} targets={targets} ests={ests} month={month} date={date} timeGone={timeGone} compact defaultView="브랜드별" />
+      <SalesStatus stores={stores} sales={sales} targets={targets} ests={ests} month={month} date={date} timeGone={timeGone} codeMappings={codeMappings} compact defaultView="브랜드별" />
     </>
   );
 }
 
-function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, compact = false, defaultView = "거래처별" }: { stores: Store[]; sales: SalesRecord[]; targets: TargetRecord[]; ests: EstRecord[]; month: string; date: string; timeGone: ReturnType<typeof getTimeGone>; compact?: boolean; defaultView?: SalesView }) {
+function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, codeMappings, compact = false, defaultView = "거래처별" }: { stores: Store[]; sales: SalesRecord[]; targets: TargetRecord[]; ests: EstRecord[]; month: string; date: string; timeGone: ReturnType<typeof getTimeGone>; codeMappings: StoreCodeMapping[]; compact?: boolean; defaultView?: SalesView }) {
   const [view, setView] = useState<SalesView>(defaultView);
   const [search, setSearch] = useState("");
   const [drill, setDrill] = useState<{ title: string; rows: SalesRecord[] } | null>(null);
@@ -3818,13 +4007,108 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, comp
   const normalizedSearch = search.trim().toLowerCase();
   const stMap = storeMap(stores);
 
-  const filterByStoreSearch = (s: SalesRecord) =>
-    !normalizedSearch ||
-    s.storeName.toLowerCase().includes(normalizedSearch) ||
-    s.storeCode.toLowerCase().includes(normalizedSearch) ||
-    s.brand.toLowerCase().includes(normalizedSearch) ||
-    String(s.manager || "").toLowerCase().includes(normalizedSearch) ||
-    s.channel.toLowerCase().includes(normalizedSearch);
+  const currentCanonicalStores = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof resolveStoreInfo>>();
+    sales
+      .filter((r) => r.period === "current" && inRange(r.saleDate, monthStart(month), monthEnd(month)))
+      .forEach((r) => {
+        if (!map.has(r.storeCode)) {
+          map.set(r.storeCode, resolveStoreInfo(r.storeCode, r.storeName, {
+            channel: r.channel,
+            manager: r.manager,
+            storeType: r.storeType,
+            brand: r.brand,
+          }, stores));
+        }
+      });
+    return Array.from(map.values());
+  }, [sales, month, stores]);
+
+  const currentByCode = useMemo(() => new Map(currentCanonicalStores.map((s) => [norm(s.code), s])), [currentCanonicalStores]);
+  const currentByName = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof resolveStoreInfo>>();
+    currentCanonicalStores.forEach((s) => {
+      const key = normalizeStoreNameKey(s.name);
+      if (key && !map.has(key)) map.set(key, s);
+    });
+    return map;
+  }, [currentCanonicalStores]);
+
+  const findManualMapping = (code: string, name: string) => {
+    const codeKey = norm(code);
+    const nameKey = normalizeStoreNameKey(name);
+    return codeMappings.find((m) => {
+      if (norm(m.oldCode) !== codeKey) return false;
+      const mappedOldNameKey = normalizeStoreNameKey(m.oldName);
+      return !mappedOldNameKey || mappedOldNameKey === nameKey;
+    });
+  };
+
+  const uploadedStoreInfo = (r: SalesRecord) => ({
+    code: r.storeCode || r.storeName || "미지정",
+    name: r.storeName || r.storeCode || "미지정",
+    channel: r.channel || "미지정",
+    manager: r.manager || "미지정",
+    storeType: r.storeType || "비매장",
+    brand: r.brand || "미지정",
+    status: "거래중" as const,
+    originalCode: r.storeCode,
+    originalName: r.storeName,
+  });
+
+  const resolveRecord = (r: SalesRecord) => {
+    if (r.period === "prevYear" || r.period === "prevMonth") {
+      const manual = findManualMapping(r.storeCode, r.storeName);
+      if (manual?.currentCode) {
+        const mapped = resolveStoreInfo(manual.currentCode, manual.currentName || r.storeName, {
+          channel: r.channel,
+          manager: r.manager,
+          storeType: r.storeType,
+          brand: r.brand,
+        }, stores);
+        return {
+          ...mapped,
+          originalCode: r.storeCode,
+          originalName: r.storeName,
+        };
+      }
+
+      const byCode = currentByCode.get(norm(r.storeCode));
+      const byName = currentByName.get(normalizeStoreNameKey(r.storeName));
+      const autoTarget = byCode || byName;
+      if (autoTarget) {
+        return {
+          ...autoTarget,
+          originalCode: r.storeCode,
+          originalName: r.storeName,
+        };
+      }
+
+      return uploadedStoreInfo(r);
+    }
+
+    return resolveStoreInfo(r.storeCode, r.storeName, {
+      channel: r.channel,
+      manager: r.manager,
+      storeType: r.storeType,
+      brand: r.brand,
+    }, stores);
+  };
+
+  const filterByStoreSearch = (s: SalesRecord) => {
+    const resolved = resolveRecord(s);
+    return !normalizedSearch ||
+      s.storeName.toLowerCase().includes(normalizedSearch) ||
+      s.storeCode.toLowerCase().includes(normalizedSearch) ||
+      s.brand.toLowerCase().includes(normalizedSearch) ||
+      String(s.manager || "").toLowerCase().includes(normalizedSearch) ||
+      s.channel.toLowerCase().includes(normalizedSearch) ||
+      resolved.name.toLowerCase().includes(normalizedSearch) ||
+      resolved.code.toLowerCase().includes(normalizedSearch) ||
+      resolved.brand.toLowerCase().includes(normalizedSearch) ||
+      String(resolved.manager || "").toLowerCase().includes(normalizedSearch) ||
+      resolved.channel.toLowerCase().includes(normalizedSearch);
+  };
 
   const current = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), date) && filterByStoreSearch(s));
   const currentFullMonthRows = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), monthEnd(month)) && filterByStoreSearch(s));
@@ -3832,24 +4116,27 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, comp
   const prevYearRows = sales.filter((s) => s.period === "prevYear" && s.refMonth === month && filterByStoreSearch(s));
 
   const rowKey = (r: SalesRecord) => {
-    if (view === "거래처별") return r.storeCode || r.storeName;
-    if (view === "브랜드별") return r.brand || "미지정";
-    if (view === "담당자별") return r.manager || "미지정";
-    return r.channel || "미지정";
+    const resolved = resolveRecord(r);
+    if (view === "거래처별") return resolved.code || resolved.name;
+    if (view === "브랜드별") return resolved.brand || "미지정";
+    if (view === "담당자별") return resolved.manager || "미지정";
+    return resolved.channel || "미지정";
   };
 
   const rowLabel = (key: string, records: SalesRecord[]) => {
     if (view !== "거래처별") return key || "미지정";
     const first = records[0];
+    if (first) return resolveRecord(first).name;
     const mapped = stMap.get(key);
-    return first?.storeName || mapped?.name || key || "미지정";
+    return mapped?.name || key || "미지정";
   };
 
   const storeKey = (store: Store) => {
-    if (view === "거래처별") return store.code || store.name;
-    if (view === "브랜드별") return store.brand || "미지정";
-    if (view === "담당자별") return store.manager || "미지정";
-    return store.channel || "미지정";
+    const resolved = resolveStoreInfo(store.code, store.name, store, stores);
+    if (view === "거래처별") return resolved.code || resolved.name;
+    if (view === "브랜드별") return resolved.brand || "미지정";
+    if (view === "담당자별") return resolved.manager || "미지정";
+    return resolved.channel || "미지정";
   };
 
   const currentMap = groupByKey(current, rowKey);
@@ -3861,10 +4148,12 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, comp
   ests
     .filter((e) => {
       const mappedStore = stMap.get(e.storeCode);
-      const mappedStoreName = mappedStore?.name || "";
-      const mappedBrand = mappedStore?.brand || "";
-      const mappedManager = mappedStore?.manager || "";
-      const mappedChannel = mappedStore?.channel || "";
+      const resolved = resolveStoreInfo(e.storeCode, e.storeName, mappedStore || {}, stores);
+      const display = resolved;
+      const mappedStoreName = `${mappedStore?.name || ""} ${display.name}`;
+      const mappedBrand = `${mappedStore?.brand || ""} ${display.brand}`;
+      const mappedManager = `${mappedStore?.manager || ""} ${display.manager}`;
+      const mappedChannel = `${mappedStore?.channel || ""} ${display.channel}`;
       return e.month === month && (!normalizedSearch ||
         e.storeName.toLowerCase().includes(normalizedSearch) ||
         e.storeCode.toLowerCase().includes(normalizedSearch) ||
@@ -3875,7 +4164,9 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, comp
     })
     .forEach((e) => {
       const s = stMap.get(e.storeCode);
-      const key = s ? storeKey(s) : e.storeCode || e.storeName || "미지정";
+      const resolved = resolveStoreInfo(e.storeCode, e.storeName, s || {}, stores);
+      const display = resolved;
+      const key = s ? storeKey(s) : view === "거래처별" ? display.code || display.name || "미지정" : view === "브랜드별" ? display.brand || "미지정" : view === "담당자별" ? display.manager || "미지정" : display.channel || "미지정";
       estMap.set(key, (estMap.get(key) || 0) + e.amount);
     });
 
@@ -4044,7 +4335,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, comp
                 <ThCompactSortable right tone="blue" sortKey="prevMonthRate" sortConfig={sortConfig} onSort={requestSort}>전월대비</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>당월 전체 매출</ThCompactSortable>
-                <ThCompactSortable right tone="gray" sortKey="timeGone" sortConfig={sortConfig} onSort={requestSort}>TIME GONE</ThCompactSortable>
+                {!compact && <ThCompactSortable right tone="gray" sortKey="timeGone" sortConfig={sortConfig} onSort={requestSort}>TIME GONE</ThCompactSortable>}
                 <ThCompactSortable right tone="gray" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>TIME GONE 대비</ThCompactSortable>
                 <ThCompactSortable right tone="purple" sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
                 <ThCompactSortable right tone="purple" sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
@@ -4054,7 +4345,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, comp
             </thead>
             <tbody>
               {sortedRows.length === 0 ? (
-                <tr><td colSpan={13} className="border p-8 text-center text-slate-500">표시할 데이터가 없습니다.</td></tr>
+                <tr><td colSpan={compact ? 12 : 13} className="border p-8 text-center text-slate-500">표시할 데이터가 없습니다.</td></tr>
               ) : sortedRows.map((r) => (
                 <tr key={r.key}>
                   <TdCompact bold>{r.label}</TdCompact>
@@ -4064,7 +4355,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, comp
                   <TdCompact right amount>{pct(r.prevMonthRate)}</TdCompact>
                   <ClickableAmountCell value={r.currentSales} onClick={() => openDrill(r, "current")} />
                   <ClickableAmountCell value={r.fullMonthSales} onClick={() => openDrill(r, "currentFullMonth")} />
-                  <TdCompact right amount>{pct(r.timeGone)}</TdCompact>
+                  {!compact && <TdCompact right amount>{pct(r.timeGone)}</TdCompact>}
                   <TdCompact right amount>{pct(r.timeGoneGap)}</TdCompact>
                   <TdCompact right amount>{won(r.est)}</TdCompact>
                   <TdCompact right amount>{pct(r.estRate)}</TdCompact>
@@ -4160,6 +4451,31 @@ function InactiveOrdersModal({ stores, sales, month, onClose }: { stores: Store[
     마지막매출금액: r.lastAmount,
   }));
 
+  function sendInactiveMail() {
+    const to = window.prompt("메일을 받을 주소를 입력하세요. 여러 명이면 쉼표로 구분해주세요.");
+    if (!to) return;
+
+    const targetRows = tab === "거래처별" ? inactiveStores : inactiveItems;
+    const excelRows = tab === "거래처별" ? storeExcelRows : itemExcelRows;
+    const fileName = `3개월_미주문_${tab}_${month}`;
+    const subject = `[에이비랩] 3개월 미주문 ${tab} 현황_${month}`;
+    const bodyLines = [
+      "안녕하세요.",
+      "",
+      `${startDate} ~ ${endDate} 기준 3개월 미주문 ${tab} 현황 공유드립니다.`,
+      `총 ${targetRows.length.toLocaleString("ko-KR")}건입니다.`,
+      "",
+      `방금 자동 다운로드된 ${fileName}.xlsx 파일을 첨부해서 전달드립니다.`,
+      "",
+      "확인 부탁드립니다.",
+    ];
+
+    exportExcel(excelRows, fileName);
+    window.setTimeout(() => {
+      window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyLines.join("\n"))}`;
+    }, 300);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
       <div className="flex max-h-[88vh] w-full max-w-6xl flex-col rounded-2xl bg-white shadow-2xl">
@@ -4169,6 +4485,9 @@ function InactiveOrdersModal({ stores, sales, month, onClose }: { stores: Store[
             <p className="mt-1 text-xs text-slate-500">기준 기간: {startDate} ~ {endDate}</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={sendInactiveMail} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700">
+              메일 전송(파일 다운로드)
+            </button>
             <button type="button" onClick={() => exportExcel(tab === "거래처별" ? storeExcelRows : itemExcelRows, `3개월_미주문_${tab}_${month}`)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700">
               엑셀 다운로드
             </button>
@@ -4245,6 +4564,184 @@ function InactiveOrdersModal({ stores, sales, month, onClose }: { stores: Store[
             </table>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+function DormantAccountPage({ stores, sales, month }: { stores: Store[]; sales: SalesRecord[]; month: string }) {
+  const [tab, setTab] = useState<InactiveOrderTab>("거래처별");
+  const startDate = threeMonthStart(month);
+  const endDate = monthEnd(month);
+  const activeStores = stores.filter((s) => s.status === "거래중");
+  const recentSales = sales.filter((s) => inRange(s.saleDate, startDate, endDate));
+  const recentStoreCodes = new Set(recentSales.map((s) => s.storeCode));
+  const latestSaleByStore = new Map<string, SalesRecord>();
+
+  sales.forEach((r) => {
+    const prev = latestSaleByStore.get(r.storeCode);
+    if (!prev || r.saleDate > prev.saleDate) latestSaleByStore.set(r.storeCode, r);
+  });
+
+  const inactiveStores = activeStores
+    .filter((s) => !recentStoreCodes.has(s.code))
+    .map((s) => {
+      const latest = latestSaleByStore.get(s.code);
+      return {
+        code: s.code,
+        name: s.name,
+        brand: s.brand,
+        manager: s.manager || "미지정",
+        channel: s.channel,
+        lastDate: latest?.saleDate || "-",
+        lastAmount: latest?.salesAmount || 0,
+      };
+    })
+    .sort((a, b) => String(a.lastDate).localeCompare(String(b.lastDate)) || a.name.localeCompare(b.name, "ko-KR"));
+
+  const itemMap = new Map<string, { itemCode: string; itemName: string; latest?: SalesRecord; recent: boolean }>();
+  sales.forEach((r) => {
+    const key = `${r.itemCode}|${r.itemName}`;
+    const current = itemMap.get(key) || { itemCode: r.itemCode || "-", itemName: r.itemName || "미지정", latest: undefined, recent: false };
+    if (inRange(r.saleDate, startDate, endDate)) current.recent = true;
+    if (!current.latest || r.saleDate > current.latest.saleDate) current.latest = r;
+    itemMap.set(key, current);
+  });
+  const inactiveItems = Array.from(itemMap.values())
+    .filter((item) => !item.recent)
+    .map((item) => ({
+      itemCode: item.itemCode,
+      itemName: item.itemName,
+      lastDate: item.latest?.saleDate || "-",
+      lastStore: item.latest?.storeName || "-",
+      lastAmount: item.latest?.salesAmount || 0,
+    }))
+    .sort((a, b) => String(a.lastDate).localeCompare(String(b.lastDate)) || a.itemName.localeCompare(b.itemName, "ko-KR"));
+
+  const storeExcelRows = inactiveStores.map((r) => ({
+    거래처코드: r.code,
+    거래처명: r.name,
+    브랜드: r.brand,
+    담당자: r.manager,
+    채널: r.channel,
+    마지막주문일: r.lastDate,
+    마지막매출금액: r.lastAmount,
+  }));
+  const itemExcelRows = inactiveItems.map((r) => ({
+    상품코드: r.itemCode,
+    상품명: r.itemName,
+    마지막주문일: r.lastDate,
+    마지막거래처: r.lastStore,
+    마지막매출금액: r.lastAmount,
+  }));
+
+  function sendInactiveMail() {
+    const to = window.prompt("메일을 받을 주소를 입력하세요. 여러 명이면 쉼표로 구분해주세요.");
+    if (!to) return;
+
+    const targetRows = tab === "거래처별" ? inactiveStores : inactiveItems;
+    const excelRows = tab === "거래처별" ? storeExcelRows : itemExcelRows;
+    const fileName = `3개월_미주문_${tab}_${month}`;
+    const subject = `[에이비랩] 3개월 미주문 ${tab} 현황_${month}`;
+    const bodyLines = [
+      "안녕하세요.",
+      "",
+      `${startDate} ~ ${endDate} 기준 3개월 미주문 ${tab} 현황 공유드립니다.`,
+      `총 ${targetRows.length.toLocaleString("ko-KR")}건입니다.`,
+      "",
+      `방금 자동 다운로드된 ${fileName}.xlsx 파일을 첨부해서 전달드립니다.`,
+      "",
+      "확인 부탁드립니다.",
+    ];
+
+    exportExcel(excelRows, fileName);
+    window.setTimeout(() => {
+      window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyLines.join("\n"))}`;
+    }, 300);
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+      <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 className="text-base font-bold text-slate-900">휴면거래처관리</h2>
+          <p className="mt-1 text-xs text-slate-500">3개월 미주문 거래처와 품목을 확인하고 엑셀 다운로드 또는 메일 전송용 파일을 만들 수 있습니다. 기준 기간: {startDate} ~ {endDate}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={sendInactiveMail} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700">
+            메일 전송용 파일 다운로드
+          </button>
+          <button type="button" onClick={() => exportExcel(tab === "거래처별" ? storeExcelRows : itemExcelRows, `3개월_미주문_${tab}_${month}`)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700">
+            엑셀 다운로드
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-3 flex gap-2 border-b border-slate-200 pt-1">
+        {(["거래처별", "품목별"] as InactiveOrderTab[]).map((item) => (
+          <button key={item} type="button" onClick={() => setTab(item)} className={`rounded-t-lg px-4 py-2 text-sm font-semibold ${tab === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+            {item} {item === "거래처별" ? inactiveStores.length : inactiveItems.length}건
+          </button>
+        ))}
+      </div>
+
+      <div className="max-h-[62vh] overflow-auto">
+        {tab === "거래처별" ? (
+          <table className="w-full min-w-[920px] border border-slate-200 text-xs">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="border px-2 py-2 text-left font-bold">거래처코드</th>
+                <th className="border px-2 py-2 text-left font-bold">거래처명</th>
+                <th className="border px-2 py-2 text-left font-bold">브랜드</th>
+                <th className="border px-2 py-2 text-left font-bold">담당자</th>
+                <th className="border px-2 py-2 text-left font-bold">채널</th>
+                <th className="border px-2 py-2 text-left font-bold">마지막 주문일</th>
+                <th className="border px-2 py-2 text-right font-bold">마지막 매출금액</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inactiveStores.length === 0 ? (
+                <tr><td colSpan={7} className="border p-8 text-center text-slate-500">3개월 미주문 거래처가 없습니다.</td></tr>
+              ) : inactiveStores.map((r) => (
+                <tr key={r.code} className="hover:bg-slate-50">
+                  <td className="border px-2 py-2">{r.code}</td>
+                  <td className="border px-2 py-2 font-semibold">{r.name}</td>
+                  <td className="border px-2 py-2">{r.brand}</td>
+                  <td className="border px-2 py-2">{r.manager}</td>
+                  <td className="border px-2 py-2">{r.channel}</td>
+                  <td className="border px-2 py-2">{r.lastDate}</td>
+                  <td className="border px-2 py-2 text-right font-semibold text-slate-900">{won(r.lastAmount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <table className="w-full min-w-[860px] border border-slate-200 text-xs">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="border px-2 py-2 text-left font-bold">상품코드</th>
+                <th className="border px-2 py-2 text-left font-bold">상품명</th>
+                <th className="border px-2 py-2 text-left font-bold">마지막 주문일</th>
+                <th className="border px-2 py-2 text-left font-bold">마지막 거래처</th>
+                <th className="border px-2 py-2 text-right font-bold">마지막 매출금액</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inactiveItems.length === 0 ? (
+                <tr><td colSpan={5} className="border p-8 text-center text-slate-500">3개월 미주문 품목이 없습니다.</td></tr>
+              ) : inactiveItems.map((r) => (
+                <tr key={`${r.itemCode}|${r.itemName}`} className="hover:bg-slate-50">
+                  <td className="border px-2 py-2">{r.itemCode}</td>
+                  <td className="border px-2 py-2 font-semibold">{r.itemName}</td>
+                  <td className="border px-2 py-2">{r.lastDate}</td>
+                  <td className="border px-2 py-2">{r.lastStore}</td>
+                  <td className="border px-2 py-2 text-right font-semibold text-slate-900">{won(r.lastAmount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
@@ -4592,6 +5089,8 @@ function MonthStartManagement({
   month,
   timeConfigs,
   setTimeConfigs,
+  codeMappings,
+  setCodeMappings,
 }: {
   stores: Store[];
   setStores: (v: Store[]) => void;
@@ -4604,6 +5103,8 @@ function MonthStartManagement({
   month: string;
   timeConfigs: TimeConfig[];
   setTimeConfigs: (v: TimeConfig[]) => void;
+  codeMappings: StoreCodeMapping[];
+  setCodeMappings: (v: StoreCodeMapping[]) => void;
 }) {
   const [tab, setTab] = useState<MonthStartTab>("거래처 매핑관리");
 
@@ -4619,7 +5120,8 @@ function MonthStartManagement({
         </div>
       </div>
 
-      {tab === "거래처 매핑관리" && <MappingPage stores={stores} setStores={setStores} sales={sales} />}
+      {tab === "거래처 매핑관리" && <MappingPage stores={stores} setStores={setStores} sales={sales} month={month} codeMappings={codeMappings} setCodeMappings={setCodeMappings} />}
+      {tab === "휴면거래처관리" && <DormantAccountPage stores={stores} sales={sales} month={month} />}
       {tab === "Target 관리" && <TargetByTypePage records={targets} setRecords={setTargets} month={month} />}
       {tab === "EST 관리" && <TargetOrEstPage title="EST 관리" records={ests} setRecords={setEsts} stores={stores} month={month} />}
       {tab === "업로드 관리" && <UploadPage stores={stores} setStores={setStores} sales={sales} setSales={setSales} month={month} timeConfigs={timeConfigs} setTimeConfigs={setTimeConfigs} />}
@@ -4627,15 +5129,12 @@ function MonthStartManagement({
   );
 }
 
-function MappingPage({ stores, setStores, sales }: { stores: Store[]; setStores: (v: Store[]) => void; sales: SalesRecord[] }) {
+function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMappings }: { stores: Store[]; setStores: (v: Store[]) => void; sales: SalesRecord[]; month: string; codeMappings: StoreCodeMapping[]; setCodeMappings: (v: StoreCodeMapping[]) => void }) {
   const empty: Store = { code: "", name: "", channel: "도매", manager: "", storeType: "비매장", brand: "미지정", status: "거래중" };
   const [form, setForm] = useState<Store>(empty);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
-  const [storeListOpen, setStoreListOpen] = useState(true);
-
-  const activeStoreCount = stores.filter((s) => s.status === "거래중").length;
-  const inactiveStoreCount = stores.filter((s) => s.status === "거래종료").length;
+  const [mappingListOpen, setMappingListOpen] = useState(true);
   const rows = stores
     .filter((s) =>
       statusFilter === "all" ||
@@ -4643,6 +5142,8 @@ function MappingPage({ stores, setStores, sales }: { stores: Store[]; setStores:
       (statusFilter === "inactive" && s.status === "거래종료")
     )
     .filter((s) => `${s.code} ${s.name} ${s.channel} ${s.manager} ${s.brand}`.toLowerCase().includes(search.toLowerCase()));
+  const activeCount = stores.filter((s) => s.status === "거래중").length;
+  const inactiveCount = stores.filter((s) => s.status === "거래종료").length;
 
   function save() {
     if (!form.code || !form.name) return alert("거래처코드와 거래처명은 필수입니다.");
@@ -4686,9 +5187,100 @@ function MappingPage({ stores, setStores, sales }: { stores: Store[]; setStores:
     }).filter((s) => s.code && s.name);
 
     const map = new Map(stores.map((s) => [s.code, s]));
-    parsed.forEach((s) => map.set(s.code, s));
+    parsed.forEach((s) => map.set(s.code, { ...map.get(s.code), ...s }));
     setStores(Array.from(map.values()));
     alert(`거래처 매핑 ${parsed.length}건을 반영했습니다.`);
+  }
+
+
+  const currentSalesStores = useMemo(() => {
+    const map = new Map<string, { code: string; name: string }>();
+    sales
+      .filter((r) => r.period === "current" && inRange(r.saleDate, monthStart(month), monthEnd(month)))
+      .forEach((r) => {
+        if (!map.has(r.storeCode)) map.set(r.storeCode, { code: r.storeCode, name: r.storeName });
+      });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "ko-KR"));
+  }, [sales, month]);
+
+  const mappingCheckRows = useMemo(() => {
+    const currentByCode = new Map(currentSalesStores.map((s) => [s.code, s]));
+    const currentByName = new Map<string, { code: string; name: string }>();
+    currentSalesStores.forEach((s) => {
+      const key = normalizeStoreNameKey(s.name);
+      if (key && !currentByName.has(key)) currentByName.set(key, s);
+    });
+
+    const sourceMap = new Map<string, { period: PeriodType; code: string; name: string; amount: number }>();
+    sales
+      .filter((r) => r.period === "prevYear" && r.refMonth === month)
+      .forEach((r) => {
+        const key = `${r.period}|${r.storeCode}|${r.storeName}`;
+        const item = sourceMap.get(key) || { period: r.period, code: r.storeCode, name: r.storeName, amount: 0 };
+        item.amount += r.salesAmount;
+        sourceMap.set(key, item);
+      });
+
+    return Array.from(sourceMap.values()).map((r) => {
+      const byCode = currentByCode.get(r.code);
+      const byName = currentByName.get(normalizeStoreNameKey(r.name));
+      const manual = codeMappings.find((m) => norm(m.oldCode) === norm(r.code) && (!m.oldName || normalizeStoreNameKey(m.oldName) === normalizeStoreNameKey(r.name)));
+      let category = "수동 매핑 필요";
+      let reason = "당월 매출이 없어 전년동월 업로드 거래처 기준으로 표시";
+      let targetCode = "";
+      let targetName = "";
+
+      if (manual) {
+        category = "수동 매핑 완료";
+        reason = "사용자가 현재 거래처로 직접 매핑함";
+        targetCode = manual.currentCode;
+        targetName = manual.currentName;
+      } else if (byCode && normalizeStoreNameKey(byCode.name) === normalizeStoreNameKey(r.name)) {
+        category = "자동 매핑";
+        reason = "거래처명과 거래처코드가 모두 당월과 같음";
+        targetCode = byCode.code;
+        targetName = byCode.name;
+      } else if (byCode) {
+        category = "자동 매핑";
+        reason = "거래처코드가 당월과 같음";
+        targetCode = byCode.code;
+        targetName = byCode.name;
+      } else if (byName) {
+        category = "자동 매핑";
+        reason = "거래처명이 당월과 같음";
+        targetCode = byName.code;
+        targetName = byName.name;
+      }
+
+      return { ...r, category, reason, targetCode, targetName };
+    }).sort((a, b) => a.category.localeCompare(b.category, "ko-KR") || a.name.localeCompare(b.name, "ko-KR"));
+  }, [sales, month, currentSalesStores, codeMappings]);
+
+  const mappingSummary = useMemo(() => {
+    return mappingCheckRows.reduce((acc, row) => {
+      acc[row.category] = (acc[row.category] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [mappingCheckRows]);
+
+  function saveManualMapping(row: { code: string; name: string; targetCode: string; targetName: string }) {
+    const currentCode = window.prompt("현재 거래처코드를 입력하세요.", row.targetCode || "");
+    if (!currentCode) return;
+    const matched = currentSalesStores.find((s) => s.code === currentCode) || stores.find((s) => s.code === currentCode);
+    const currentName = window.prompt("현재 거래처명을 입력하세요.", row.targetName || matched?.name || "");
+    if (!currentName) return;
+    const next: StoreCodeMapping = {
+      id: `${row.code}|${row.name}|${currentCode}`,
+      oldCode: row.code,
+      oldName: row.name,
+      currentCode,
+      currentName,
+    };
+    setCodeMappings([...codeMappings.filter((m) => !(norm(m.oldCode) === norm(row.code) && normalizeStoreNameKey(m.oldName) === normalizeStoreNameKey(row.name))), next]);
+  }
+
+  function deleteManualMapping(row: { code: string; name: string }) {
+    setCodeMappings(codeMappings.filter((m) => !(norm(m.oldCode) === norm(row.code) && normalizeStoreNameKey(m.oldName) === normalizeStoreNameKey(row.name))));
   }
 
   return (
@@ -4696,14 +5288,34 @@ function MappingPage({ stores, setStores, sales }: { stores: Store[]; setStores:
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-base font-bold">거래처 매핑관리</h2>
-          <p className="mt-1 text-xs text-slate-500">이카운트 파일에 없는 채널/담당자/브랜드 정보를 거래처코드 기준으로 매핑합니다. 상태 버튼으로 활성/비활성을 바꾸고, X로 삭제할 수 있습니다.</p>
+          <p className="mt-1 text-xs text-slate-500">채널/담당자/브랜드 정보를 거래처코드 기준으로 관리합니다. 전년동월 매출은 당월 매출에 같은 거래처코드나 거래처명이 있으면 당월 거래처 기준으로 합산하고, 당월 매출이 없으면 전년동월 업로드 거래처 기준으로 별도 표시합니다.</p>
         </div>
-        <label className="cursor-pointer rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white">
+        <label className="shrink-0 cursor-pointer rounded-md bg-green-600 px-2 py-1 text-[11px] font-semibold text-white">
           매핑 엑셀 업로드
           <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => upload(e.target.files?.[0] || null)} />
         </label>
       </div>
 
+      <div className="sticky top-0 z-20 mb-3 rounded-xl border border-blue-100 bg-blue-50/80 p-2 shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="거래처 검색" className="h-8 w-[260px] rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+          <div className="flex overflow-hidden rounded-lg border border-slate-300 bg-white text-xs font-semibold shadow-sm">
+            <button type="button" onClick={() => setStatusFilter("all")} className={`px-3 py-1.5 ${statusFilter === "all" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}>전체 {stores.length.toLocaleString("ko-KR")}</button>
+            <button type="button" onClick={() => setStatusFilter("active")} className={`border-l border-slate-200 px-3 py-1.5 ${statusFilter === "active" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>활성 {activeCount.toLocaleString("ko-KR")}</button>
+            <button type="button" onClick={() => setStatusFilter("inactive")} className={`border-l border-slate-200 px-3 py-1.5 ${statusFilter === "inactive" ? "bg-slate-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>비활성 {inactiveCount.toLocaleString("ko-KR")}</button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMappingListOpen((v) => !v)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            {mappingListOpen ? "거래처 목록 닫기" : "거래처 목록 열기"}
+          </button>
+          <span className="text-xs font-semibold text-slate-500">표시 {rows.length.toLocaleString("ko-KR")}건</span>
+        </div>
+      </div>
+
+      {mappingListOpen && (
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="거래처코드" className="h-8 w-[130px] rounded-md border px-2 py-1 text-xs" />
         <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="거래처명" className="h-8 w-[200px] rounded-md border px-2 py-1 text-xs" />
@@ -4725,38 +5337,67 @@ function MappingPage({ stores, setStores, sales }: { stores: Store[]; setStores:
         </select>
         <button onClick={save} className="h-8 w-[58px] rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white">저장</button>
       </div>
+      )}
 
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="거래처 검색" className="h-8 w-[240px] rounded-lg border border-slate-300 px-2 py-1 text-xs" />
-        <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
-          {[
-            { key: "all", label: `전체 ${stores.length.toLocaleString("ko-KR")}` },
-            { key: "active", label: `활성 ${activeStoreCount.toLocaleString("ko-KR")}` },
-            { key: "inactive", label: `비활성 ${inactiveStoreCount.toLocaleString("ko-KR")}` },
-          ].map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setStatusFilter(item.key as "all" | "active" | "inactive")}
-              className={`h-7 rounded-md px-2.5 text-[11px] font-bold transition ${statusFilter === item.key ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}
-            >
-              {item.label}
-            </button>
-          ))}
+      <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-2 flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">전년동월 거래처 매핑 검증</h3>
+            <p className="mt-1 text-xs text-slate-500">전년동월 업로드 거래처를 당월 매출 거래처 기준으로 비교합니다. 코드나 거래처명 중 하나라도 당월 매출과 같으면 당월 거래처 기준으로 자동 합산되고, 당월 매출이 없으면 전년동월 업로드 거래처 기준으로 표시됩니다.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
+            <span>자동 {mappingSummary["자동 매핑"] || 0}건</span>
+            <span>수동필요 {mappingSummary["수동 매핑 필요"] || 0}건</span>
+            <span>수동완료 {mappingSummary["수동 매핑 완료"] || 0}건</span>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setStoreListOpen((v) => !v)}
-          className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50"
-        >
-          {storeListOpen ? "거래처 목록 닫기" : "거래처 목록 열기"}
-        </button>
-        <span className="text-xs text-slate-400">표시 {rows.length.toLocaleString("ko-KR")}건</span>
+        <div className="max-h-[260px] overflow-auto">
+          <table className="w-full min-w-[960px] border border-slate-200 bg-white text-xs">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="border px-2 py-1.5 text-left">구분</th>
+                <th className="border px-2 py-1.5 text-left">업로드구분</th>
+                <th className="border px-2 py-1.5 text-left">업로드코드</th>
+                <th className="border px-2 py-1.5 text-left">업로드거래처명</th>
+                <th className="border px-2 py-1.5 text-right">업로드매출금액</th>
+                <th className="border px-2 py-1.5 text-left">당월코드</th>
+                <th className="border px-2 py-1.5 text-left">당월거래처명</th>
+                <th className="border px-2 py-1.5 text-left">매핑방식</th>
+                <th className="border px-2 py-1.5 text-right">관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mappingCheckRows.length === 0 ? (
+                <tr><td colSpan={9} className="border p-5 text-center text-slate-500">검증할 전년동월 매출 데이터가 없습니다.</td></tr>
+              ) : mappingCheckRows.map((r) => (
+                <tr key={`${r.period}|${r.code}|${r.name}`} className="hover:bg-slate-50">
+                  <td className="border px-2 py-1.5 font-semibold">{r.category}</td>
+                  <td className="border px-2 py-1.5">전년동월</td>
+                  <td className="border px-2 py-1.5">{r.code}</td>
+                  <td className="border px-2 py-1.5 font-semibold">{r.name}</td>
+                  <td className="border px-2 py-1.5 text-right font-semibold">{won(r.amount)}</td>
+                  <td className="border px-2 py-1.5">{r.targetCode || "-"}</td>
+                  <td className="border px-2 py-1.5">{r.targetName || "-"}</td>
+                  <td className="border px-2 py-1.5">{r.reason}</td>
+                  <td className="border px-2 py-1.5 text-right">
+                    {r.category === "수동 매핑 완료" ? (
+                      <button type="button" onClick={() => deleteManualMapping(r)} className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-100">해제</button>
+                    ) : r.category === "수동 매핑 필요" ? (
+                      <button type="button" onClick={() => saveManualMapping(r)} className="rounded-md bg-blue-600 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-blue-700">수동매핑</button>
+                    ) : (
+                      <span className="text-slate-400">자동</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {storeListOpen ? (
-        <div className="max-h-[60vh] overflow-auto">
-          <table className="w-auto table-fixed border text-xs">
+      {mappingListOpen && (
+      <div className="max-h-[60vh] overflow-auto">
+        <table className="w-auto table-fixed border text-xs">
           <colgroup>
             <col className="w-[130px]" />
             <col className="w-[200px]" />
@@ -4813,10 +5454,6 @@ function MappingPage({ stores, setStores, sales }: { stores: Store[]; setStores:
           </tbody>
         </table>
       </div>
-      ) : (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-xs font-semibold text-slate-500">
-          거래처 목록이 닫혀 있습니다. 상단의 "거래처 목록 열기"를 누르면 {statusFilter === "all" ? "전체" : statusFilter === "active" ? "활성 거래처" : "비활성 거래처"} 목록을 다시 볼 수 있습니다.
-        </div>
       )}
     </div>
   );
@@ -4894,11 +5531,11 @@ function TargetByTypePage({ records, setRecords, month }: { records: TargetRecor
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
           <p className="text-sm font-semibold text-slate-600">매장 Target</p>
-          <input value={storeAmount || ""} onChange={(e) => updateAmount("매장", num(e.target.value))} className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-right text-xl font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="0" />
+          <input value={storeAmount ? won(storeAmount) : ""} onChange={(e) => updateAmount("매장", num(e.target.value))} className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-right text-xl font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="0" />
         </div>
         <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
           <p className="text-sm font-semibold text-slate-600">비매장 Target</p>
-          <input value={nonStoreAmount || ""} onChange={(e) => updateAmount("비매장", num(e.target.value))} className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-right text-xl font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="0" />
+          <input value={nonStoreAmount ? won(nonStoreAmount) : ""} onChange={(e) => updateAmount("비매장", num(e.target.value))} className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-right text-xl font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="0" />
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-sm font-semibold text-slate-600">총 Target</p>
@@ -4912,11 +5549,28 @@ function TargetByTypePage({ records, setRecords, month }: { records: TargetRecor
 function TargetOrEstPage({ title, records, setRecords, stores, month }: { title: string; records: TargetRecord[] | EstRecord[]; setRecords: (v: any[]) => void; stores: Store[]; month: string }) {
   const [targetMonth, setTargetMonth] = useState(month);
   const [search, setSearch] = useState("");
+  const isEstPage = title.includes("EST");
+  const stMap = storeMap(stores);
 
   const rows = stores.filter((s) => s.status === "거래중").filter((s) => `${s.code} ${s.name} ${s.manager} ${s.channel}`.toLowerCase().includes(search.toLowerCase())).map((s) => {
     const existing = records.find((r) => r.storeCode === s.code && r.month === targetMonth);
     return { store: s, amount: existing?.amount || 0 };
   });
+
+  const estSummary = records
+    .filter((r) => r.month === targetMonth)
+    .reduce((acc, r) => {
+      const type = stMap.get(r.storeCode || "")?.storeType === "매장" ? "매장" : "비매장";
+      if (type === "매장") acc.store += r.amount || 0;
+      else acc.nonStore += r.amount || 0;
+      return acc;
+    }, { store: 0, nonStore: 0 });
+
+  function resetEst() {
+    if (!confirm(`${targetMonth} EST 데이터를 초기화할까요?`)) return;
+    setRecords(records.filter((r) => r.month !== targetMonth));
+    alert(`${targetMonth} EST 데이터가 초기화되었습니다.`);
+  }
 
   function updateAmount(store: Store, amount: number) {
     const next = { storeCode: store.code, storeName: store.name, month: targetMonth, amount };
@@ -4944,11 +5598,35 @@ function TargetOrEstPage({ title, records, setRecords, stores, month }: { title:
           <h2 className="text-lg font-bold">{title}</h2>
           <p className="mt-1 text-sm text-slate-500">거래처별 {title.replace(" 관리", "")} 금액을 관리합니다.</p>
         </div>
-        <label className="cursor-pointer rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white">
-          엑셀 업로드
-          <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => upload(e.target.files?.[0] || null)} />
-        </label>
+        <div className="flex flex-wrap gap-2">
+          <label className="cursor-pointer rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white">
+            엑셀 업로드
+            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => upload(e.target.files?.[0] || null)} />
+          </label>
+          {isEstPage && (
+            <button type="button" onClick={resetEst} className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100">
+              EST 리셋
+            </button>
+          )}
+        </div>
       </div>
+
+      {isEstPage && (
+        <div className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-slate-600">매장 EST</p>
+            <p className="mt-2 break-all text-right text-2xl font-bold text-slate-900">{won(estSummary.store)}</p>
+          </div>
+          <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-slate-600">비매장 EST</p>
+            <p className="mt-2 break-all text-right text-2xl font-bold text-slate-900">{won(estSummary.nonStore)}</p>
+          </div>
+          <div className="rounded-2xl border border-orange-300 bg-orange-100 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-slate-600">총 EST</p>
+            <p className="mt-2 break-all text-right text-2xl font-bold text-slate-900">{won(estSummary.store + estSummary.nonStore)}</p>
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-2">
         <input type="month" value={targetMonth} onChange={(e) => setTargetMonth(e.target.value)} className="rounded-xl border px-3 py-2" />
@@ -4975,7 +5653,7 @@ function TargetOrEstPage({ title, records, setRecords, stores, month }: { title:
                 <Td>{store.manager || "-"}</Td>
                 <Td right>
                   <input
-                    value={amount || ""}
+                    value={amount ? won(amount) : ""}
                     onChange={(e) => updateAmount(store, num(e.target.value))}
                     className="w-[160px] rounded border px-2 py-1 text-right"
                     placeholder="0"
@@ -4988,6 +5666,36 @@ function TargetOrEstPage({ title, records, setRecords, stores, month }: { title:
       </div>
     </div>
   );
+}
+
+
+function buildAutoClosedStoresFromPrevYear(parsed: SalesRecord[], stores: Store[]) {
+  const existingByCode = new Map(stores.map((s) => [norm(s.code), s]));
+  const currentActiveByName = new Set(
+    stores
+      .filter((s) => s.status === "거래중")
+      .map((s) => normalizeStoreNameKey(s.name))
+      .filter(Boolean)
+  );
+  const map = new Map<string, Store>();
+
+  parsed.forEach((r) => {
+    const codeKey = norm(r.storeCode);
+    const nameKey = normalizeStoreNameKey(r.storeName);
+    if (!codeKey || existingByCode.has(codeKey) || (nameKey && currentActiveByName.has(nameKey))) return;
+
+    map.set(codeKey, {
+      code: r.storeCode,
+      name: r.storeName || r.storeCode,
+      channel: r.channel || "미지정",
+      manager: (r.manager || "") as Manager,
+      storeType: r.storeType || "비매장",
+      brand: r.brand || "미지정",
+      status: "거래종료",
+    });
+  });
+
+  return Array.from(map.values());
 }
 
 function UploadPage({ stores, setStores, sales, setSales, month, timeConfigs, setTimeConfigs }: { stores: Store[]; setStores: (v: Store[]) => void; sales: SalesRecord[]; setSales: (v: SalesRecord[]) => void; month: string; timeConfigs: TimeConfig[]; setTimeConfigs: (v: TimeConfig[]) => void }) {
@@ -5025,17 +5733,19 @@ function UploadPage({ stores, setStores, sales, setSales, month, timeConfigs, se
       );
     }).filter((r) => r.saleDate && r.storeCode && r.salesAmount !== 0);
 
-    const missingStores = parsed
-      .filter((r) => !storeMap(stores).has(r.storeCode))
-      .map((r) => ({
-        code: r.storeCode,
-        name: r.storeName || r.storeCode,
-        channel: "매장" as Channel,
-        manager: "" as Manager,
-        storeType: "매장" as StoreType,
-        brand: r.brand || "미지정",
-        status: "거래중" as const,
-      }));
+    const missingStores = period === "prevYear"
+      ? buildAutoClosedStoresFromPrevYear(parsed, stores)
+      : parsed
+        .filter((r) => !storeMap(stores).has(r.storeCode))
+        .map((r) => ({
+          code: r.storeCode,
+          name: r.storeName || r.storeCode,
+          channel: "매장" as Channel,
+          manager: "" as Manager,
+          storeType: "매장" as StoreType,
+          brand: r.brand || "미지정",
+          status: "거래중" as const,
+        }));
 
     if (missingStores.length) {
       const map = new Map(stores.map((s) => [s.code, s]));
@@ -5053,7 +5763,8 @@ function UploadPage({ stores, setStores, sales, setSales, month, timeConfigs, se
     }
 
     setSales([...nextSales, ...parsed]);
-    alert(`${period === "current" ? "당월" : period === "prevMonth" ? "전월" : "전년동월"} 매출 ${parsed.length}건을 반영했습니다.`);
+    const closedMessage = period === "prevYear" && missingStores.length ? `\n당월 기준에 없는 전년동월 거래처 ${missingStores.length}건은 거래종료로 자동 생성했습니다.` : "";
+    alert(`${period === "current" ? "당월" : period === "prevMonth" ? "전월" : "전년동월"} 매출 ${parsed.length}건을 반영했습니다.${closedMessage}`);
   }
 
   function saveHolidays() {
