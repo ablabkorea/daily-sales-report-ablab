@@ -3508,15 +3508,47 @@ async function saveSharedState<T>(key: string, value: T) {
 }
 
 function useLocal<T>(key: string, initial: T) {
-  const [value, setValue] = useState<T>(initial);
+  const [value, rawSetValue] = useState<T>(initial);
   const [loaded, setLoaded] = useState(false);
   const valueRef = useRef<T>(initial);
-  const skipNextRemoteSave = useRef(false);
-  const valueJson = JSON.stringify(value);
+  const saveTimerRef = useRef<number | null>(null);
+  const localEditUntilRef = useRef(0);
+  const lastSavedJsonRef = useRef("");
+  const keyRef = useRef(key);
 
   useEffect(() => {
-    valueRef.current = value;
-  }, [value]);
+    keyRef.current = key;
+  }, [key]);
+
+  const persistNow = (nextValue: T) => {
+    if (typeof window === "undefined") return;
+
+    const json = JSON.stringify(nextValue);
+    valueRef.current = nextValue;
+    lastSavedJsonRef.current = json;
+    localEditUntilRef.current = Date.now() + 6000;
+    window.localStorage.setItem(keyRef.current, json);
+
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      saveSharedState(keyRef.current, nextValue)
+        .then(() => {
+          // 업로드/수정 직후에는 다른 탭에서 이전 데이터를 가져와 덮어쓰지 않도록 잠시 보호합니다.
+          localEditUntilRef.current = Date.now() + 2500;
+        })
+        .catch((error) => {
+          console.warn("공유 데이터 저장 실패, 브라우저 저장소에만 저장되었습니다.", error);
+        });
+    }, 80);
+  };
+
+  const setValue: React.Dispatch<React.SetStateAction<T>> = (next) => {
+    rawSetValue((prev) => {
+      const resolved = typeof next === "function" ? (next as (prev: T) => T)(prev) : next;
+      persistNow(resolved);
+      return resolved;
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -3527,14 +3559,16 @@ function useLocal<T>(key: string, initial: T) {
         if (localSaved && !cancelled) {
           const parsed = JSON.parse(localSaved) as T;
           valueRef.current = parsed;
-          setValue(parsed);
+          lastSavedJsonRef.current = JSON.stringify(parsed);
+          rawSetValue(parsed);
         }
 
         const remoteSaved = await loadSharedState<T>(key);
         if (!cancelled && remoteSaved !== null) {
-          skipNextRemoteSave.current = true;
           valueRef.current = remoteSaved;
-          setValue(remoteSaved);
+          lastSavedJsonRef.current = JSON.stringify(remoteSaved);
+          window.localStorage.setItem(key, lastSavedJsonRef.current);
+          rawSetValue(remoteSaved);
         }
       } catch (error) {
         console.warn("공유 데이터 불러오기 실패, 브라우저 저장소를 우선 사용합니다.", error);
@@ -3547,27 +3581,9 @@ function useLocal<T>(key: string, initial: T) {
 
     return () => {
       cancelled = true;
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     };
   }, [key]);
-
-  useEffect(() => {
-    if (!loaded) return;
-
-    window.localStorage.setItem(key, valueJson);
-
-    if (skipNextRemoteSave.current) {
-      skipNextRemoteSave.current = false;
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      saveSharedState(key, value).catch((error) => {
-        console.warn("공유 데이터 저장 실패, 브라우저 저장소에만 저장되었습니다.", error);
-      });
-    }, 250);
-
-    return () => window.clearTimeout(timer);
-  }, [key, value, valueJson, loaded]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -3575,18 +3591,25 @@ function useLocal<T>(key: string, initial: T) {
     const syncFromRemote = async () => {
       try {
         if (typeof document !== "undefined" && document.hidden) return;
+        // 방금 업로드/수정한 데이터가 Supabase에 저장되는 동안 과거 원격값이 화면을 덮어쓰지 않도록 보호합니다.
+        if (Date.now() < localEditUntilRef.current) return;
+
         const remoteSaved = await loadSharedState<T>(key);
-        if (remoteSaved !== null && JSON.stringify(remoteSaved) !== JSON.stringify(valueRef.current)) {
-          skipNextRemoteSave.current = true;
+        if (remoteSaved === null) return;
+
+        const remoteJson = JSON.stringify(remoteSaved);
+        if (remoteJson !== JSON.stringify(valueRef.current) && remoteJson !== lastSavedJsonRef.current) {
           valueRef.current = remoteSaved;
-          setValue(remoteSaved);
+          lastSavedJsonRef.current = remoteJson;
+          window.localStorage.setItem(key, remoteJson);
+          rawSetValue(remoteSaved);
         }
       } catch {
         // 네트워크가 잠시 끊겨도 로컬 화면은 계속 사용합니다.
       }
     };
 
-    const interval = window.setInterval(syncFromRemote, 2500);
+    const interval = window.setInterval(syncFromRemote, 3000);
     window.addEventListener("focus", syncFromRemote);
 
     return () => {
