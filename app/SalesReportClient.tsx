@@ -8,7 +8,7 @@ type Manager = string;
 type StoreType = string;
 type PeriodType = "current" | "prevMonth" | "prevYear";
 type SalesView = "거래처별" | "브랜드별" | "담당자별" | "채널별";
-type MonthStartTab = "거래처/휴면 관리" | "Target/EST 관리" | "업로드 관리";
+type MonthStartTab = "거래처 매핑관리" | "휴면거래처관리" | "Target 관리" | "EST 관리" | "업로드 관리";
 type DrillPeriod = "prevYear" | "prevMonth" | "current" | "currentFullMonth";
 type SalesStatusSortKey = "label" | "prevYearSales" | "prevYearRate" | "prevMonthSales" | "prevMonthRate" | "currentSales" | "fullMonthSales" | "timeGone" | "timeGoneGap" | "est" | "estRate" | "profitAmount" | "profitRate";
 type SortDirection = "asc" | "desc";
@@ -77,7 +77,7 @@ type TimeConfig = {
 const CHANNELS: Channel[] = ["도매", "체인", "체인물류", "식자재마트", "제조", "권역배송", "온라인", "매장", "비매장", "기업", "매입", "본사"];
 const MANAGERS: Manager[] = ["SY", "KT", "SW", "NH", "Bomi", "BM", "bomi"];
 const SALES_VIEWS: SalesView[] = ["거래처별", "브랜드별", "담당자별", "채널별"];
-const MONTH_TABS: MonthStartTab[] = ["거래처/휴면 관리", "Target/EST 관리", "업로드 관리"];
+const MONTH_TABS: MonthStartTab[] = ["거래처 매핑관리", "휴면거래처관리", "Target 관리", "EST 관리", "업로드 관리"];
 
 const initialStores: Store[] = [
   {
@@ -3317,7 +3317,6 @@ function num(v: unknown) {
   if (!raw) return 0;
 
   const isParenthesesNegative = /^\(.*\)$/.test(raw);
-
   const cleaned = raw
     .replace(/[,\s₩원%]/g, "")
     .replace(/[−–—]/g, "-")
@@ -3448,11 +3447,10 @@ function makeSale(
   salesAmount: number,
   costAmount: number,
   profitAmount: number,
-  stores: Store[],
-  uploadedProfitRate?: number
+  stores: Store[]
 ): SalesRecord {
   const s = storeMap(stores).get(storeCode);
-  const profitRate = Number.isFinite(uploadedProfitRate) ? Number(uploadedProfitRate) : salesAmount ? (profitAmount / salesAmount) * 100 : 0;
+  const profitRate = salesAmount ? (profitAmount / salesAmount) * 100 : 0;
   return {
     id: `${period}|${refMonth}|${saleDate}|${storeCode}|${itemCode}|${itemName}`,
     period,
@@ -3695,26 +3693,6 @@ function groupByKey(records: SalesRecord[], keyFn: (r: SalesRecord) => string) {
 
 function sum(records: SalesRecord[], key: keyof Pick<SalesRecord, "salesAmount" | "costAmount" | "profitAmount" | "quantity">) {
   return records.reduce((a, b) => a + Number(b[key] || 0), 0);
-}
-
-function profitRateValue(value: unknown) {
-  if (value === undefined || value === null || norm(value) === "") return undefined;
-
-  if (typeof value === "number") {
-    return Math.abs(value) > 0 && Math.abs(value) <= 1 ? value * 100 : value;
-  }
-
-  const text = norm(value);
-  const parsed = num(text);
-  return text.includes("%") ? parsed : Math.abs(parsed) > 0 && Math.abs(parsed) <= 1 ? parsed * 100 : parsed;
-}
-
-function weightedProfitRate(records: SalesRecord[]) {
-  const salesTotal = sum(records, "salesAmount");
-  if (!salesTotal) return 0;
-
-  const weighted = records.reduce((total, row) => total + Number(row.salesAmount || 0) * Number(row.profitRate || 0), 0);
-  return weighted / salesTotal;
 }
 
 function exportExcel(rows: Record<string, string | number>[], fileName: string) {
@@ -3984,7 +3962,7 @@ function Dashboard({ stores, sales, targets, ests, month, date, timeGone, codeMa
   const prevMonthSales = sum(prevMonth, "salesAmount");
   const prevYearSales = sum(prevYear, "salesAmount");
   const profitAmount = sum(current, "profitAmount");
-  const profitRate = weightedProfitRate(current);
+  const profitRate = currentSales ? (profitAmount / currentSales) * 100 : 0;
   const { storeTarget, nonStoreTarget, storeEst, nonStoreEst } = metricsByStoreType(stores, targets, ests, month);
   const targetTotal = storeTarget + nonStoreTarget;
   const estTotal = storeEst + nonStoreEst;
@@ -4259,7 +4237,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
     const prevMonthSales = sum(prevMonthRecords, "salesAmount");
     const prevYearSales = sum(prevYearRecords, "salesAmount");
     const profitAmount = sum(currentRecords, "profitAmount");
-    const profitRate = weightedProfitRate(currentRecords);
+    const profitRate = currentSales ? (profitAmount / currentSales) * 100 : 0;
     const prevMonthRate = prevMonthSales ? ((currentSales - prevMonthSales) / prevMonthSales) * 100 : 0;
     const prevYearRate = prevYearSales ? ((currentSales - prevYearSales) / prevYearSales) * 100 : 0;
     const est = estMap.get(key) || 0;
@@ -4890,7 +4868,7 @@ function ItemDrillModal({ itemCode, itemName, rows, onClose }: { itemCode: strin
   const totalQuantity = sum(rows, "quantity");
   const totalCost = sum(rows, "costAmount");
   const totalProfit = sum(rows, "profitAmount");
-  const totalProfitRate = weightedProfitRate(rows);
+  const totalProfitRate = totalSales ? (totalProfit / totalSales) * 100 : 0;
   const excelRows = orderRowsForExcel(rows);
 
   return (
@@ -5116,7 +5094,7 @@ function MonthStartManagement({
   codeMappings: StoreCodeMapping[];
   setCodeMappings: (v: StoreCodeMapping[]) => void;
 }) {
-  const [tab, setTab] = useState<MonthStartTab>("거래처/휴면 관리");
+  const [tab, setTab] = useState<MonthStartTab>("거래처 매핑관리");
 
   return (
     <div className="space-y-4">
@@ -5130,18 +5108,10 @@ function MonthStartManagement({
         </div>
       </div>
 
-      {tab === "거래처/휴면 관리" && (
-        <div className="space-y-4">
-          <MappingPage stores={stores} setStores={setStores} sales={sales} month={month} codeMappings={codeMappings} setCodeMappings={setCodeMappings} />
-          <DormantAccountPage stores={stores} sales={sales} month={month} />
-        </div>
-      )}
-      {tab === "Target/EST 관리" && (
-        <div className="space-y-4">
-          <TargetByTypePage records={targets} setRecords={setTargets} month={month} />
-          <TargetOrEstPage title="EST 관리" records={ests} setRecords={setEsts} stores={stores} month={month} />
-        </div>
-      )}
+      {tab === "거래처 매핑관리" && <MappingPage stores={stores} setStores={setStores} sales={sales} month={month} codeMappings={codeMappings} setCodeMappings={setCodeMappings} />}
+      {tab === "휴면거래처관리" && <DormantAccountPage stores={stores} sales={sales} month={month} />}
+      {tab === "Target 관리" && <TargetByTypePage records={targets} setRecords={setTargets} month={month} />}
+      {tab === "EST 관리" && <TargetOrEstPage title="EST 관리" records={ests} setRecords={setEsts} stores={stores} month={month} />}
       {tab === "업로드 관리" && <UploadPage stores={stores} setStores={setStores} sales={sales} setSales={setSales} month={month} date={date} timeConfigs={timeConfigs} setTimeConfigs={setTimeConfigs} />}
     </div>
   );
@@ -5756,16 +5726,7 @@ function UploadPage({ stores, setStores, sales, setSales, month, date, timeConfi
       const quantity = num(r["판매 수량"] ?? r["수량"]);
       const salesAmount = num(r["판매 금액"] ?? r["판매금액"] ?? r["매출금액"] ?? r["당월 매출"] ?? r["매출"]);
       const costAmount = num(r["원가 금액"] ?? r["원가금액"] ?? r["원가"]);
-      const profitAmount = num(r["이익 금액"] ?? r["이익금액"] ?? r["매출 이익"] ?? r["매출이익"] ?? r["매출총이익"] ?? r["마진액"]);
-      const uploadedProfitRate = profitRateValue(
-        r["이익율"] ??
-        r["이익률"] ??
-        r["매출 이익율"] ??
-        r["매출 이익률"] ??
-        r["매출이익율"] ??
-        r["매출이익률"] ??
-        r["마진율"]
-      );
+      const profitAmount = num(r["이익 금액"] ?? r["이익금액"] ?? r["마진액"]);
       const mapping = storeMap(stores).get(storeCode);
 
       return makeSale(
@@ -5780,8 +5741,7 @@ function UploadPage({ stores, setStores, sales, setSales, month, date, timeConfi
         salesAmount,
         costAmount,
         profitAmount,
-        stores,
-        uploadedProfitRate
+        stores
       );
     }).filter((r) => r.saleDate && r.storeCode && r.salesAmount !== 0);
 
@@ -5861,8 +5821,8 @@ function UploadPage({ stores, setStores, sales, setSales, month, date, timeConfi
 
 
 function ProfitValidationPanel({ sales, month, date }: { sales: SalesRecord[]; month: string; date: string }) {
-  const monthRows = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), monthEnd(month)));
-  const toDateRows = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), date));
+  const monthRows = sales.filter((s) => s.period === "current" && (s.refMonth === month || inRange(s.saleDate, monthStart(month), monthEnd(month))));
+  const toDateRows = monthRows.filter((s) => s.saleDate <= date);
   const monthProfit = sum(monthRows, "profitAmount");
   const toDateProfit = sum(toDateRows, "profitAmount");
   const monthSales = sum(monthRows, "salesAmount");
@@ -5870,9 +5830,15 @@ function ProfitValidationPanel({ sales, month, date }: { sales: SalesRecord[]; m
   const monthRate = weightedProfitRate(monthRows);
   const toDateRate = weightedProfitRate(toDateRows);
 
+  const dailyMap = new Map<string, SalesRecord[]>();
+  monthRows.forEach((r) => {
+    const key = r.saleDate || "날짜없음";
+    dailyMap.set(key, [...(dailyMap.get(key) || []), r]);
+  });
+
   const dailyRows: { date: string; salesAmount: number; profitAmount: number; profitRate: number }[] = [];
   for (let d = monthStart(month), guard = 0; d <= monthEnd(month) && guard < 40; d = addDays(d, 1), guard += 1) {
-    const rows = monthRows.filter((s) => s.saleDate === d);
+    const rows = dailyMap.get(d) || [];
     dailyRows.push({
       date: d,
       salesAmount: sum(rows, "salesAmount"),
@@ -5880,6 +5846,19 @@ function ProfitValidationPanel({ sales, month, date }: { sales: SalesRecord[]; m
       profitRate: weightedProfitRate(rows),
     });
   }
+
+  Array.from(dailyMap.keys())
+    .filter((d) => d < monthStart(month) || d > monthEnd(month))
+    .sort()
+    .forEach((d) => {
+      const rows = dailyMap.get(d) || [];
+      dailyRows.push({
+        date: d,
+        salesAmount: sum(rows, "salesAmount"),
+        profitAmount: sum(rows, "profitAmount"),
+        profitRate: weightedProfitRate(rows),
+      });
+    });
 
   const excelRows = dailyRows.map((r) => ({
     날짜: r.date,
@@ -5893,7 +5872,7 @@ function ProfitValidationPanel({ sales, month, date }: { sales: SalesRecord[]; m
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-lg font-bold">이익금액 검증</h2>
-          <p className="mt-1 text-sm text-slate-500">당월 전체와 기준일({date})까지의 이익금액을 나누어 확인합니다.</p>
+          <p className="mt-1 text-sm text-slate-500">업로드된 당월 데이터 기준으로 당월 전체와 기준일({date})까지의 매출/이익금액을 확인합니다.</p>
         </div>
         <button
           type="button"
@@ -5906,45 +5885,37 @@ function ProfitValidationPanel({ sales, month, date }: { sales: SalesRecord[]; m
 
       <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-          <p className="text-sm font-semibold text-slate-600">당월 이익금액</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{won(monthProfit)}원</p>
-          <p className="mt-1 text-xs text-slate-500">당월 매출 {won(monthSales)}원 · 이익률 {pct(monthRate)}</p>
+          <p className="text-sm font-semibold text-slate-600">당월 매출/이익금액</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">이익 {won(monthProfit)}원</p>
+          <p className="mt-1 text-xs text-slate-500">매출 {won(monthSales)}원 · 이익률 {pct(monthRate)}</p>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm font-semibold text-slate-600">당일까지의 이익</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{won(toDateProfit)}원</p>
-          <p className="mt-1 text-xs text-slate-500">당일까지 매출 {won(toDateSales)}원 · 이익률 {pct(toDateRate)}</p>
+          <p className="text-sm font-semibold text-slate-600">당일까지의 매출/이익</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">이익 {won(toDateProfit)}원</p>
+          <p className="mt-1 text-xs text-slate-500">매출 {won(toDateSales)}원 · 이익률 {pct(toDateRate)}</p>
         </div>
       </div>
 
       <div className="max-h-[360px] overflow-auto">
-        <table className="w-full min-w-[640px] border border-slate-200 text-xs">
+        <table className="w-full min-w-[720px] border border-slate-200 text-sm">
           <thead>
             <tr className="bg-slate-100">
-              <th className="sticky top-0 border bg-slate-100 px-3 py-2 text-left font-bold">날짜</th>
-              <th className="sticky top-0 border bg-slate-100 px-3 py-2 text-right font-bold">매출금액</th>
-              <th className="sticky top-0 border bg-slate-100 px-3 py-2 text-right font-bold">이익금액</th>
-              <th className="sticky top-0 border bg-slate-100 px-3 py-2 text-right font-bold">이익률</th>
+              <Th>날짜</Th>
+              <Th right>매출금액</Th>
+              <Th right>이익금액</Th>
+              <Th right>이익률</Th>
             </tr>
           </thead>
           <tbody>
             {dailyRows.map((r) => (
-              <tr key={r.date} className={r.date <= date ? "bg-white" : "bg-slate-50 text-slate-500"}>
-                <td className="border px-3 py-2 font-semibold">{r.date}</td>
-                <td className="border px-3 py-2 text-right font-semibold text-slate-900">{won(r.salesAmount)}</td>
-                <td className="border px-3 py-2 text-right font-semibold text-slate-900">{won(r.profitAmount)}</td>
-                <td className="border px-3 py-2 text-right">{pct(r.profitRate)}</td>
+              <tr key={r.date}>
+                <Td bold>{r.date}</Td>
+                <Td right>{won(r.salesAmount)}</Td>
+                <Td right>{won(r.profitAmount)}</Td>
+                <Td right>{pct(r.profitRate)}</Td>
               </tr>
             ))}
           </tbody>
-          <tfoot>
-            <tr className="bg-slate-100 font-bold">
-              <td className="border px-3 py-2">합계</td>
-              <td className="border px-3 py-2 text-right">{won(monthSales)}</td>
-              <td className="border px-3 py-2 text-right">{won(monthProfit)}</td>
-              <td className="border px-3 py-2 text-right">{pct(monthRate)}</td>
-            </tr>
-          </tfoot>
         </table>
       </div>
     </div>
