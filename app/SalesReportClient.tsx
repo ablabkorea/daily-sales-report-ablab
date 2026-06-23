@@ -3294,6 +3294,14 @@ function inRange(date: string, start: string, end: string) {
   return date >= start && date <= end;
 }
 
+function daysBetween(fromDate: string, toDate: string) {
+  if (!fromDate || fromDate === "-") return 9999;
+  const from = new Date(`${fromDate}T00:00:00`);
+  const to = new Date(`${toDate}T00:00:00`);
+  const diff = Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
+  return Number.isFinite(diff) ? diff : 9999;
+}
+
 function won(n: number) {
   return Math.round(n || 0).toLocaleString("ko-KR");
 }
@@ -3752,9 +3760,9 @@ export default function Home() {
   }
 
   return (
-    <main className="flex min-h-screen bg-orange-50 text-slate-900" style={{ fontFamily: '"Malgun Gothic", "맑은 고딕", sans-serif' }}>
-      <aside className="flex min-h-screen w-44 shrink-0 flex-col border-r border-orange-200 bg-orange-50 text-slate-900">
-        <div className="border-b border-orange-200 p-4 text-base font-bold tracking-tight text-orange-950">에이비랩 코리아 Sales Report</div>
+    <main className="flex min-h-screen bg-white text-slate-900" style={{ fontFamily: '"Malgun Gothic", "맑은 고딕", sans-serif' }}>
+      <aside className="flex min-h-screen w-44 shrink-0 flex-col border-r border-slate-200 bg-white text-slate-900">
+        <div className="border-b border-slate-200 bg-orange-50 p-4 text-base font-bold tracking-tight text-orange-950">에이비랩 코리아 Sales Report</div>
         <nav className="space-y-2 p-3">
           {menus.map((m, index) => (
             <button
@@ -3768,7 +3776,7 @@ export default function Home() {
             </button>
           ))}
         </nav>
-        <div className="mt-auto border-t border-orange-200 p-3">
+        <div className="mt-auto border-t border-slate-200 p-3">
           {isAdmin ? (
             <button
               type="button"
@@ -4003,6 +4011,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
   const [drill, setDrill] = useState<{ title: string; rows: SalesRecord[] } | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: SalesStatusSortKey; direction: SortDirection }>({ key: "currentSales", direction: "desc" });
   const [inactiveOpen, setInactiveOpen] = useState(false);
+  const [orderDateFilter, setOrderDateFilter] = useState<"all" | "check7" | "no30">("all");
 
   const normalizedSearch = search.trim().toLowerCase();
   const stMap = storeMap(stores);
@@ -4170,7 +4179,23 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
       estMap.set(key, (estMap.get(key) || 0) + e.amount);
     });
 
-  const keys = Array.from(new Set([...currentMap.keys(), ...currentFullMonthMap.keys(), ...prevMonthMap.keys(), ...prevYearMap.keys(), ...estMap.keys()])).sort();
+  const baseKeySet = new Set([...currentMap.keys(), ...currentFullMonthMap.keys(), ...prevMonthMap.keys(), ...prevYearMap.keys(), ...estMap.keys()]);
+  if (view === "거래처별") {
+    stores.filter((store) => store.status === "거래중").forEach((store) => baseKeySet.add(storeKey(store)));
+  }
+  const keys = Array.from(baseKeySet).sort();
+
+  const lastOrderDateByKey = useMemo(() => {
+    const map = new Map<string, string>();
+    sales
+      .filter((r) => r.period === "current" && r.saleDate <= date)
+      .forEach((r) => {
+        const key = rowKey(r);
+        const prev = map.get(key);
+        if (!prev || r.saleDate > prev) map.set(key, r.saleDate);
+      });
+    return map;
+  }, [sales, date, view, stores, codeMappings]);
 
   const getDrillRows = (key: string, period: DrillPeriod) => {
     if (period === "prevYear") return prevYearMap.get(key) || [];
@@ -4217,7 +4242,14 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
       estRate,
       profitAmount,
       profitRate,
+      lastOrderDate: view === "거래처별" ? (lastOrderDateByKey.get(key) || "-") : "-",
+      daysSinceLastOrder: view === "거래처별" ? daysBetween(lastOrderDateByKey.get(key) || "-", date) : 0,
     };
+  }).filter((row) => {
+    if (view !== "거래처별") return true;
+    if (orderDateFilter === "check7") return row.daysSinceLastOrder >= 7;
+    if (orderDateFilter === "no30") return row.daysSinceLastOrder >= 30;
+    return true;
   });
 
   const sortedRows = useMemo(() => {
@@ -4296,6 +4328,17 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
                 ))}
               </select>
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="거래처 검색" className="w-[220px] rounded-lg border border-slate-300 bg-white/80 px-3 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+              {view === "거래처별" && (
+                <select
+                  value={orderDateFilter}
+                  onChange={(e) => setOrderDateFilter(e.target.value as "all" | "check7" | "no30")}
+                  className="w-[190px] rounded-lg border border-slate-300 bg-white/80 px-3 py-1.5 text-xs font-semibold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="all">마지막 발주일 전체</option>
+                  <option value="check7">확인필요 7일 이상</option>
+                  <option value="no30">미발주 30일 이상</option>
+                </select>
+              )}
               <span className="text-xs font-medium text-slate-500">표시 기준: {view}</span>
               <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
                 <button
@@ -4325,10 +4368,11 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
         )}
 
         <div className="max-h-[62vh] overflow-auto">
-          <table className="w-full min-w-[1320px] table-auto border border-slate-200 text-[12px] leading-tight">
+          <table className="w-full min-w-[1420px] table-auto border border-slate-200 text-[12px] leading-tight">
             <thead>
               <tr className="bg-slate-100">
                 <ThCompactSortable w="w-[10%]" sortKey="label" sortConfig={sortConfig} onSort={requestSort}>{view.replace("별", "")}</ThCompactSortable>
+                {!compact && view === "거래처별" && <ThCompact tone="gray">마지막 발주일</ThCompact>}
                 <ThCompactSortable right tone="mint" sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>전년동월</ThCompactSortable>
                 <ThCompactSortable right tone="mint" sortKey="prevYearRate" sortConfig={sortConfig} onSort={requestSort}>전년대비</ThCompactSortable>
                 <ThCompactSortable right tone="blue" sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>전월</ThCompactSortable>
@@ -4349,6 +4393,14 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
               ) : sortedRows.map((r) => (
                 <tr key={r.key}>
                   <TdCompact bold>{r.label}</TdCompact>
+                  {!compact && view === "거래처별" && (
+                    <TdCompact>
+                      <div className="font-semibold text-slate-900">{r.lastOrderDate}</div>
+                      <div className={`mt-0.5 text-[11px] font-semibold ${r.daysSinceLastOrder >= 30 ? "text-red-600" : r.daysSinceLastOrder >= 7 ? "text-amber-600" : "text-slate-400"}`}>
+                        {r.lastOrderDate === "-" ? "발주 없음" : `${r.daysSinceLastOrder}일 경과`}
+                      </div>
+                    </TdCompact>
+                  )}
                   <ClickableAmountCell value={r.prevYearSales} onClick={() => openDrill(r, "prevYear")} />
                   <TdCompact right amount>{pct(r.prevYearRate)}</TdCompact>
                   <ClickableAmountCell value={r.prevMonthSales} onClick={() => openDrill(r, "prevMonth")} />
@@ -5133,8 +5185,9 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
   const empty: Store = { code: "", name: "", channel: "도매", manager: "", storeType: "비매장", brand: "미지정", status: "거래중" };
   const [form, setForm] = useState<Store>(empty);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
-  const [mappingListOpen, setMappingListOpen] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
+  const [mappingListOpen, setMappingListOpen] = useState(false);
+  const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const rows = stores
     .filter((s) =>
       statusFilter === "all" ||
@@ -5300,9 +5353,9 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
         <div className="flex flex-wrap items-center gap-2">
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="거래처 검색" className="h-8 w-[260px] rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
           <div className="flex overflow-hidden rounded-lg border border-slate-300 bg-white text-xs font-semibold shadow-sm">
-            <button type="button" onClick={() => setStatusFilter("all")} className={`px-3 py-1.5 ${statusFilter === "all" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}>전체 {stores.length.toLocaleString("ko-KR")}</button>
-            <button type="button" onClick={() => setStatusFilter("active")} className={`border-l border-slate-200 px-3 py-1.5 ${statusFilter === "active" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>활성 {activeCount.toLocaleString("ko-KR")}</button>
-            <button type="button" onClick={() => setStatusFilter("inactive")} className={`border-l border-slate-200 px-3 py-1.5 ${statusFilter === "inactive" ? "bg-slate-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>비활성 {inactiveCount.toLocaleString("ko-KR")}</button>
+            <button type="button" onClick={() => { setStatusFilter("all"); setMappingListOpen(true); }} className={`px-3 py-1.5 ${statusFilter === "all" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}>전체 {stores.length.toLocaleString("ko-KR")}</button>
+            <button type="button" onClick={() => { setStatusFilter("active"); setMappingListOpen(true); }} className={`border-l border-slate-200 px-3 py-1.5 ${statusFilter === "active" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>활성 {activeCount.toLocaleString("ko-KR")}</button>
+            <button type="button" onClick={() => { setStatusFilter("inactive"); setMappingListOpen(true); }} className={`border-l border-slate-200 px-3 py-1.5 ${statusFilter === "inactive" ? "bg-slate-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>비활성 {inactiveCount.toLocaleString("ko-KR")}</button>
           </div>
           <button
             type="button"
@@ -5310,6 +5363,13 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
             className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
           >
             {mappingListOpen ? "거래처 목록 닫기" : "거래처 목록 열기"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMappingModalOpen(true)}
+            className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-orange-600"
+          >
+            검증표 열기
           </button>
           <span className="text-xs font-semibold text-slate-500">표시 {rows.length.toLocaleString("ko-KR")}건</span>
         </div>
@@ -5339,7 +5399,18 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
       </div>
       )}
 
-      <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+      {mappingModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
+          <div className="flex max-h-[88vh] w-full max-w-6xl flex-col rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 p-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">전년동월 거래처 매핑 검증</h3>
+                <p className="mt-1 text-xs text-slate-500">검증표는 필요할 때만 열어서 수동 매핑을 설정합니다.</p>
+              </div>
+              <button type="button" onClick={() => setMappingModalOpen(false)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">닫기</button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
         <div className="mb-2 flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h3 className="text-sm font-bold text-slate-900">전년동월 거래처 매핑 검증</h3>
@@ -5394,6 +5465,11 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
           </table>
         </div>
       </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {mappingListOpen && (
       <div className="max-h-[60vh] overflow-auto">
