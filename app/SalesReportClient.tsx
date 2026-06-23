@@ -4044,6 +4044,18 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
     });
   };
 
+  const uploadedStoreInfo = (r: SalesRecord) => ({
+    code: r.storeCode || r.storeName || "미지정",
+    name: r.storeName || r.storeCode || "미지정",
+    channel: r.channel || "미지정",
+    manager: r.manager || "미지정",
+    storeType: r.storeType || "비매장",
+    brand: r.brand || "미지정",
+    status: "거래중" as const,
+    originalCode: r.storeCode,
+    originalName: r.storeName,
+  });
+
   const resolveRecord = (r: SalesRecord) => {
     if (r.period === "prevYear" || r.period === "prevMonth") {
       const manual = findManualMapping(r.storeCode, r.storeName);
@@ -4071,6 +4083,8 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
           originalName: r.storeName,
         };
       }
+
+      return uploadedStoreInfo(r);
     }
 
     return resolveStoreInfo(r.storeCode, r.storeName, {
@@ -5192,7 +5206,7 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
 
     const sourceMap = new Map<string, { period: PeriodType; code: string; name: string; amount: number }>();
     sales
-      .filter((r) => (r.period === "prevYear" || r.period === "prevMonth") && r.refMonth === month)
+      .filter((r) => r.period === "prevYear" && r.refMonth === month)
       .forEach((r) => {
         const key = `${r.period}|${r.storeCode}|${r.storeName}`;
         const item = sourceMap.get(key) || { period: r.period, code: r.storeCode, name: r.storeName, amount: 0 };
@@ -5205,7 +5219,7 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
       const byName = currentByName.get(normalizeStoreNameKey(r.name));
       const manual = codeMappings.find((m) => norm(m.oldCode) === norm(r.code) && (!m.oldName || normalizeStoreNameKey(m.oldName) === normalizeStoreNameKey(r.name)));
       let category = "수동 매핑 필요";
-      let reason = "당월 기준에 코드와 거래처명이 모두 없음";
+      let reason = "당월 매출이 없어 전년동월 업로드 거래처 기준으로 표시";
       let targetCode = "";
       let targetName = "";
 
@@ -5267,9 +5281,9 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-base font-bold">거래처 매핑관리</h2>
-          <p className="mt-1 text-xs text-slate-500">채널/담당자/브랜드 정보를 거래처코드 기준으로 관리합니다. 매출현황은 전년동월/전월 매출을 당월 거래처 기준으로 비교하고, 코드 또는 거래처명이 당월과 같으면 자동 매핑합니다. 둘 다 당월 기준에 없으면 수동 매핑 필요로 표시하며, 수동 매핑 전에는 업로드 거래처 기준 별도 행으로 표시됩니다.</p>
+          <p className="mt-1 text-xs text-slate-500">채널/담당자/브랜드 정보를 거래처코드 기준으로 관리합니다. 전년동월 매출은 당월 매출에 같은 거래처코드나 거래처명이 있으면 당월 거래처 기준으로 합산하고, 당월 매출이 없으면 전년동월 업로드 거래처 기준으로 별도 표시합니다.</p>
         </div>
-        <label className="cursor-pointer rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white">
+        <label className="shrink-0 cursor-pointer rounded-md bg-green-600 px-2 py-1 text-[11px] font-semibold text-white">
           매핑 엑셀 업로드
           <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => upload(e.target.files?.[0] || null)} />
         </label>
@@ -5311,8 +5325,8 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
       <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
         <div className="mb-2 flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">전년동월/전월 거래처 매핑 검증</h3>
-            <p className="mt-1 text-xs text-slate-500">전년동월/전월 업로드 거래처를 당월 거래처 기준으로 비교합니다. 코드나 거래처명 중 하나라도 당월과 같으면 자동 매핑되고, 둘 다 당월 기준에 없으면 수동 매핑 필요로 표시됩니다. 수동 매핑 전에는 매출현황에서 업로드 거래처 기준 별도 행으로 표시됩니다.</p>
+            <h3 className="text-sm font-bold text-slate-900">전년동월 거래처 매핑 검증</h3>
+            <p className="mt-1 text-xs text-slate-500">전년동월 업로드 거래처를 당월 매출 거래처 기준으로 비교합니다. 코드나 거래처명 중 하나라도 당월 매출과 같으면 당월 거래처 기준으로 자동 합산되고, 당월 매출이 없으면 전년동월 업로드 거래처 기준으로 표시됩니다.</p>
           </div>
           <div className="flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
             <span>자동 {mappingSummary["자동 매핑"] || 0}건</span>
@@ -5337,11 +5351,11 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
             </thead>
             <tbody>
               {mappingCheckRows.length === 0 ? (
-                <tr><td colSpan={9} className="border p-5 text-center text-slate-500">검증할 전년동월/전월 매출 데이터가 없습니다.</td></tr>
+                <tr><td colSpan={9} className="border p-5 text-center text-slate-500">검증할 전년동월 매출 데이터가 없습니다.</td></tr>
               ) : mappingCheckRows.map((r) => (
                 <tr key={`${r.period}|${r.code}|${r.name}`} className="hover:bg-slate-50">
                   <td className="border px-2 py-1.5 font-semibold">{r.category}</td>
-                  <td className="border px-2 py-1.5">{r.period === "prevYear" ? "전년동월" : "전월"}</td>
+                  <td className="border px-2 py-1.5">전년동월</td>
                   <td className="border px-2 py-1.5">{r.code}</td>
                   <td className="border px-2 py-1.5 font-semibold">{r.name}</td>
                   <td className="border px-2 py-1.5 text-right font-semibold">{won(r.amount)}</td>
