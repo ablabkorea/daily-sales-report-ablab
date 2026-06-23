@@ -8,7 +8,7 @@ type Manager = string;
 type StoreType = string;
 type PeriodType = "current" | "prevMonth" | "prevYear";
 type SalesView = "거래처별" | "브랜드별" | "담당자별" | "채널별";
-type MonthStartTab = "거래처 매핑관리" | "휴면거래처관리" | "Target 관리" | "EST 관리" | "업로드 관리";
+type MonthStartTab = "거래처/휴면 관리" | "Target/EST 관리" | "업로드 관리";
 type DrillPeriod = "prevYear" | "prevMonth" | "current" | "currentFullMonth";
 type SalesStatusSortKey = "label" | "prevYearSales" | "prevYearRate" | "prevMonthSales" | "prevMonthRate" | "currentSales" | "fullMonthSales" | "timeGone" | "timeGoneGap" | "est" | "estRate" | "profitAmount" | "profitRate";
 type SortDirection = "asc" | "desc";
@@ -77,7 +77,7 @@ type TimeConfig = {
 const CHANNELS: Channel[] = ["도매", "체인", "체인물류", "식자재마트", "제조", "권역배송", "온라인", "매장", "비매장", "기업", "매입", "본사"];
 const MANAGERS: Manager[] = ["SY", "KT", "SW", "NH", "Bomi", "BM", "bomi"];
 const SALES_VIEWS: SalesView[] = ["거래처별", "브랜드별", "담당자별", "채널별"];
-const MONTH_TABS: MonthStartTab[] = ["거래처 매핑관리", "휴면거래처관리", "Target 관리", "EST 관리", "업로드 관리"];
+const MONTH_TABS: MonthStartTab[] = ["거래처/휴면 관리", "Target/EST 관리", "업로드 관리"];
 
 const initialStores: Store[] = [
   {
@@ -5101,7 +5101,7 @@ function MonthStartManagement({
   codeMappings: StoreCodeMapping[];
   setCodeMappings: (v: StoreCodeMapping[]) => void;
 }) {
-  const [tab, setTab] = useState<MonthStartTab>("거래처 매핑관리");
+  const [tab, setTab] = useState<MonthStartTab>("거래처/휴면 관리");
 
   return (
     <div className="space-y-4">
@@ -5115,11 +5115,86 @@ function MonthStartManagement({
         </div>
       </div>
 
-      {tab === "거래처 매핑관리" && <MappingPage stores={stores} setStores={setStores} sales={sales} month={month} codeMappings={codeMappings} setCodeMappings={setCodeMappings} />}
-      {tab === "휴면거래처관리" && <DormantAccountPage stores={stores} sales={sales} month={month} />}
-      {tab === "Target 관리" && <TargetByTypePage records={targets} setRecords={setTargets} month={month} />}
-      {tab === "EST 관리" && <TargetOrEstPage title="EST 관리" records={ests} setRecords={setEsts} stores={stores} month={month} />}
+      {tab === "거래처/휴면 관리" && (
+        <CustomerManagementPage
+          stores={stores}
+          setStores={setStores}
+          sales={sales}
+          month={month}
+          codeMappings={codeMappings}
+          setCodeMappings={setCodeMappings}
+        />
+      )}
+      {tab === "Target/EST 관리" && (
+        <TargetEstManagementPage
+          targets={targets}
+          setTargets={setTargets}
+          ests={ests}
+          setEsts={setEsts}
+          stores={stores}
+          month={month}
+        />
+      )}
       {tab === "업로드 관리" && <UploadPage stores={stores} setStores={setStores} sales={sales} setSales={setSales} month={month} timeConfigs={timeConfigs} setTimeConfigs={setTimeConfigs} />}
+    </div>
+  );
+}
+
+
+function CustomerManagementPage({ stores, setStores, sales, month, codeMappings, setCodeMappings }: { stores: Store[]; setStores: (v: Store[]) => void; sales: SalesRecord[]; month: string; codeMappings: StoreCodeMapping[]; setCodeMappings: (v: StoreCodeMapping[]) => void }) {
+  const [subTab, setSubTab] = useState<"거래처 매핑관리" | "휴면거래처관리">("거래처 매핑관리");
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-3 shadow-sm backdrop-blur">
+        <div className="flex flex-wrap gap-2">
+          {(["거래처 매핑관리", "휴면거래처관리"] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => setSubTab(item)}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold ${subTab === item ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {subTab === "거래처 매핑관리" ? (
+        <MappingPage stores={stores} setStores={setStores} sales={sales} month={month} codeMappings={codeMappings} setCodeMappings={setCodeMappings} />
+      ) : (
+        <DormantAccountPage stores={stores} sales={sales} month={month} />
+      )}
+    </div>
+  );
+}
+
+function TargetEstManagementPage({ targets, setTargets, ests, setEsts, stores, month }: { targets: TargetRecord[]; setTargets: (v: TargetRecord[]) => void; ests: EstRecord[]; setEsts: (v: EstRecord[]) => void; stores: Store[]; month: string }) {
+  const [subTab, setSubTab] = useState<"Target 관리" | "EST 관리">("Target 관리");
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-3 shadow-sm backdrop-blur">
+        <div className="flex flex-wrap gap-2">
+          {(["Target 관리", "EST 관리"] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => setSubTab(item)}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold ${subTab === item ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {subTab === "Target 관리" ? (
+        <TargetByTypePage records={targets} setRecords={setTargets} month={month} />
+      ) : (
+        <TargetOrEstPage title="EST 관리" records={ests} setRecords={setEsts} stores={stores} month={month} />
+      )}
     </div>
   );
 }
@@ -5720,6 +5795,51 @@ function buildAutoClosedStoresFromPrevYear(parsed: SalesRecord[], stores: Store[
 function UploadPage({ stores, setStores, sales, setSales, month, timeConfigs, setTimeConfigs }: { stores: Store[]; setStores: (v: Store[]) => void; sales: SalesRecord[]; setSales: (v: SalesRecord[]) => void; month: string; timeConfigs: TimeConfig[]; setTimeConfigs: (v: TimeConfig[]) => void }) {
   const [holidayText, setHolidayText] = useState("");
   const [deleteDate, setDeleteDate] = useState(today());
+  const [expectedProfitText, setExpectedProfitText] = useState("");
+
+  const currentMonthSalesForValidation = useMemo(
+    () => sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), monthEnd(month))),
+    [sales, month]
+  );
+  const validationTotalSales = sum(currentMonthSalesForValidation, "salesAmount");
+  const validationTotalProfit = sum(currentMonthSalesForValidation, "profitAmount");
+  const validationProfitRate = weightedProfitRate(currentMonthSalesForValidation);
+  const expectedProfitAmount = num(expectedProfitText);
+  const profitGap = expectedProfitText.trim() ? validationTotalProfit - expectedProfitAmount : 0;
+
+  const profitByDate = useMemo(() => {
+    const map = new Map<string, { date: string; count: number; salesAmount: number; profitAmount: number; profitRate: number }>();
+    currentMonthSalesForValidation.forEach((r) => {
+      const item = map.get(r.saleDate) || { date: r.saleDate, count: 0, salesAmount: 0, profitAmount: 0, profitRate: 0 };
+      item.count += 1;
+      item.salesAmount += r.salesAmount;
+      item.profitAmount += r.profitAmount;
+      map.set(r.saleDate, item);
+    });
+    return Array.from(map.values())
+      .map((item) => ({ ...item, profitRate: item.salesAmount ? (item.profitAmount / item.salesAmount) * 100 : 0 }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [currentMonthSalesForValidation]);
+
+  const profitByStore = useMemo(() => {
+    const map = new Map<string, { storeCode: string; storeName: string; count: number; salesAmount: number; profitAmount: number; profitRate: number }>();
+    currentMonthSalesForValidation.forEach((r) => {
+      const key = `${r.storeCode}|${r.storeName}`;
+      const item = map.get(key) || { storeCode: r.storeCode, storeName: r.storeName, count: 0, salesAmount: 0, profitAmount: 0, profitRate: 0 };
+      item.count += 1;
+      item.salesAmount += r.salesAmount;
+      item.profitAmount += r.profitAmount;
+      map.set(key, item);
+    });
+    return Array.from(map.values())
+      .map((item) => ({ ...item, profitRate: item.salesAmount ? (item.profitAmount / item.salesAmount) * 100 : 0 }))
+      .sort((a, b) => Math.abs(b.profitAmount) - Math.abs(a.profitAmount));
+  }, [currentMonthSalesForValidation]);
+
+  const profitValidationExcelRows = [
+    ...profitByDate.map((r) => ({ 구분: "날짜별", 일자: r.date, 거래처코드: "", 거래처명: "", 건수: r.count, 매출금액: r.salesAmount, 이익금액: r.profitAmount, 이익률: pct(r.profitRate) })),
+    ...profitByStore.map((r) => ({ 구분: "거래처별", 일자: "", 거래처코드: r.storeCode, 거래처명: r.storeName, 건수: r.count, 매출금액: r.salesAmount, 이익금액: r.profitAmount, 이익률: pct(r.profitRate) })),
+  ];
 
   async function uploadSales(file: File | null, period: PeriodType) {
     if (!file) return;
@@ -5815,6 +5935,114 @@ function UploadPage({ stores, setStores, sales, setSales, month, timeConfigs, se
           <UploadBox title="당월 매출 업로드" description="같은 날짜 파일을 다시 올리면 해당 날짜 기존 당월 매출을 삭제하고 새 파일로 업데이트합니다." onUpload={(file) => uploadSales(file, "current")} />
           <UploadBox title="전월 매출 업로드" description="매출비교와 매출현황의 전월 매출 기준으로 사용합니다. 같은 기준월 자료는 새 파일로 교체됩니다." onUpload={(file) => uploadSales(file, "prevMonth")} />
           <UploadBox title="전년동월 매출 업로드" description="매출비교와 매출현황의 전년동월 매출 기준으로 사용합니다. 같은 기준월 자료는 새 파일로 교체됩니다." onUpload={(file) => uploadSales(file, "prevYear")} />
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-5 shadow-sm backdrop-blur">
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="text-lg font-bold">이익금액 검증표</h2>
+            <p className="mt-1 text-sm text-slate-500">당월 업로드 데이터 기준으로 이익금액 합계를 검증합니다. 다른 전산의 이익금액을 입력하면 차이를 바로 확인할 수 있습니다.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => exportExcel(profitValidationExcelRows, `이익금액_검증표_${month}`)}
+            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+          >
+            검증표 엑셀 다운로드
+          </button>
+        </div>
+
+        <div className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-slate-600">당월 업로드 건수</p>
+            <p className="mt-2 text-right text-2xl font-bold text-slate-900">{currentMonthSalesForValidation.length.toLocaleString("ko-KR")}건</p>
+          </div>
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+            <p className="text-sm font-semibold text-slate-600">당월 매출금액</p>
+            <p className="mt-2 break-all text-right text-2xl font-bold text-slate-900">{won(validationTotalSales)}</p>
+          </div>
+          <div className="rounded-2xl border border-green-100 bg-green-50 p-4">
+            <p className="text-sm font-semibold text-slate-600">사이트 이익금액</p>
+            <p className="mt-2 break-all text-right text-2xl font-bold text-slate-900">{won(validationTotalProfit)}</p>
+            <p className="mt-1 text-right text-xs font-semibold text-slate-500">이익률 {pct(validationProfitRate)}</p>
+          </div>
+          <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+            <p className="text-sm font-semibold text-slate-600">전산 기준 이익금액</p>
+            <input
+              value={expectedProfitText}
+              onChange={(e) => setExpectedProfitText(e.target.value)}
+              placeholder="예: 94,322,354"
+              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-right text-lg font-bold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+            <p className={`mt-1 text-right text-xs font-bold ${profitGap === 0 ? "text-slate-500" : profitGap > 0 ? "text-red-600" : "text-blue-600"}`}>
+              차이 {expectedProfitText.trim() ? won(profitGap) : "-"}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div>
+            <h3 className="mb-2 text-sm font-bold text-slate-800">날짜별 이익금액</h3>
+            <div className="max-h-[320px] overflow-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[620px] text-xs">
+                <thead>
+                  <tr className="bg-slate-100">
+                    <Th>일자</Th>
+                    <Th right>건수</Th>
+                    <Th right>매출금액</Th>
+                    <Th right>이익금액</Th>
+                    <Th right>이익률</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profitByDate.length === 0 ? (
+                    <tr><Td>당월 업로드 데이터 없음</Td><Td>{""}</Td><Td>{""}</Td><Td>{""}</Td><Td>{""}</Td></tr>
+                  ) : profitByDate.map((r) => (
+                    <tr key={r.date}>
+                      <Td bold>{r.date}</Td>
+                      <Td right>{r.count.toLocaleString("ko-KR")}</Td>
+                      <Td right>{won(r.salesAmount)}</Td>
+                      <Td right bold>{won(r.profitAmount)}</Td>
+                      <Td right>{pct(r.profitRate)}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-bold text-slate-800">거래처별 이익금액 TOP 50</h3>
+            <div className="max-h-[320px] overflow-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[760px] text-xs">
+                <thead>
+                  <tr className="bg-slate-100">
+                    <Th>거래처코드</Th>
+                    <Th>거래처명</Th>
+                    <Th right>건수</Th>
+                    <Th right>매출금액</Th>
+                    <Th right>이익금액</Th>
+                    <Th right>이익률</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profitByStore.length === 0 ? (
+                    <tr><Td>당월 업로드 데이터 없음</Td><Td>{""}</Td><Td>{""}</Td><Td>{""}</Td><Td>{""}</Td><Td>{""}</Td></tr>
+                  ) : profitByStore.slice(0, 50).map((r) => (
+                    <tr key={`${r.storeCode}|${r.storeName}`}>
+                      <Td>{r.storeCode}</Td>
+                      <Td bold>{r.storeName}</Td>
+                      <Td right>{r.count.toLocaleString("ko-KR")}</Td>
+                      <Td right>{won(r.salesAmount)}</Td>
+                      <Td right bold>{won(r.profitAmount)}</Td>
+                      <Td right>{pct(r.profitRate)}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 
