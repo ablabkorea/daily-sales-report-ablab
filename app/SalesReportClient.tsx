@@ -3311,7 +3311,23 @@ function pct(n: number) {
 }
 
 function num(v: unknown) {
-  return typeof v === "number" ? v : Number(String(v ?? "").replace(/,/g, "").replace("%", "")) || 0;
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+
+  const text = String(v ?? "").trim();
+  if (!text) return 0;
+
+  const isParenthesesNegative = /^\(.*\)$/.test(text);
+  const cleaned = text
+    .replace(/\u2212/g, "-")
+    .replace(/,/g, "")
+    .replace(/%/g, "")
+    .replace(/원/g, "")
+    .replace(/\s/g, "")
+    .replace(/[()]/g, "");
+
+  const parsed = Number(cleaned);
+  if (!Number.isFinite(parsed)) return 0;
+  return isParenthesesNegative ? -Math.abs(parsed) : parsed;
 }
 
 function norm(v: unknown) {
@@ -5739,9 +5755,20 @@ function UploadPage({ stores, setStores, sales, setSales, month, date, timeConfi
       const itemCode = norm(r["품목 코드"] ?? r["품목코드"] ?? r["상품코드"]);
       const itemName = norm(r["품목명[규격]"] ?? r["품목명"] ?? r["상품명"]);
       const quantity = num(r["판매 수량"] ?? r["수량"]);
-      const salesAmount = num(r["판매 금액"] ?? r["판매금액"] ?? r["매출금액"] ?? r["당월 매출"] ?? r["매출"]);
-      const costAmount = num(r["원가 금액"] ?? r["원가금액"] ?? r["원가"]);
-      const profitAmount = num(r["이익 금액"] ?? r["이익금액"] ?? r["매출 이익"] ?? r["매출이익"] ?? r["매출총이익"] ?? r["마진액"]);
+      const rawSalesAmount = r["판매 금액"] ?? r["판매금액"] ?? r["매출금액"] ?? r["당월 매출"] ?? r["매출"];
+      const rawCostAmount = r["원가 금액"] ?? r["원가금액"] ?? r["원가"];
+      const rawProfitAmount = r["이익 금액"] ?? r["이익금액"] ?? r["매출 이익"] ?? r["매출이익"] ?? r["매출총이익"] ?? r["마진액"];
+      const hasSalesAmount = norm(rawSalesAmount) !== "";
+      const hasCostAmount = norm(rawCostAmount) !== "";
+      const hasProfitAmount = norm(rawProfitAmount) !== "";
+      const salesAmount = num(rawSalesAmount);
+      const costAmount = num(rawCostAmount);
+      const uploadedProfitAmount = num(rawProfitAmount);
+      const profitAmount = hasProfitAmount
+        ? uploadedProfitAmount
+        : hasSalesAmount || hasCostAmount
+        ? salesAmount - costAmount
+        : 0;
       const uploadedProfitRate = profitRateValue(
         r["이익율"] ??
         r["이익률"] ??
@@ -5768,7 +5795,11 @@ function UploadPage({ stores, setStores, sales, setSales, month, date, timeConfi
         stores,
         uploadedProfitRate
       );
-    }).filter((r) => r.saleDate && r.storeCode && r.salesAmount !== 0);
+    }).filter((r) =>
+      r.saleDate &&
+      r.storeCode &&
+      (r.salesAmount !== 0 || r.costAmount !== 0 || r.profitAmount !== 0 || r.quantity !== 0)
+    );
 
     const missingStores = period === "prevYear"
       ? buildAutoClosedStoresFromPrevYear(parsed, stores)
