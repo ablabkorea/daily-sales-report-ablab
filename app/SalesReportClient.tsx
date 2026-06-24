@@ -4608,15 +4608,15 @@ function InactiveOrdersModal({ sales, month, onClose }: { stores: Store[]; sales
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto p-4">
-          <table className="w-full min-w-[860px] border border-slate-200 text-xs">
+        <div className="min-h-0 flex-1 overflow-auto bg-white px-4 pb-4 pt-0">
+          <table className="w-full min-w-[860px] border-separate border-spacing-0 border border-slate-200 bg-white text-xs">
             <thead>
               <tr className="bg-slate-100">
-                <th className="border px-2 py-2 text-left font-bold">상품코드</th>
-                <th className="border px-2 py-2 text-left font-bold">상품명</th>
-                <th className="border px-2 py-2 text-left font-bold">마지막 주문일</th>
-                <th className="border px-2 py-2 text-left font-bold">마지막 거래처</th>
-                <th className="border px-2 py-2 text-right font-bold">마지막 매출금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품코드</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품명</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">마지막 주문일</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">마지막 거래처</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">마지막 매출금액</th>
               </tr>
             </thead>
             <tbody>
@@ -4760,13 +4760,13 @@ function DormantAccountPage({ stores, sales, month }: { stores: Store[]; sales: 
           <table className="w-full min-w-[920px] border border-slate-200 text-xs">
             <thead>
               <tr className="bg-slate-100">
-                <th className="border px-2 py-2 text-left font-bold">거래처코드</th>
-                <th className="border px-2 py-2 text-left font-bold">거래처명</th>
-                <th className="border px-2 py-2 text-left font-bold">브랜드</th>
-                <th className="border px-2 py-2 text-left font-bold">담당자</th>
-                <th className="border px-2 py-2 text-left font-bold">채널</th>
-                <th className="border px-2 py-2 text-left font-bold">마지막 주문일</th>
-                <th className="border px-2 py-2 text-right font-bold">마지막 매출금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">거래처코드</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">거래처명</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">브랜드</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">담당자</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">채널</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">마지막 주문일</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">마지막 매출금액</th>
               </tr>
             </thead>
             <tbody>
@@ -4786,14 +4786,14 @@ function DormantAccountPage({ stores, sales, month }: { stores: Store[]; sales: 
             </tbody>
           </table>
         ) : (
-          <table className="w-full min-w-[860px] border border-slate-200 text-xs">
+          <table className="w-full min-w-[860px] border-separate border-spacing-0 border border-slate-200 bg-white text-xs">
             <thead>
               <tr className="bg-slate-100">
-                <th className="border px-2 py-2 text-left font-bold">상품코드</th>
-                <th className="border px-2 py-2 text-left font-bold">상품명</th>
-                <th className="border px-2 py-2 text-left font-bold">마지막 주문일</th>
-                <th className="border px-2 py-2 text-left font-bold">마지막 거래처</th>
-                <th className="border px-2 py-2 text-right font-bold">마지막 매출금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품코드</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품명</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">마지막 주문일</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">마지막 거래처</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">마지막 매출금액</th>
               </tr>
             </thead>
             <tbody>
@@ -4889,19 +4889,19 @@ function OrderDrillModal({ title, rows, allSales, onClose }: { title: string; ro
           </div>
         </div>
 
-        <div className="relative isolate min-h-0 flex-1 overflow-auto bg-white p-5">
+        <div className="relative isolate min-h-0 flex-1 overflow-auto bg-white px-5 pb-5 pt-0">
           <table className="w-full min-w-[1100px] border-separate border-spacing-0 border border-slate-200 bg-white text-sm">
-            <thead className="sticky top-0 z-50 bg-slate-100 shadow-[0_3px_8px_rgba(15,23,42,0.16)]">
-              <tr className="bg-slate-100">
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-left font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">주문일</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-left font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">거래처</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-left font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">상품코드</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-left font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">상품명</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-right font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">수량</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-right font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">매출금액</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-right font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">원가금액</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-right font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">이익금액</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-right font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">이익률</th>
+            <thead className="sticky top-0 z-[80] bg-white shadow-[0_2px_0_0_#e2e8f0]">
+              <tr className="bg-white">
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">주문일</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">거래처</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품코드</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품명</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">수량</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">매출금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">원가금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익률</th>
               </tr>
             </thead>
             <tbody>
@@ -4981,18 +4981,18 @@ function ItemDrillModal({ itemCode, itemName, rows, onClose }: { itemCode: strin
           </div>
         </div>
 
-        <div className="relative isolate min-h-0 flex-1 overflow-auto bg-white p-5">
+        <div className="relative isolate min-h-0 flex-1 overflow-auto bg-white px-5 pb-5 pt-0">
           <table className="w-full min-w-[920px] border-separate border-spacing-0 border border-slate-200 bg-white text-sm">
-            <thead className="sticky top-0 z-50 bg-slate-100 shadow-[0_3px_8px_rgba(15,23,42,0.16)]">
-              <tr className="bg-slate-100">
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-left font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">주문일</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-left font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">거래처</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-left font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">담당자</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-right font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">수량</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-right font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">매출금액</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-right font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">원가금액</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-right font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">이익금액</th>
-                <th className="sticky top-0 z-50 border border-slate-200 bg-slate-100 bg-clip-padding px-3 py-2 text-right font-bold shadow-[0_2px_6px_rgba(15,23,42,0.12)]">이익률</th>
+            <thead className="sticky top-0 z-[80] bg-white shadow-[0_2px_0_0_#e2e8f0]">
+              <tr className="bg-white">
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">주문일</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">거래처</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">담당자</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">수량</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">매출금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">원가금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익률</th>
               </tr>
             </thead>
             <tbody>
@@ -5432,7 +5432,7 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
               </div>
               <button type="button" onClick={() => setMappingModalOpen(false)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">닫기</button>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto p-4">
+            <div className="min-h-0 flex-1 overflow-auto bg-white px-4 pb-4 pt-0">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
         <div className="mb-2 flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -5446,18 +5446,18 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
           </div>
         </div>
         <div className="max-h-[260px] overflow-auto">
-          <table className="w-full min-w-[960px] border border-slate-200 bg-white text-xs">
+          <table className="w-full min-w-[960px] border-separate border-spacing-0 border border-slate-200 bg-white text-xs">
             <thead>
               <tr className="bg-slate-100">
-                <th className="border px-2 py-1.5 text-left">구분</th>
-                <th className="border px-2 py-1.5 text-left">업로드구분</th>
-                <th className="border px-2 py-1.5 text-left">업로드코드</th>
-                <th className="border px-2 py-1.5 text-left">업로드거래처명</th>
-                <th className="border px-2 py-1.5 text-right">업로드매출금액</th>
-                <th className="border px-2 py-1.5 text-left">당월코드</th>
-                <th className="border px-2 py-1.5 text-left">당월거래처명</th>
-                <th className="border px-2 py-1.5 text-left">매핑방식</th>
-                <th className="border px-2 py-1.5 text-right">관리</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-1.5 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">구분</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-1.5 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">업로드구분</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-1.5 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">업로드코드</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-1.5 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">업로드거래처명</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-1.5 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">업로드매출금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-1.5 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">당월코드</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-1.5 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">당월거래처명</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-1.5 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">매핑방식</th>
+                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-1.5 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">관리</th>
               </tr>
             </thead>
             <tbody>
@@ -5473,7 +5473,7 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
                   <td className="border px-2 py-1.5">{r.targetCode || "-"}</td>
                   <td className="border px-2 py-1.5">{r.targetName || "-"}</td>
                   <td className="border px-2 py-1.5">{r.reason}</td>
-                  <td className="border px-2 py-1.5 text-right">
+                  <td className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-1.5 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">
                     {r.category === "수동 매핑 완료" ? (
                       <button type="button" onClick={() => deleteManualMapping(r)} className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-100">해제</button>
                     ) : r.category === "수동 매핑 필요" ? (
