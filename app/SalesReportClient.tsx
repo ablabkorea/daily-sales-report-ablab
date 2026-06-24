@@ -4893,15 +4893,15 @@ function OrderDrillModal({ title, rows, allSales, onClose }: { title: string; ro
           <table className="w-full min-w-[1100px] border border-slate-200 text-sm">
             <thead>
               <tr className="bg-slate-100">
-                <th className="border bg-slate-100 px-3 py-2 text-left font-bold">주문일</th>
-                <th className="border bg-slate-100 px-3 py-2 text-left font-bold">거래처</th>
-                <th className="border bg-slate-100 px-3 py-2 text-left font-bold">상품코드</th>
-                <th className="border bg-slate-100 px-3 py-2 text-left font-bold">상품명</th>
-                <th className="border bg-slate-100 px-3 py-2 text-right font-bold">수량</th>
-                <th className="border bg-slate-100 px-3 py-2 text-right font-bold">매출금액</th>
-                <th className="border bg-slate-100 px-3 py-2 text-right font-bold">원가금액</th>
-                <th className="border bg-slate-100 px-3 py-2 text-right font-bold">이익금액</th>
-                <th className="border bg-slate-100 px-3 py-2 text-right font-bold">이익률</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-left font-bold shadow-sm">주문일</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-left font-bold shadow-sm">거래처</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-left font-bold shadow-sm">상품코드</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-left font-bold shadow-sm">상품명</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-right font-bold shadow-sm">수량</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-right font-bold shadow-sm">매출금액</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-right font-bold shadow-sm">원가금액</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-right font-bold shadow-sm">이익금액</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-right font-bold shadow-sm">이익률</th>
               </tr>
             </thead>
             <tbody>
@@ -4985,26 +4985,24 @@ function ItemDrillModal({ itemCode, itemName, rows, onClose }: { itemCode: strin
           <table className="w-full min-w-[1050px] border border-slate-200 text-sm">
             <thead>
               <tr className="bg-slate-100">
-                <th className="border bg-slate-100 px-3 py-2 text-left font-bold">주문일</th>
-                <th className="border bg-slate-100 px-3 py-2 text-left font-bold">거래처</th>
-                <th className="border bg-slate-100 px-3 py-2 text-left font-bold">브랜드</th>
-                <th className="border bg-slate-100 px-3 py-2 text-left font-bold">담당자</th>
-                <th className="border bg-slate-100 px-3 py-2 text-left font-bold">채널</th>
-                <th className="border bg-slate-100 px-3 py-2 text-right font-bold">수량</th>
-                <th className="border bg-slate-100 px-3 py-2 text-right font-bold">매출금액</th>
-                <th className="border bg-slate-100 px-3 py-2 text-right font-bold">원가금액</th>
-                <th className="border bg-slate-100 px-3 py-2 text-right font-bold">이익금액</th>
-                <th className="border bg-slate-100 px-3 py-2 text-right font-bold">이익률</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-left font-bold shadow-sm">주문일</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-left font-bold shadow-sm">거래처</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-left font-bold shadow-sm">담당자</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-left font-bold shadow-sm">채널</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-right font-bold shadow-sm">수량</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-right font-bold shadow-sm">매출금액</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-right font-bold shadow-sm">원가금액</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-right font-bold shadow-sm">이익금액</th>
+                <th className="sticky top-0 z-20 border bg-slate-100 px-3 py-2 text-right font-bold shadow-sm">이익률</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={10} className="border p-10 text-center text-slate-500">표시할 품목별 주문내역이 없습니다.</td></tr>
+                <tr><td colSpan={9} className="border p-10 text-center text-slate-500">표시할 품목별 주문내역이 없습니다.</td></tr>
               ) : rows.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50">
                   <td className="border px-3 py-2">{r.saleDate}</td>
                   <td className="border px-3 py-2 font-semibold">{r.storeName}</td>
-                  <td className="border px-3 py-2">{r.brand}</td>
                   <td className="border px-3 py-2">{r.manager || "미지정"}</td>
                   <td className="border px-3 py-2">{r.channel}</td>
                   <td className="border px-3 py-2 text-right">{won(r.quantity)}</td>
