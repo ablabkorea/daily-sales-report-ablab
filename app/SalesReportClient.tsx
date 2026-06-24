@@ -4077,6 +4077,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
   const [sortConfig, setSortConfig] = useState<{ key: SalesStatusSortKey; direction: SortDirection }>({ key: "currentSales", direction: "desc" });
   const [inactiveOpen, setInactiveOpen] = useState(false);
   const [orderDateFilter, setOrderDateFilter] = useState<"all" | "check7" | "no30">("all");
+  const [hideEndedStores, setHideEndedStores] = useState(false);
 
   const normalizedSearch = search.trim().toLowerCase();
   const stMap = storeMap(stores);
@@ -4292,6 +4293,9 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
     const prevYearRate = prevYearSales ? ((currentSales - prevYearSales) / prevYearSales) * 100 : 0;
     const est = estMap.get(key) || 0;
     const estRate = est ? (currentSales / est) * 100 : 0;
+    const firstRecord = allRecords[0];
+    const storeStatus = firstRecord ? resolveRecord(firstRecord).status : stMap.get(key)?.status;
+    const isEndedStore = view === "거래처별" && storeStatus === "거래종료";
     return {
       key,
       label: rowLabel(key, allRecords),
@@ -4307,6 +4311,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
       estRate,
       profitAmount,
       profitRate,
+      isEndedStore,
       lastOrderDate: view === "거래처별" ? (lastOrderDateByKey.get(key) || "-") : "-",
       daysSinceLastOrder: view === "거래처별" ? daysBetween(lastOrderDateByKey.get(key) || "-", date) : 0,
     };
@@ -4317,8 +4322,13 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
     return true;
   });
 
+  const displayRows = useMemo(() => {
+    if (!hideEndedStores || view !== "거래처별") return rows;
+    return rows.filter((row) => !row.isEndedStore);
+  }, [rows, hideEndedStores, view]);
+
   const sortedRows = useMemo(() => {
-    return [...rows].sort((a, b) => {
+    return [...displayRows].sort((a, b) => {
       const aValue = a[sortConfig.key];
       const bValue = b[sortConfig.key];
       let result = 0;
@@ -4329,7 +4339,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
       }
       return sortConfig.direction === "asc" ? result : -result;
     });
-  }, [rows, sortConfig]);
+  }, [displayRows, sortConfig]);
 
   const requestSort = (key: SalesStatusSortKey) => {
     setSortConfig((prev) => ({
@@ -4376,6 +4386,29 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
           <div>
             <h2 className="text-base font-bold text-slate-900">매출현황</h2>
             <p className="mt-1 text-xs text-slate-500">상단 헤더를 클릭하면 내림차순/오름차순으로 정렬됩니다. 금액을 클릭하면 해당 주문내역을 볼 수 있습니다.</p>
+          </div>
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {compact && (
+              <select
+                value={view}
+                onChange={(e) => setView(e.target.value as SalesView)}
+                className="w-[150px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                {SALES_VIEWS.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            )}
+            <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold shadow-sm ${view === "거래처별" ? "border-slate-300 bg-white text-slate-700" : "border-slate-200 bg-slate-50 text-slate-400"}`}>
+              <input
+                type="checkbox"
+                checked={hideEndedStores}
+                disabled={view !== "거래처별"}
+                onChange={(e) => setHideEndedStores(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              거래종료 거래처 제외
+            </label>
           </div>
         </div>
 
@@ -4431,8 +4464,8 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
           </>
         )}
 
-        <div className="max-h-[62vh] overflow-auto">
-          <table className="w-full min-w-[1320px] table-auto border border-slate-200 text-[12px] leading-tight">
+        <div className="relative max-h-[62vh] overflow-auto bg-white">
+          <table className="w-full min-w-[1320px] table-auto border-separate border-spacing-0 border border-slate-200 text-[12px] leading-tight">
             <thead>
               <tr className="bg-slate-100">
                 <ThCompactSortable w="w-[10%]" sortKey="label" sortConfig={sortConfig} onSort={requestSort}>{view.replace("별", "")}</ThCompactSortable>
@@ -4827,7 +4860,7 @@ function OrderDrillModal({ title, rows, allSales, onClose }: { title: string; ro
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3">
       <div className="flex max-h-[94vh] w-full max-w-[96vw] flex-col rounded-2xl bg-white shadow-2xl">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="sticky top-0 z-20 flex flex-col gap-3 border-b border-slate-200 bg-white p-5 shadow-sm xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-xl font-bold text-slate-900">{title} 주문내역</h3>
@@ -4924,7 +4957,7 @@ function ItemDrillModal({ itemCode, itemName, rows, onClose }: { itemCode: strin
   return (
     <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-950/45 p-4">
       <div className="flex max-h-[88vh] w-full max-w-[90vw] flex-col rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="sticky top-0 z-20 flex flex-col gap-3 border-b border-slate-200 bg-white p-5 shadow-sm xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 flex-1">
             <h3 className="text-xl font-bold text-slate-900">품목별 전체 거래처 주문내역</h3>
             <p className="mt-1 text-sm font-semibold text-slate-700">{itemCode} · {itemName}</p>
@@ -5020,7 +5053,7 @@ function ThCompact({ children, right = false, w = "", tone = "default" }: { chil
     "border-slate-200 bg-slate-100 text-slate-800";
 
   return (
-    <th className={`sticky top-0 z-30 border px-1 py-1.5 align-middle text-[11px] font-bold leading-tight whitespace-normal break-keep ${toneClass} ${right ? "text-right" : "text-left"} ${w}`}>
+    <th className={`sticky top-0 z-50 border px-1 py-1.5 align-middle text-[11px] font-bold leading-tight whitespace-normal break-keep shadow-sm bg-clip-padding ${toneClass} ${right ? "text-right" : "text-left"} ${w}`}>
       {children}
     </th>
   );
