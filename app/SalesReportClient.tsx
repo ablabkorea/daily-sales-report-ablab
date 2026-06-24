@@ -10,7 +10,7 @@ type PeriodType = "current" | "prevMonth" | "prevYear";
 type SalesView = "거래처별" | "브랜드별" | "담당자별" | "채널별";
 type MonthStartTab = "거래처/휴면 관리" | "Target/EST 관리" | "업로드 관리";
 type DrillPeriod = "prevYear" | "prevMonth" | "current" | "currentFullMonth";
-type SalesStatusSortKey = "label" | "prevYearSales" | "prevYearRate" | "prevMonthSales" | "prevMonthRate" | "currentSales" | "fullMonthSales" | "timeGone" | "timeGoneGap" | "est" | "estRate" | "profitAmount" | "profitRate";
+type SalesStatusSortKey = "label" | "prevYearSales" | "prevYearRate" | "prevYearTimeGoneGap" | "prevMonthSales" | "prevMonthRate" | "prevMonthTimeGoneGap" | "currentSales" | "fullMonthSales" | "timeGone" | "timeGoneGap" | "est" | "estRate" | "profitAmount" | "profitRate";
 type SortDirection = "asc" | "desc";
 type InactiveOrderTab = "거래처별" | "품목별";
 
@@ -3824,44 +3824,48 @@ export default function SalesReportClient() {
   }
 
   return (
-    <main className="flex min-h-screen bg-white text-slate-900" style={{ fontFamily: '"Malgun Gothic", "맑은 고딕", sans-serif' }}>
-      <aside className="flex min-h-screen w-44 shrink-0 flex-col border-r border-slate-200 bg-white text-slate-900">
-        <div className="border-b border-gray-300 bg-orange-50 p-4 text-base font-bold tracking-tight text-orange-950">에이비랩 코리아 Sales Report</div>
-        <nav className="space-y-2 p-3">
-          {menus.map((m, index) => (
-            <button
-              key={m}
-              onClick={() => setActive(m)}
-              className={`w-full rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition ${
-                active === m ? "bg-orange-500 text-white shadow" : "text-slate-700 hover:bg-orange-100 hover:text-orange-900"
-              }`}
-            >
-              {index + 1}. {m}
-            </button>
-          ))}
-        </nav>
-        <div className="mt-auto border-t border-slate-200 p-3">
-          {isAdmin ? (
-            <button
-              type="button"
-              onClick={() => { setIsAdmin(false); setActive("대시보드"); }}
-              className="w-full rounded-xl bg-orange-100 px-3 py-2 text-left text-xs font-semibold text-orange-900 hover:bg-orange-200"
-            >
-              관리자 모드 해제
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={adminLogin}
-              className="w-full rounded-xl bg-orange-100 px-3 py-2 text-left text-xs font-semibold text-orange-900 hover:bg-orange-200"
-            >
-              관리자 로그인
-            </button>
-          )}
+    <main className="min-h-screen bg-white text-slate-900" style={{ fontFamily: '"Malgun Gothic", "맑은 고딕", sans-serif' }}>
+      <header className="sticky top-0 z-40 border-b border-gray-300 bg-white/95 shadow-sm backdrop-blur">
+        <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-5">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-lg font-extrabold tracking-tight text-orange-950">에이비랩 코리아 Sales Report</div>
+            <nav className="flex flex-wrap items-center gap-2">
+              {menus.map((m, index) => (
+                <button
+                  key={m}
+                  onClick={() => setActive(m)}
+                  className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
+                    active === m ? "bg-orange-500 text-white shadow" : "bg-orange-50 text-orange-900 hover:bg-orange-100"
+                  }`}
+                >
+                  {index + 1}. {m}
+                </button>
+              ))}
+            </nav>
+          </div>
+          <div>
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={() => { setIsAdmin(false); setActive("대시보드"); }}
+                className="rounded-xl bg-orange-100 px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-200"
+              >
+                관리자 모드 해제
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={adminLogin}
+                className="rounded-xl bg-orange-100 px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-200"
+              >
+                관리자 로그인
+              </button>
+            )}
+          </div>
         </div>
-      </aside>
+      </header>
 
-      <section className="min-w-0 flex-1 p-4 lg:p-5">
+      <section className="min-w-0 p-4 lg:p-5">
         <div className="mb-4 rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
@@ -4440,7 +4444,7 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
         <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
           <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">브랜드별 요약</div>
           <div className="max-h-[65vh] overflow-auto isolate">
-            <table className="w-full min-w-[900px] border-separate border-spacing-0 text-center text-sm">
+            <table className="w-full min-w-[900px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
               <thead>
                 <tr>
                   {([
@@ -4484,7 +4488,7 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
             {selectedBrand && <button onClick={backToTop} className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200">← 브랜드 목록</button>}
           </div>
           <div className="max-h-[65vh] overflow-auto isolate">
-            <table className="w-full min-w-[1000px] border-separate border-spacing-0 text-center text-sm">
+            <table className="w-full min-w-[1000px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
               <thead>
                 <tr>
                   {([
@@ -4533,7 +4537,7 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
             </div>
           </div>
           <div className="max-h-[65vh] overflow-auto isolate">
-            <table className="w-full min-w-[1500px] border-separate border-spacing-0 text-center text-xs">
+            <table className="w-full min-w-[1500px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
               <thead>
                 <tr>
                   {([
@@ -4617,7 +4621,7 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
           <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
             <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">상세 발주 원본</div>
             <div className="max-h-[55vh] overflow-auto isolate">
-              <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-center text-xs">
+              <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
                 <thead>
                   <tr>
                     {([
@@ -4942,6 +4946,8 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
     const profitRate = weightedProfitRate(currentRecords);
     const prevMonthRate = prevMonthSales ? ((currentSales - prevMonthSales) / prevMonthSales) * 100 : 0;
     const prevYearRate = prevYearSales ? ((currentSales - prevYearSales) / prevYearSales) * 100 : 0;
+    const prevYearTimeGoneGap = prevYearRate - timeGone.timeGoneRate;
+    const prevMonthTimeGoneGap = prevMonthRate - timeGone.timeGoneRate;
     const est = estMap.get(key) || 0;
     const estRate = est ? (currentSales / est) * 100 : 0;
     const firstRecord = allRecords[0];
@@ -4956,6 +4962,8 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
       fullMonthSales,
       prevMonthRate,
       prevYearRate,
+      prevYearTimeGoneGap,
+      prevMonthTimeGoneGap,
       timeGone: timeGone.timeGoneRate,
       timeGoneGap: estRate - timeGone.timeGoneRate,
       est,
@@ -5018,8 +5026,10 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
   const salesStatusExcelRows = sortedRows.map((r) => ({
     구분: r.label,
     전년동월: r.prevYearSales,
+    "전년동월 대비 Time gone": pct(r.prevYearTimeGoneGap),
     전년대비: pct(r.prevYearRate),
     전월: r.prevMonthSales,
+    "전월 대비 Time gone": pct(r.prevMonthTimeGoneGap),
     전월대비: pct(r.prevMonthRate),
     "당일까지 매출": r.currentSales,
     "당월 전체 매출": r.fullMonthSales,
@@ -5127,18 +5137,26 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
         )}
 
         <div className="relative max-h-[62vh] overflow-auto bg-white">
-          <table className="w-full min-w-[1320px] table-auto border-separate border-spacing-0 border border-gray-300 text-[12px] leading-tight">
+          <table className={`w-full ${compact ? "min-w-[1500px]" : "min-w-[1320px]"} table-auto border-separate border-spacing-0 border border-gray-300 text-[12px] leading-tight`}>
             <thead>
               <tr className="bg-slate-100">
                 <ThCompactSortable w="w-[10%]" sortKey="label" sortConfig={sortConfig} onSort={requestSort}>{view.replace("별", "")}</ThCompactSortable>
                 {!compact && view === "거래처별" && <ThCompact tone="gray">마지막 발주일</ThCompact>}
                 <ThCompactSortable right tone="mint" sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>전년동월</ThCompactSortable>
-                <ThCompactSortable right tone="mint" sortKey="prevYearRate" sortConfig={sortConfig} onSort={requestSort}>전년대비</ThCompactSortable>
+                {compact ? (
+                  <ThCompactSortable right tone="mint" sortKey="prevYearTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전년동월 대비 Time gone</ThCompactSortable>
+                ) : (
+                  <ThCompactSortable right tone="mint" sortKey="prevYearRate" sortConfig={sortConfig} onSort={requestSort}>전년대비</ThCompactSortable>
+                )}
                 <ThCompactSortable right tone="blue" sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>전월</ThCompactSortable>
-                <ThCompactSortable right tone="blue" sortKey="prevMonthRate" sortConfig={sortConfig} onSort={requestSort}>전월대비</ThCompactSortable>
+                {compact ? (
+                  <ThCompactSortable right tone="blue" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전월 대비 Time gone</ThCompactSortable>
+                ) : (
+                  <ThCompactSortable right tone="blue" sortKey="prevMonthRate" sortConfig={sortConfig} onSort={requestSort}>전월대비</ThCompactSortable>
+                )}
                 <ThCompactSortable right tone="yellow" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>당월 전체 매출</ThCompactSortable>
-                <ThCompactSortable right tone="gray" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>TIME GONE 대비</ThCompactSortable>
+                <ThCompactSortable right tone="gray" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>{compact ? "당월 Time gone 대비" : "TIME GONE 대비"}</ThCompactSortable>
                 <ThCompactSortable right tone="purple" sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
                 <ThCompactSortable right tone="purple" sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
                 <ThCompactSortable right tone="green" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
@@ -5147,7 +5165,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
             </thead>
             <tbody>
               {sortedRows.length === 0 ? (
-                <tr><td colSpan={compact ? 11 : view === "거래처별" ? 12 : 11} className="border p-8 text-center text-slate-500">표시할 데이터가 없습니다.</td></tr>
+                <tr><td colSpan={compact ? 12 : view === "거래처별" ? 13 : 12} className="border p-8 text-center text-slate-500">표시할 데이터가 없습니다.</td></tr>
               ) : sortedRows.map((r) => (
                 <tr key={r.key}>
                   <TdCompact bold>{r.label}</TdCompact>
@@ -5160,9 +5178,9 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
                     </TdCompact>
                   )}
                   <ClickableAmountCell value={r.prevYearSales} onClick={() => openDrill(r, "prevYear")} />
-                  <TdCompact right amount>{pct(r.prevYearRate)}</TdCompact>
+                  <TdCompact right amount>{compact ? pct(r.prevYearTimeGoneGap) : pct(r.prevYearRate)}</TdCompact>
                   <ClickableAmountCell value={r.prevMonthSales} onClick={() => openDrill(r, "prevMonth")} />
-                  <TdCompact right amount>{pct(r.prevMonthRate)}</TdCompact>
+                  <TdCompact right amount>{compact ? pct(r.prevMonthTimeGoneGap) : pct(r.prevMonthRate)}</TdCompact>
                   <ClickableAmountCell value={r.currentSales} onClick={() => openDrill(r, "current")} />
                   <ClickableAmountCell value={r.fullMonthSales} onClick={() => openDrill(r, "currentFullMonth")} />
                   <TdCompact right amount>{pct(r.timeGoneGap)}</TdCompact>
@@ -5481,7 +5499,7 @@ function DormantAccountPage({ stores, sales, month }: { stores: Store[]; sales: 
 function ClickableAmountCell({ value, onClick }: { value: number; onClick: () => void }) {
   const disabled = !value;
   return (
-    <td className="border border-gray-300 bg-white px-1.5 py-2 text-right align-middle whitespace-normal break-words">
+    <td className="border border-gray-300 bg-white px-1.5 py-2 text-right align-middle whitespace-nowrap break-keep">
       <button
         type="button"
         onClick={onClick}
@@ -5725,14 +5743,14 @@ function ThCompact({ children, right = false, w = "", tone = "default" }: { chil
     "border-slate-200 bg-slate-100 text-slate-800";
 
   return (
-    <th className={`sticky top-0 z-50 border px-1 py-1.5 align-middle text-[11px] font-bold leading-tight whitespace-normal break-keep shadow-sm bg-clip-padding ${toneClass} ${right ? "text-right" : "text-left"} ${w}`}>
+    <th className={`sticky top-0 z-50 border px-1 py-1.5 align-middle text-center text-[10px] font-bold leading-tight whitespace-nowrap break-keep shadow-sm bg-clip-padding ${toneClass} ${right ? "text-right" : "text-left"} ${w}`}>
       {children}
     </th>
   );
 }
 
 function TdCompact({ children, right = false, bold = false, color = "", amount = false }: { children: React.ReactNode; right?: boolean; bold?: boolean; color?: string; amount?: boolean }) {
-  return <td className={`border border-gray-300 bg-white px-1.5 py-2 align-middle whitespace-normal break-words ${right ? "text-right" : "text-left"} ${bold ? "font-semibold" : ""} ${amount ? "text-[13px] font-bold leading-snug text-slate-900" : ""} ${color}`}>{children}</td>;
+  return <td className={`border border-gray-300 bg-white px-1.5 py-2 align-middle whitespace-nowrap break-keep ${right ? "text-right" : "text-left"} ${bold ? "font-semibold" : ""} ${amount ? "text-[13px] font-bold leading-snug text-slate-900" : ""} ${color}`}>{children}</td>;
 }
 
 function SalesCompare({ stores, sales, month, date }: { stores: Store[]; sales: SalesRecord[]; month: string; date: string }) {
