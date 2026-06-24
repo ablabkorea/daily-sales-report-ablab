@@ -3868,8 +3868,17 @@ export default function SalesReportClient() {
       <section className="min-w-0 p-4 lg:p-5">
         <div className="mb-4 rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">에이비랩 코리아 Sales Report</h1>
+            <div className="min-w-0 flex-1">
+              {active === "대시보드" && (
+                <DashboardTopKpis
+                  stores={stores}
+                  sales={sales}
+                  targets={targets}
+                  ests={ests}
+                  month={dashMonth}
+                  date={dashDate}
+                />
+              )}
             </div>
 
             <div className="rounded-2xl border border-gray-300/70 bg-slate-50/75 p-3 shadow-sm backdrop-blur">
@@ -3894,6 +3903,7 @@ export default function SalesReportClient() {
                     className="mt-1 w-full rounded-lg border border-slate-300 bg-white/80 px-2 py-1.5 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
                 </label>
+                <HeaderMetricInfo title="TIME GONE" value={pct(tg.timeGoneRate)} />
                 <HeaderTimeInfo title="총일수" value={tg.totalDays} />
                 <HeaderTimeInfo title="진행일수" value={tg.progressedDays} />
                 <HeaderTimeInfo title="잔여일수" value={tg.remainingDays} />
@@ -3966,6 +3976,15 @@ function HeaderTimeInfo({ title, value }: { title: string; value: number }) {
   );
 }
 
+function HeaderMetricInfo({ title, value }: { title: string; value: string | number }) {
+  return (
+    <div className="min-w-[76px] rounded-lg border border-gray-300/70 bg-white/70 px-3 py-1.5 text-center shadow-sm">
+      <p className="text-[11px] font-semibold text-slate-500">{title}</p>
+      <p className="mt-0.5 text-[16px] font-bold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
 function KpiGroup({ items }: { items: { title: string; value: string | number; color?: string; format?: "won" | "percent" | "number" }[] }) {
   return (
     <div className="h-full rounded-xl border border-gray-300/70 bg-slate-50/75 p-3 shadow-sm backdrop-blur">
@@ -4013,6 +4032,41 @@ function metricsByStoreType(stores: Store[], targets: TargetRecord[], ests: EstR
   return { storeTarget, nonStoreTarget, storeEst, nonStoreEst };
 }
 
+function DashboardTopKpis({ stores, sales, targets, ests, month, date }: { stores: Store[]; sales: SalesRecord[]; targets: TargetRecord[]; ests: EstRecord[]; month: string; date: string }) {
+  const current = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), date));
+  const currentFullMonth = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), monthEnd(month)));
+  const currentSales = sum(current, "salesAmount");
+  const fullMonthSales = sum(currentFullMonth, "salesAmount");
+  const profitAmount = sum(current, "profitAmount");
+  const profitRate = weightedProfitRate(current);
+  const { storeTarget, nonStoreTarget, storeEst, nonStoreEst } = metricsByStoreType(stores, targets, ests, month);
+  const targetTotal = storeTarget + nonStoreTarget;
+  const estTotal = storeEst + nonStoreEst;
+
+  return (
+    <div className="grid w-full grid-cols-1 gap-3 lg:grid-cols-3">
+      <KpiGroup items={[
+        { title: "매장 Target", value: storeTarget, format: "won" },
+        { title: "비매장 Target", value: nonStoreTarget, format: "won" },
+        { title: "총 Target", value: targetTotal, format: "won", color: "text-slate-900" },
+        { title: "Target 달성률", value: targetTotal ? (currentSales / targetTotal) * 100 : 0, format: "percent", color: "text-slate-900" },
+      ]} />
+      <KpiGroup items={[
+        { title: "매장 EST", value: storeEst, format: "won" },
+        { title: "비매장 EST", value: nonStoreEst, format: "won" },
+        { title: "총 EST", value: estTotal, format: "won", color: "text-slate-900" },
+        { title: "EST 달성률", value: estTotal ? (currentSales / estTotal) * 100 : 0, format: "percent", color: "text-slate-900" },
+      ]} />
+      <KpiGroup items={[
+        { title: "당일까지 매출", value: currentSales, format: "won" },
+        { title: "당월 전체 매출", value: fullMonthSales, format: "won" },
+        { title: "이익금액", value: profitAmount, format: "won", color: "text-slate-900" },
+        { title: "이익률", value: profitRate, format: "percent", color: "text-slate-900" },
+      ]} />
+    </div>
+  );
+}
+
 function Dashboard({ stores, sales, targets, ests, month, date, timeGone, codeMappings }: { stores: Store[]; sales: SalesRecord[]; targets: TargetRecord[]; ests: EstRecord[]; month: string; date: string; timeGone: ReturnType<typeof getTimeGone>; codeMappings: StoreCodeMapping[] }) {
   const current = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), date));
   const currentFullMonth = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), monthEnd(month)));
@@ -4051,32 +4105,6 @@ function Dashboard({ stores, sales, targets, ests, month, date, timeGone, codeMa
 
   return (
     <>
-      <div className="mx-auto mb-4 grid max-w-7xl grid-cols-1 gap-3 xl:grid-cols-4">
-        <KpiGroup items={[
-          { title: "기준월", value: month },
-          { title: "기준일", value: date },
-          { title: "TIME GONE", value: timeGone.timeGoneRate, format: "percent", color: "text-slate-900" },
-        ]} />
-        <KpiGroup items={[
-          { title: "매장 Target", value: storeTarget, format: "won" },
-          { title: "비매장 Target", value: nonStoreTarget, format: "won" },
-          { title: "총 Target", value: targetTotal, format: "won", color: "text-slate-900" },
-          { title: "Target 달성률", value: targetTotal ? (currentSales / targetTotal) * 100 : 0, format: "percent", color: "text-slate-900" },
-        ]} />
-        <KpiGroup items={[
-          { title: "매장 EST", value: storeEst, format: "won" },
-          { title: "비매장 EST", value: nonStoreEst, format: "won" },
-          { title: "총 EST", value: estTotal, format: "won", color: "text-slate-900" },
-          { title: "EST 달성률", value: estTotal ? (currentSales / estTotal) * 100 : 0, format: "percent", color: "text-slate-900" },
-        ]} />
-        <KpiGroup items={[
-          { title: "당일까지 매출", value: currentSales, format: "won" },
-          { title: "당월 전체 매출", value: fullMonthSales, format: "won" },
-          { title: "이익금액", value: profitAmount, format: "won", color: "text-slate-900" },
-          { title: "이익률", value: profitRate, format: "percent", color: "text-slate-900" },
-        ]} />
-      </div>
-
       <SalesStatus stores={stores} sales={sales} targets={targets} ests={ests} month={month} date={date} timeGone={timeGone} codeMappings={codeMappings} compact defaultView="브랜드별" />
     </>
   );
