@@ -4073,6 +4073,7 @@ function Dashboard({ stores, sales, targets, ests, month, date, timeGone, codeMa
 function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, codeMappings, compact = false, defaultView = "거래처별" }: { stores: Store[]; sales: SalesRecord[]; targets: TargetRecord[]; ests: EstRecord[]; month: string; date: string; timeGone: ReturnType<typeof getTimeGone>; codeMappings: StoreCodeMapping[]; compact?: boolean; defaultView?: SalesView }) {
   const [view, setView] = useState<SalesView>(defaultView);
   const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
   const [drill, setDrill] = useState<{ title: string; rows: SalesRecord[] } | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: SalesStatusSortKey; direction: SortDirection }>({ key: "currentSales", direction: "desc" });
   const [inactiveOpen, setInactiveOpen] = useState(false);
@@ -4429,7 +4430,19 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
                   <option key={v} value={v}>{v}</option>
                 ))}
               </select>
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="거래처 검색" className="w-[220px] rounded-lg border border-slate-300 bg-white/80 px-3 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+              <input
+                value={searchDraft}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSearchDraft(value);
+                  if (!value.trim()) setSearch("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") setSearch(searchDraft.trim());
+                }}
+                placeholder="거래처 검색"
+                className="w-[220px] rounded-lg border border-slate-300 bg-white/80 px-3 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
               {view === "거래처별" && (
                 <select
                   value={orderDateFilter}
@@ -5066,6 +5079,7 @@ function TdCompact({ children, right = false, bold = false, color = "", amount =
 
 function SalesCompare({ stores, sales, month, date }: { stores: Store[]; sales: SalesRecord[]; month: string; date: string }) {
   const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
   const stMap = storeMap(stores);
   const storeCodes = Array.from(new Set([...stores.map((s) => s.code), ...sales.map((s) => s.storeCode)]));
   const rows = storeCodes.map((code) => {
@@ -5105,7 +5119,19 @@ function SalesCompare({ stores, sales, month, date }: { stores: Store[]; sales: 
           <p className="mt-1 text-sm text-slate-500">거래처별 전년동월 / 전월 / 당월 매출을 비교합니다.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="거래처코드 / 거래처명 검색" className="w-[300px] rounded-xl border border-slate-300 bg-white/80 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+          <input
+            value={searchDraft}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSearchDraft(value);
+              if (!value.trim()) setSearch("");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setSearch(searchDraft.trim());
+            }}
+            placeholder="거래처코드 / 거래처명 검색"
+            className="w-[300px] rounded-xl border border-slate-300 bg-white/80 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          />
           <button
             onClick={() => exportExcel(salesCompareExcelRows, `매출비교_${month}`)}
             className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
@@ -5212,6 +5238,7 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
   const empty: Store = { code: "", name: "", channel: "도매", manager: "", storeType: "비매장", brand: "미지정", status: "거래중" };
   const [form, setForm] = useState<Store>(empty);
   const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
   const [mappingListOpen, setMappingListOpen] = useState(false);
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
@@ -5378,7 +5405,22 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
 
       <div className="sticky top-0 z-20 mb-3 rounded-xl border border-blue-100 bg-blue-50/80 p-2 shadow-sm backdrop-blur">
         <div className="flex flex-wrap items-center gap-2">
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="거래처 검색" className="h-8 w-[260px] rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+          <input
+            value={searchDraft}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSearchDraft(value);
+              if (!value.trim()) setSearch("");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                setSearch(searchDraft.trim());
+                setMappingListOpen(true);
+              }
+            }}
+            placeholder="거래처 검색"
+            className="h-8 w-[260px] rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          />
           <div className="flex overflow-hidden rounded-lg border border-slate-300 bg-white text-xs font-semibold shadow-sm">
             <button type="button" onClick={() => { setStatusFilter("all"); setMappingListOpen(true); }} className={`px-3 py-1.5 ${statusFilter === "all" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}>전체 {stores.length.toLocaleString("ko-KR")}</button>
             <button type="button" onClick={() => { setStatusFilter("active"); setMappingListOpen(true); }} className={`border-l border-slate-200 px-3 py-1.5 ${statusFilter === "active" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>활성 {activeCount.toLocaleString("ko-KR")}</button>
@@ -5654,6 +5696,7 @@ function TargetByTypePage({ records, setRecords, month }: { records: TargetRecor
 function TargetOrEstPage({ title, records, setRecords, stores, month }: { title: string; records: TargetRecord[] | EstRecord[]; setRecords: (v: any[]) => void; stores: Store[]; month: string }) {
   const [targetMonth, setTargetMonth] = useState(month);
   const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
   const isEstPage = title.includes("EST");
   const stMap = storeMap(stores);
 
@@ -5735,7 +5778,19 @@ function TargetOrEstPage({ title, records, setRecords, stores, month }: { title:
 
       <div className="mb-4 flex flex-wrap gap-2">
         <input type="month" value={targetMonth} onChange={(e) => setTargetMonth(e.target.value)} className="rounded-xl border px-3 py-2" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="거래처/담당자/채널 검색" className="w-[280px] rounded-xl border px-3 py-2" />
+        <input
+          value={searchDraft}
+          onChange={(e) => {
+            const value = e.target.value;
+            setSearchDraft(value);
+            if (!value.trim()) setSearch("");
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") setSearch(searchDraft.trim());
+          }}
+          placeholder="거래처/담당자/채널 검색"
+          className="w-[280px] rounded-xl border px-3 py-2"
+        />
       </div>
 
       <div className="max-h-[62vh] overflow-auto">
