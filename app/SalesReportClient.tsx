@@ -4175,8 +4175,22 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
   };
 
   const filterByStoreSearch = (s: SalesRecord) => {
+    if (!normalizedSearch) return true;
+
     const resolved = resolveRecord(s);
-    return !normalizedSearch ||
+
+    // 거래처별 화면에서는 검색어가 거래처코드/거래처명에 걸린 행만 보여줍니다.
+    // 브랜드, 담당자, 채널까지 검색에 포함하면 검색어와 직접 관련 없는 거래처 행까지 살아남을 수 있습니다.
+    if (view === "거래처별") {
+      return (
+        s.storeName.toLowerCase().includes(normalizedSearch) ||
+        s.storeCode.toLowerCase().includes(normalizedSearch) ||
+        resolved.name.toLowerCase().includes(normalizedSearch) ||
+        resolved.code.toLowerCase().includes(normalizedSearch)
+      );
+    }
+
+    return (
       s.storeName.toLowerCase().includes(normalizedSearch) ||
       s.storeCode.toLowerCase().includes(normalizedSearch) ||
       s.brand.toLowerCase().includes(normalizedSearch) ||
@@ -4186,7 +4200,8 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
       resolved.code.toLowerCase().includes(normalizedSearch) ||
       resolved.brand.toLowerCase().includes(normalizedSearch) ||
       String(resolved.manager || "").toLowerCase().includes(normalizedSearch) ||
-      resolved.channel.toLowerCase().includes(normalizedSearch);
+      resolved.channel.toLowerCase().includes(normalizedSearch)
+    );
   };
 
   const shouldIncludeRecord = (s: SalesRecord) => !hideEndedStores || resolveRecord(s).status !== "거래종료";
@@ -4236,13 +4251,25 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
       const mappedManager = `${mappedStore?.manager || ""} ${display.manager}`;
       const mappedChannel = `${mappedStore?.channel || ""} ${display.channel}`;
       const isEnded = display.status === "거래종료" || mappedStore?.status === "거래종료";
-      return e.month === month && (!hideEndedStores || !isEnded) && (!normalizedSearch ||
+      if (e.month !== month || (hideEndedStores && isEnded)) return false;
+      if (!normalizedSearch) return true;
+
+      if (view === "거래처별") {
+        return (
+          e.storeName.toLowerCase().includes(normalizedSearch) ||
+          e.storeCode.toLowerCase().includes(normalizedSearch) ||
+          mappedStoreName.toLowerCase().includes(normalizedSearch)
+        );
+      }
+
+      return (
         e.storeName.toLowerCase().includes(normalizedSearch) ||
         e.storeCode.toLowerCase().includes(normalizedSearch) ||
         mappedStoreName.toLowerCase().includes(normalizedSearch) ||
         mappedBrand.toLowerCase().includes(normalizedSearch) ||
         mappedManager.toLowerCase().includes(normalizedSearch) ||
-        mappedChannel.toLowerCase().includes(normalizedSearch));
+        mappedChannel.toLowerCase().includes(normalizedSearch)
+      );
     })
     .forEach((e) => {
       const s = stMap.get(e.storeCode);
@@ -4253,7 +4280,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
     });
 
   const baseKeySet = new Set([...currentMap.keys(), ...currentFullMonthMap.keys(), ...prevMonthMap.keys(), ...prevYearMap.keys(), ...estMap.keys()]);
-  if (view === "거래처별") {
+  if (view === "거래처별" && !normalizedSearch) {
     stores.filter((store) => !hideEndedStores || store.status === "거래중").forEach((store) => baseKeySet.add(storeKey(store)));
   }
   const keys = Array.from(baseKeySet).sort();
