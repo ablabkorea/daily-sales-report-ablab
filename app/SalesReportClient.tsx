@@ -3512,6 +3512,28 @@ async function loadSharedState<T>(key: string): Promise<T | null> {
   return rows[0]?.data ?? null;
 }
 
+function localMetaKey(key: string) {
+  return `${key}__local_meta`;
+}
+
+function getLocalMeta(key: string) {
+  if (typeof window === "undefined") return { editedAt: 0, pending: false };
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(localMetaKey(key)) || "{}");
+    return {
+      editedAt: Number(parsed.editedAt || 0),
+      pending: Boolean(parsed.pending),
+    };
+  } catch {
+    return { editedAt: 0, pending: false };
+  }
+}
+
+function setLocalMeta(key: string, meta: { editedAt: number; pending: boolean }) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(localMetaKey(key), JSON.stringify(meta));
+}
+
 async function saveSharedState<T>(key: string, value: T) {
   const config = supabaseConfig();
   if (!config) return;
@@ -3537,7 +3559,6 @@ function useLocal<T>(key: string, initial: T) {
   const [loaded, setLoaded] = useState(false);
   const valueRef = useRef<T>(initial);
   const saveTimerRef = useRef<number | null>(null);
-  const localEditUntilRef = useRef(0);
   const lastSavedJsonRef = useRef("");
   const keyRef = useRef(key);
 
@@ -3549,22 +3570,27 @@ function useLocal<T>(key: string, initial: T) {
     if (typeof window === "undefined") return;
 
     const json = JSON.stringify(nextValue);
+    const editedAt = Date.now();
     valueRef.current = nextValue;
     lastSavedJsonRef.current = json;
-    localEditUntilRef.current = Date.now() + 6000;
     window.localStorage.setItem(keyRef.current, json);
+    setLocalMeta(keyRef.current, { editedAt, pending: true });
 
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
       saveSharedState(keyRef.current, nextValue)
         .then(() => {
-          // 업로드/수정 직후에는 다른 탭에서 이전 데이터를 가져와 덮어쓰지 않도록 잠시 보호합니다.
-          localEditUntilRef.current = Date.now() + 2500;
+          const meta = getLocalMeta(keyRef.current);
+          if (meta.editedAt === editedAt) setLocalMeta(keyRef.current, { editedAt, pending: false });
         })
         .catch((error) => {
-          console.warn("공유 데이터 저장 실패, 브라우저 저장소에만 저장되었습니다.", error);
+          // Supabase 저장이 실패해도 화면의 최신 업로드값은 유지합니다.
+          // 다음 업로드/수정 때 다시 저장을 시도합니다.
+          console.warn("공유 데이터 저장 실패, 브라우저 저장소에 최신 데이터를 유지합니다.", error);
+          const meta = getLocalMeta(keyRef.current);
+          if (meta.editedAt === editedAt) setLocalMeta(keyRef.current, { editedAt, pending: true });
         });
-    }, 80);
+    }, 120);
   };
 
   const setValue: React.Dispatch<React.SetStateAction<T>> = (next) => {
@@ -3581,6 +3607,8 @@ function useLocal<T>(key: string, initial: T) {
     async function hydrate() {
       try {
         const localSaved = window.localStorage.getItem(key);
+        const meta = getLocalMeta(key);
+
         if (localSaved && !cancelled) {
           const parsed = JSON.parse(localSaved) as T;
           valueRef.current = parsed;
@@ -3588,12 +3616,18 @@ function useLocal<T>(key: string, initial: T) {
           rawSetValue(parsed);
         }
 
-        const remoteSaved = await loadSharedState<T>(key);
-        if (!cancelled && remoteSaved !== null) {
-          valueRef.current = remoteSaved;
-          lastSavedJsonRef.current = JSON.stringify(remoteSaved);
-          window.localStorage.setItem(key, lastSavedJsonRef.current);
-          rawSetValue(remoteSaved);
+        // 로컬에 업로드/수정 데이터가 있으면 원격의 과거값으로 덮어쓰지 않습니다.
+        // 로컬이 비어있는 첫 접속일 때만 Supabase 값을 불러옵니다.
+        if (!localSaved) {
+          const remoteSaved = await loadSharedState<T>(key);
+          if (!cancelled && remoteSaved !== null) {
+            const remoteJson = JSON.stringify(remoteSaved);
+            valueRef.current = remoteSaved;
+            lastSavedJsonRef.current = remoteJson;
+            window.localStorage.setItem(key, remoteJson);
+            setLocalMeta(key, { editedAt: meta.editedAt || Date.now(), pending: false });
+            rawSetValue(remoteSaved);
+          }
         }
       } catch (error) {
         console.warn("공유 데이터 불러오기 실패, 브라우저 저장소를 우선 사용합니다.", error);
@@ -3613,33 +3647,26 @@ function useLocal<T>(key: string, initial: T) {
   useEffect(() => {
     if (!loaded) return;
 
-    const syncFromRemote = async () => {
+    const retryPendingSave = async () => {
       try {
-        if (typeof document !== "undefined" && document.hidden) return;
-        // 방금 업로드/수정한 데이터가 Supabase에 저장되는 동안 과거 원격값이 화면을 덮어쓰지 않도록 보호합니다.
-        if (Date.now() < localEditUntilRef.current) return;
-
-        const remoteSaved = await loadSharedState<T>(key);
-        if (remoteSaved === null) return;
-
-        const remoteJson = JSON.stringify(remoteSaved);
-        if (remoteJson !== JSON.stringify(valueRef.current) && remoteJson !== lastSavedJsonRef.current) {
-          valueRef.current = remoteSaved;
-          lastSavedJsonRef.current = remoteJson;
-          window.localStorage.setItem(key, remoteJson);
-          rawSetValue(remoteSaved);
-        }
+        const meta = getLocalMeta(key);
+        if (!meta.pending) return;
+        const localSaved = window.localStorage.getItem(key);
+        if (!localSaved) return;
+        const parsed = JSON.parse(localSaved) as T;
+        await saveSharedState(key, parsed);
+        setLocalMeta(key, { editedAt: meta.editedAt, pending: false });
       } catch {
-        // 네트워크가 잠시 끊겨도 로컬 화면은 계속 사용합니다.
+        // 저장 재시도 실패 시에도 화면 데이터는 유지합니다.
       }
     };
 
-    const interval = window.setInterval(syncFromRemote, 3000);
-    window.addEventListener("focus", syncFromRemote);
+    const interval = window.setInterval(retryPendingSave, 5000);
+    window.addEventListener("focus", retryPendingSave);
 
     return () => {
       window.clearInterval(interval);
-      window.removeEventListener("focus", syncFromRemote);
+      window.removeEventListener("focus", retryPendingSave);
     };
   }, [key, loaded]);
 
@@ -5105,7 +5132,7 @@ function MonthStartManagement({
   stores: Store[];
   setStores: (v: Store[]) => void;
   sales: SalesRecord[];
-  setSales: (v: SalesRecord[]) => void;
+  setSales: React.Dispatch<React.SetStateAction<SalesRecord[]>>;
   targets: TargetRecord[];
   setTargets: (v: TargetRecord[]) => void;
   ests: EstRecord[];
@@ -5741,7 +5768,7 @@ function buildAutoClosedStoresFromPrevYear(parsed: SalesRecord[], stores: Store[
   return Array.from(map.values());
 }
 
-function UploadPage({ stores, setStores, sales, setSales, month, date, timeConfigs, setTimeConfigs }: { stores: Store[]; setStores: (v: Store[]) => void; sales: SalesRecord[]; setSales: (v: SalesRecord[]) => void; month: string; date: string; timeConfigs: TimeConfig[]; setTimeConfigs: (v: TimeConfig[]) => void }) {
+function UploadPage({ stores, setStores, sales, setSales, month, date, timeConfigs, setTimeConfigs }: { stores: Store[]; setStores: (v: Store[]) => void; sales: SalesRecord[]; setSales: React.Dispatch<React.SetStateAction<SalesRecord[]>>; month: string; date: string; timeConfigs: TimeConfig[]; setTimeConfigs: (v: TimeConfig[]) => void }) {
   const [holidayText, setHolidayText] = useState("");
   const [deleteDate, setDeleteDate] = useState(today());
 
@@ -5821,18 +5848,25 @@ function UploadPage({ stores, setStores, sales, setSales, month, date, timeConfi
       setStores(Array.from(map.values()));
     }
 
-    let nextSales: SalesRecord[];
-
-    if (period === "current") {
-      const uploadedDates = Array.from(new Set(parsed.map((r) => r.saleDate)));
-      nextSales = sales.filter((s) => !(s.period === "current" && uploadedDates.includes(s.saleDate)));
-    } else {
-      nextSales = sales.filter((s) => !(s.period === period && s.refMonth === month));
+    if (parsed.length === 0) {
+      alert("업로드 파일에서 반영할 매출/원가/이익 행을 찾지 못했습니다. 기존 데이터는 삭제하지 않았습니다.");
+      return;
     }
 
-    setSales([...nextSales, ...parsed]);
+    const uploadedDates = Array.from(new Set(parsed.map((r) => r.saleDate).filter(Boolean)));
+
+    // 업로드 직후 금액이 들어갔다가 사라지는 문제를 막기 위해
+    // 화면에 잡혀 있던 오래된 sales 값이 아니라, setSales가 받는 최신 prev 값을 기준으로 병합합니다.
+    setSales((prevSales) => {
+      const nextSales = period === "current"
+        ? prevSales.filter((s) => !(s.period === "current" && uploadedDates.includes(s.saleDate)))
+        : prevSales.filter((s) => !(s.period === period && s.refMonth === month));
+
+      return [...nextSales, ...parsed];
+    });
+
     const closedMessage = period === "prevYear" && missingStores.length ? `\n당월 기준에 없는 전년동월 거래처 ${missingStores.length}건은 거래종료로 자동 생성했습니다.` : "";
-    alert(`${period === "current" ? "당월" : period === "prevMonth" ? "전월" : "전년동월"} 매출 ${parsed.length}건을 반영했습니다.${closedMessage}`);
+    alert(`${period === "current" ? "당월" : period === "prevMonth" ? "전월" : "전년동월"} 매출 ${parsed.length}건을 반영했습니다.\n반영 날짜: ${uploadedDates.join(", ")}${closedMessage}`);
   }
 
   function saveHolidays() {
@@ -5974,7 +6008,16 @@ function UploadBox({ title, description, onUpload }: { title: string; descriptio
       <p className="mt-2 min-h-[44px] text-sm text-slate-500">{description}</p>
       <label className="mt-4 inline-block cursor-pointer rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
         엑셀 업로드
-        <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => onUpload(e.target.files?.[0] || null)} />
+        <input
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0] || null;
+            onUpload(file);
+            e.currentTarget.value = "";
+          }}
+        />
       </label>
     </div>
   );
