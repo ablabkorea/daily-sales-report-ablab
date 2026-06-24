@@ -3826,7 +3826,7 @@ export default function SalesReportClient() {
   return (
     <main className="flex min-h-screen bg-white text-slate-900" style={{ fontFamily: '"Malgun Gothic", "맑은 고딕", sans-serif' }}>
       <aside className="flex min-h-screen w-44 shrink-0 flex-col border-r border-slate-200 bg-white text-slate-900">
-        <div className="border-b border-slate-200 bg-orange-50 p-4 text-base font-bold tracking-tight text-orange-950">에이비랩 코리아 Sales Report</div>
+        <div className="border-b border-gray-300 bg-orange-50 p-4 text-base font-bold tracking-tight text-orange-950">에이비랩 코리아 Sales Report</div>
         <nav className="space-y-2 p-3">
           {menus.map((m, index) => (
             <button
@@ -3862,13 +3862,13 @@ export default function SalesReportClient() {
       </aside>
 
       <section className="min-w-0 flex-1 p-4 lg:p-5">
-        <div className="mb-4 rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+        <div className="mb-4 rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <h1 className="text-2xl font-bold tracking-tight">에이비랩 코리아 Sales Report</h1>
             </div>
 
-            <div className="rounded-2xl border border-slate-200/70 bg-slate-50/75 p-3 shadow-sm backdrop-blur">
+            <div className="rounded-2xl border border-gray-300/70 bg-slate-50/75 p-3 shadow-sm backdrop-blur">
               <div className="flex flex-wrap items-end gap-2">
                 <label className="w-[135px] text-[12px] font-semibold text-slate-600">
                   기준년월
@@ -3955,7 +3955,7 @@ export default function SalesReportClient() {
 
 function HeaderTimeInfo({ title, value }: { title: string; value: number }) {
   return (
-    <div className="min-w-[76px] rounded-lg border border-slate-200/70 bg-white/70 px-3 py-1.5 text-center shadow-sm">
+    <div className="min-w-[76px] rounded-lg border border-gray-300/70 bg-white/70 px-3 py-1.5 text-center shadow-sm">
       <p className="text-[11px] font-semibold text-slate-500">{title}</p>
       <p className="mt-0.5 text-[16px] font-bold text-slate-900">{Number.isInteger(value) ? value : value.toFixed(1)}일</p>
     </div>
@@ -3964,7 +3964,7 @@ function HeaderTimeInfo({ title, value }: { title: string; value: number }) {
 
 function KpiGroup({ items }: { items: { title: string; value: string | number; color?: string; format?: "won" | "percent" | "number" }[] }) {
   return (
-    <div className="h-full rounded-xl border border-slate-200/70 bg-slate-50/75 p-3 shadow-sm backdrop-blur">
+    <div className="h-full rounded-xl border border-gray-300/70 bg-slate-50/75 p-3 shadow-sm backdrop-blur">
       <div className="divide-y divide-slate-200/70">
         {items.map((item) => {
           const value =
@@ -4177,7 +4177,7 @@ function buildItemAnalysisRows(sales: SalesRecord[], storeCode: string, currentS
 
 function PopupTh({ children, right = false }: { children: React.ReactNode; right?: boolean }) {
   return (
-    <th className={`sticky top-0 z-50 border border-slate-200 bg-white px-3 py-2 font-bold shadow-[0_2px_0_0_#e2e8f0] ${right ? "text-right" : "text-left"}`}>
+    <th className={`sticky top-0 z-50 border border-gray-300 bg-white px-3 py-2 font-bold shadow-[0_2px_0_0_#e2e8f0] ${right ? "text-right" : "text-left"}`}>
       {children}
     </th>
   );
@@ -4499,18 +4499,18 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
                 <tbody>
                   {sortedDetailRows.map((r) => (
                     <tr key={r.id} className="hover:bg-blue-50">
-                      <td className="border border-slate-200 p-2">{r.saleDate}</td>
-                      <td className="border border-slate-200 p-2 font-semibold">{r.storeName}</td>
-                      <td className="border border-slate-200 p-2">{r.itemCode}</td>
-                      <td className="border border-slate-200 p-2">{r.itemName}</td>
-                      <td className="border border-slate-200 p-2 text-right">{won(r.quantity)}</td>
-                      <td className="border border-slate-200 p-2 text-right font-bold text-slate-900">{won(r.salesAmount)}</td>
-                      <td className="border border-slate-200 p-2 text-right">{won(r.costAmount)}</td>
-                      <td className="border border-slate-200 p-2 text-right">{won(r.profitAmount)}</td>
-                      <td className="border border-slate-200 p-2 text-right">{pct(r.profitRate)}</td>
+                      <td className="border border-gray-300 p-2">{r.saleDate}</td>
+                      <td className="border border-gray-300 p-2 font-semibold">{r.storeName}</td>
+                      <td className="border border-gray-300 p-2">{r.itemCode}</td>
+                      <td className="border border-gray-300 p-2">{r.itemName}</td>
+                      <td className="border border-gray-300 p-2 text-right">{won(r.quantity)}</td>
+                      <td className="border border-gray-300 p-2 text-right font-bold text-slate-900">{won(r.salesAmount)}</td>
+                      <td className="border border-gray-300 p-2 text-right">{won(r.costAmount)}</td>
+                      <td className="border border-gray-300 p-2 text-right">{won(r.profitAmount)}</td>
+                      <td className="border border-gray-300 p-2 text-right">{pct(r.profitRate)}</td>
                     </tr>
                   ))}
-                  {!sortedDetailRows.length && <tr><td colSpan={9} className="border border-slate-200 p-8 text-center text-slate-500">상세 데이터가 없습니다.</td></tr>}
+                  {!sortedDetailRows.length && <tr><td colSpan={9} className="border border-gray-300 p-8 text-center text-slate-500">상세 데이터가 없습니다.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -4883,7 +4883,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
 
   return (
     <>
-      <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+      <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
         <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-base font-bold text-slate-900">매출현황</h2>
@@ -4978,7 +4978,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
         )}
 
         <div className="relative max-h-[62vh] overflow-auto bg-white">
-          <table className="w-full min-w-[1320px] table-auto border-separate border-spacing-0 border border-slate-200 text-[12px] leading-tight">
+          <table className="w-full min-w-[1320px] table-auto border-separate border-spacing-0 border border-gray-300 text-[12px] leading-tight">
             <thead>
               <tr className="bg-slate-100">
                 <ThCompactSortable w="w-[10%]" sortKey="label" sortConfig={sortConfig} onSort={requestSort}>{view.replace("별", "")}</ThCompactSortable>
@@ -5103,7 +5103,7 @@ function InactiveOrdersModal({ sales, month, onClose }: { stores: Store[]; sales
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
       <div className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 border-b border-gray-300 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h3 className="text-lg font-bold text-slate-900">3개월 미주문 품목 현황</h3>
             <p className="mt-1 text-xs text-slate-500">기준 기간: {startDate} ~ {endDate} · 총 {inactiveItems.length.toLocaleString("ko-KR")}건</p>
@@ -5122,7 +5122,7 @@ function InactiveOrdersModal({ sales, month, onClose }: { stores: Store[]; sales
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto bg-white px-4 pb-4 pt-0">
-          <table className="w-full min-w-[860px] border-separate border-spacing-0 border border-slate-200 bg-white text-xs">
+          <table className="w-full min-w-[860px] border-separate border-spacing-0 border border-gray-300 bg-white text-xs">
             <thead>
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품코드</th>
@@ -5244,7 +5244,7 @@ function DormantAccountPage({ stores, sales, month }: { stores: Store[]; sales: 
   }
 
   return (
-    <div className="rounded-xl border border-slate-200/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+    <div className="rounded-xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
       <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-base font-bold text-slate-900">휴면거래처관리</h2>
@@ -5260,7 +5260,7 @@ function DormantAccountPage({ stores, sales, month }: { stores: Store[]; sales: 
         </div>
       </div>
 
-      <div className="mb-3 flex gap-2 border-b border-slate-200 pt-1">
+      <div className="mb-3 flex gap-2 border-b border-gray-300 pt-1">
         {(["거래처별", "품목별"] as InactiveOrderTab[]).map((item) => (
           <button key={item} type="button" onClick={() => setTab(item)} className={`rounded-t-lg px-4 py-2 text-sm font-semibold ${tab === item ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
             {item} {item === "거래처별" ? inactiveStores.length : inactiveItems.length}건
@@ -5270,7 +5270,7 @@ function DormantAccountPage({ stores, sales, month }: { stores: Store[]; sales: 
 
       <div className="max-h-[62vh] overflow-auto">
         {tab === "거래처별" ? (
-          <table className="w-full min-w-[920px] border border-slate-200 text-xs">
+          <table className="w-full min-w-[920px] border border-gray-300 text-xs">
             <thead>
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">거래처코드</th>
@@ -5299,7 +5299,7 @@ function DormantAccountPage({ stores, sales, month }: { stores: Store[]; sales: 
             </tbody>
           </table>
         ) : (
-          <table className="w-full min-w-[860px] border-separate border-spacing-0 border border-slate-200 bg-white text-xs">
+          <table className="w-full min-w-[860px] border-separate border-spacing-0 border border-gray-300 bg-white text-xs">
             <thead>
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품코드</th>
@@ -5332,7 +5332,7 @@ function DormantAccountPage({ stores, sales, month }: { stores: Store[]; sales: 
 function ClickableAmountCell({ value, onClick }: { value: number; onClick: () => void }) {
   const disabled = !value;
   return (
-    <td className="border border-slate-200 bg-white px-1.5 py-2 text-right align-middle whitespace-normal break-words">
+    <td className="border border-gray-300 bg-white px-1.5 py-2 text-right align-middle whitespace-normal break-words">
       <button
         type="button"
         onClick={onClick}
@@ -5372,8 +5372,15 @@ function OrderDrillModal({ title, rows, allSales, onClose }: { title: string; ro
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3">
+      <style jsx global>{`
+        .order-popup-table,
+        .order-popup-table th,
+        .order-popup-table td {
+          border-color: #d1d5db !important;
+        }
+      `}</style>
       <div className="flex max-h-[94vh] w-full max-w-[96vw] flex-col rounded-2xl bg-white shadow-2xl">
-        <div className="sticky top-0 z-20 flex flex-col gap-3 border-b border-slate-200 bg-white p-5 shadow-sm xl:flex-row xl:items-start xl:justify-between">
+        <div className="sticky top-0 z-20 flex flex-col gap-3 border-b border-gray-300 bg-white p-5 shadow-sm xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-xl font-bold text-slate-900">{title} 주문내역</h3>
@@ -5395,7 +5402,7 @@ function OrderDrillModal({ title, rows, allSales, onClose }: { title: string; ro
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
               닫기
             </button>
@@ -5403,28 +5410,28 @@ function OrderDrillModal({ title, rows, allSales, onClose }: { title: string; ro
         </div>
 
         <div className="relative isolate min-h-0 flex-1 overflow-auto bg-white px-5 pb-5 pt-0">
-          <table className="w-full min-w-[1100px] border-separate border-spacing-0 border border-slate-200 bg-white text-sm">
+          <table className="order-popup-table w-full min-w-[1100px] border-separate border-spacing-0 border border-gray-300 bg-white text-sm">
             <thead className="sticky top-0 z-[80] bg-white shadow-[0_2px_0_0_#e2e8f0]">
               <tr className="bg-white">
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">주문일</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">거래처</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품코드</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품명</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">수량</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">매출금액</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">원가금액</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익금액</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익률</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">주문일</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">거래처</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품코드</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품명</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">수량</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">매출금액</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">원가금액</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익금액</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익률</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={9} className="border border-slate-200 p-10 text-center text-slate-500">표시할 주문내역이 없습니다.</td></tr>
+                <tr><td colSpan={9} className="border border-gray-300 p-10 text-center text-slate-500">표시할 주문내역이 없습니다.</td></tr>
               ) : rows.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50">
-                  <td className="border border-slate-200 px-3 py-2">{r.saleDate}</td>
-                  <td className="border border-slate-200 px-3 py-2 font-semibold">{r.storeName}</td>
-                  <td className="border border-slate-200 px-3 py-2">
+                  <td className="border border-gray-300 px-3 py-2">{r.saleDate}</td>
+                  <td className="border border-gray-300 px-3 py-2 font-semibold">{r.storeName}</td>
+                  <td className="border border-gray-300 px-3 py-2">
                     <button
                       type="button"
                       onClick={() => openItemDrill(r.itemCode, r.itemName)}
@@ -5434,12 +5441,12 @@ function OrderDrillModal({ title, rows, allSales, onClose }: { title: string; ro
                       {r.itemCode}
                     </button>
                   </td>
-                  <td className="border border-slate-200 px-3 py-2">{r.itemName}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right">{won(r.quantity)}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right text-base font-bold text-slate-900">{won(r.salesAmount)}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right font-semibold text-slate-900">{won(r.costAmount)}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right font-semibold text-slate-900">{won(r.profitAmount)}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right text-slate-900">{pct(r.profitRate)}</td>
+                  <td className="border border-gray-300 px-3 py-2">{r.itemName}</td>
+                  <td className="border border-gray-300 px-3 py-2 text-right">{won(r.quantity)}</td>
+                  <td className="border border-gray-300 px-3 py-2 text-right text-base font-bold text-slate-900">{won(r.salesAmount)}</td>
+                  <td className="border border-gray-300 px-3 py-2 text-right font-semibold text-slate-900">{won(r.costAmount)}</td>
+                  <td className="border border-gray-300 px-3 py-2 text-right font-semibold text-slate-900">{won(r.profitAmount)}</td>
+                  <td className="border border-gray-300 px-3 py-2 text-right text-slate-900">{pct(r.profitRate)}</td>
                 </tr>
               ))}
             </tbody>
@@ -5469,8 +5476,15 @@ function ItemDrillModal({ itemCode, itemName, rows, onClose }: { itemCode: strin
 
   return (
     <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-950/45 p-4">
+      <style jsx global>{`
+        .order-popup-table,
+        .order-popup-table th,
+        .order-popup-table td {
+          border-color: #d1d5db !important;
+        }
+      `}</style>
       <div className="flex max-h-[88vh] w-full max-w-[90vw] flex-col rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200">
-        <div className="sticky top-0 z-20 flex flex-col gap-3 border-b border-slate-200 bg-white p-5 shadow-sm xl:flex-row xl:items-start xl:justify-between">
+        <div className="sticky top-0 z-20 flex flex-col gap-3 border-b border-gray-300 bg-white p-5 shadow-sm xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 flex-1">
             <h3 className="text-xl font-bold text-slate-900">품목별 전체 거래처 주문내역</h3>
             <p className="mt-1 text-sm font-semibold text-slate-700">{itemCode} · {itemName}</p>
@@ -5487,7 +5501,7 @@ function ItemDrillModal({ itemCode, itemName, rows, onClose }: { itemCode: strin
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
               닫기
             </button>
@@ -5495,32 +5509,32 @@ function ItemDrillModal({ itemCode, itemName, rows, onClose }: { itemCode: strin
         </div>
 
         <div className="relative isolate min-h-0 flex-1 overflow-auto bg-white px-5 pb-5 pt-0">
-          <table className="w-full min-w-[920px] border-separate border-spacing-0 border border-slate-200 bg-white text-sm">
+          <table className="order-popup-table w-full min-w-[920px] border-separate border-spacing-0 border border-gray-300 bg-white text-sm">
             <thead className="sticky top-0 z-[80] bg-white shadow-[0_2px_0_0_#e2e8f0]">
               <tr className="bg-white">
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">주문일</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">거래처</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">담당자</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">수량</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">매출금액</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">원가금액</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익금액</th>
-                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익률</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">주문일</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">거래처</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">담당자</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">수량</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">매출금액</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">원가금액</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익금액</th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익률</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={8} className="border border-slate-200 p-10 text-center text-slate-500">표시할 품목별 주문내역이 없습니다.</td></tr>
+                <tr><td colSpan={8} className="border border-gray-300 p-10 text-center text-slate-500">표시할 품목별 주문내역이 없습니다.</td></tr>
               ) : rows.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50">
-                  <td className="border border-slate-200 px-3 py-2">{r.saleDate}</td>
-                  <td className="border border-slate-200 px-3 py-2 font-semibold">{r.storeName}</td>
-                  <td className="border border-slate-200 px-3 py-2">{r.manager || "미지정"}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right">{won(r.quantity)}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right text-base font-bold text-slate-900">{won(r.salesAmount)}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right font-semibold text-slate-900">{won(r.costAmount)}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right font-semibold text-slate-900">{won(r.profitAmount)}</td>
-                  <td className="border border-slate-200 px-3 py-2 text-right text-slate-900">{pct(r.profitRate)}</td>
+                  <td className="border border-gray-300 px-3 py-2">{r.saleDate}</td>
+                  <td className="border border-gray-300 px-3 py-2 font-semibold">{r.storeName}</td>
+                  <td className="border border-gray-300 px-3 py-2">{r.manager || "미지정"}</td>
+                  <td className="border border-gray-300 px-3 py-2 text-right">{won(r.quantity)}</td>
+                  <td className="border border-gray-300 px-3 py-2 text-right text-base font-bold text-slate-900">{won(r.salesAmount)}</td>
+                  <td className="border border-gray-300 px-3 py-2 text-right font-semibold text-slate-900">{won(r.costAmount)}</td>
+                  <td className="border border-gray-300 px-3 py-2 text-right font-semibold text-slate-900">{won(r.profitAmount)}</td>
+                  <td className="border border-gray-300 px-3 py-2 text-right text-slate-900">{pct(r.profitRate)}</td>
                 </tr>
               ))}
             </tbody>
@@ -5569,7 +5583,7 @@ function ThCompact({ children, right = false, w = "", tone = "default" }: { chil
 }
 
 function TdCompact({ children, right = false, bold = false, color = "", amount = false }: { children: React.ReactNode; right?: boolean; bold?: boolean; color?: string; amount?: boolean }) {
-  return <td className={`border border-slate-200 bg-white px-1.5 py-2 align-middle whitespace-normal break-words ${right ? "text-right" : "text-left"} ${bold ? "font-semibold" : ""} ${amount ? "text-[13px] font-bold leading-snug text-slate-900" : ""} ${color}`}>{children}</td>;
+  return <td className={`border border-gray-300 bg-white px-1.5 py-2 align-middle whitespace-normal break-words ${right ? "text-right" : "text-left"} ${bold ? "font-semibold" : ""} ${amount ? "text-[13px] font-bold leading-snug text-slate-900" : ""} ${color}`}>{children}</td>;
 }
 
 function SalesCompare({ stores, sales, month, date }: { stores: Store[]; sales: SalesRecord[]; month: string; date: string }) {
@@ -5607,7 +5621,7 @@ function SalesCompare({ stores, sales, month, date }: { stores: Store[]; sales: 
   }));
 
   return (
-    <div className="rounded-xl border border-slate-200/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+    <div className="rounded-xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-lg font-bold text-slate-900">매출비교</h2>
@@ -5637,7 +5651,7 @@ function SalesCompare({ stores, sales, month, date }: { stores: Store[]; sales: 
       </div>
 
       <div className="max-h-[68vh] overflow-visible">
-        <table className="w-full table-fixed border border-slate-200 text-xs">
+        <table className="w-full table-fixed border border-gray-300 text-xs">
           <thead>
             <tr className="bg-slate-100">
               <Th>거래처코드</Th>
@@ -5703,7 +5717,7 @@ function MonthStartManagement({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+      <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
         <div className="flex flex-wrap gap-2">
           {MONTH_TABS.map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === t ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
@@ -5886,7 +5900,7 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
   }
 
   return (
-    <div className="rounded-xl border border-slate-200/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+    <div className="rounded-xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-base font-bold">거래처 매핑관리</h2>
@@ -5940,7 +5954,7 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
       </div>
 
       {mappingListOpen && (
-      <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-3 rounded-xl border border-gray-300 bg-slate-50 p-3">
         <div className="mb-2 text-xs font-bold text-slate-700">신규 매장 추가 / 거래처 수정</div>
         <div className="flex flex-wrap items-center gap-1.5">
           <input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} placeholder="브랜드" className="h-8 w-[150px] rounded-md border bg-white px-2 py-1 text-xs" />
@@ -5968,7 +5982,7 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
       {mappingModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
           <div className="flex max-h-[92vh] w-full max-w-[96vw] flex-col rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 p-4">
+            <div className="flex items-center justify-between border-b border-gray-300 p-4">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">전년동월 거래처 매핑 검증</h3>
                 <p className="mt-1 text-xs text-slate-500">검증표는 필요할 때만 열어서 수동 매핑을 설정합니다.</p>
@@ -5976,7 +5990,7 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
               <button type="button" onClick={() => setMappingModalOpen(false)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">닫기</button>
             </div>
             <div className="min-h-0 flex-1 overflow-auto bg-white px-4 pb-4 pt-0">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="rounded-xl border border-gray-300 bg-slate-50 p-3">
         <div className="mb-2 flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h3 className="text-sm font-bold text-slate-900">전년동월 거래처 매핑 검증</h3>
@@ -5989,7 +6003,7 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
           </div>
         </div>
         <div className="max-h-[72vh] overflow-auto">
-          <table className="w-full min-w-[960px] border-separate border-spacing-0 border border-slate-200 bg-white text-xs">
+          <table className="w-full min-w-[960px] border-separate border-spacing-0 border border-gray-300 bg-white text-xs">
             <thead>
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-2 py-1.5 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">구분</th>
@@ -6052,26 +6066,26 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
           </colgroup>
           <thead>
             <tr className="bg-slate-100">
-              <th className="border border-slate-200 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">거래처코드</th>
-              <th className="border border-slate-200 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">거래처명</th>
-              <th className="border border-slate-200 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">채널</th>
-              <th className="border border-slate-200 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">담당자</th>
-              <th className="border border-slate-200 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">매장구분</th>
-              <th className="border border-slate-200 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">브랜드</th>
-              <th className="border border-slate-200 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">상태</th>
-              <th className="border border-slate-200 bg-slate-100 px-2 py-1.5 text-right text-xs font-bold">관리</th>
+              <th className="border border-gray-300 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">거래처코드</th>
+              <th className="border border-gray-300 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">거래처명</th>
+              <th className="border border-gray-300 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">채널</th>
+              <th className="border border-gray-300 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">담당자</th>
+              <th className="border border-gray-300 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">매장구분</th>
+              <th className="border border-gray-300 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">브랜드</th>
+              <th className="border border-gray-300 bg-slate-100 px-2 py-1.5 text-left text-xs font-bold">상태</th>
+              <th className="border border-gray-300 bg-slate-100 px-2 py-1.5 text-right text-xs font-bold">관리</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((s) => (
               <tr key={s.code} onClick={() => setForm(s)} className="cursor-pointer hover:bg-blue-50">
-                <td className="truncate border border-slate-200 bg-white px-2 py-1.5 text-left align-middle" title={s.code}>{s.code}</td>
-                <td className="truncate border border-slate-200 bg-white px-2 py-1.5 text-left align-middle font-semibold" title={s.name}>{s.name}</td>
-                <td className="border border-slate-200 bg-white px-2 py-1.5 text-left align-middle">{s.channel}</td>
-                <td className="border border-slate-200 bg-white px-2 py-1.5 text-left align-middle">{s.manager || "-"}</td>
-                <td className="border border-slate-200 bg-white px-2 py-1.5 text-left align-middle">{s.storeType}</td>
-                <td className="truncate border border-slate-200 bg-white px-2 py-1.5 text-left align-middle" title={s.brand}>{s.brand}</td>
-                <td className="border border-slate-200 bg-white px-2 py-1.5 text-left align-middle">
+                <td className="truncate border border-gray-300 bg-white px-2 py-1.5 text-left align-middle" title={s.code}>{s.code}</td>
+                <td className="truncate border border-gray-300 bg-white px-2 py-1.5 text-left align-middle font-semibold" title={s.name}>{s.name}</td>
+                <td className="border border-gray-300 bg-white px-2 py-1.5 text-left align-middle">{s.channel}</td>
+                <td className="border border-gray-300 bg-white px-2 py-1.5 text-left align-middle">{s.manager || "-"}</td>
+                <td className="border border-gray-300 bg-white px-2 py-1.5 text-left align-middle">{s.storeType}</td>
+                <td className="truncate border border-gray-300 bg-white px-2 py-1.5 text-left align-middle" title={s.brand}>{s.brand}</td>
+                <td className="border border-gray-300 bg-white px-2 py-1.5 text-left align-middle">
                   <button
                     type="button"
                     onClick={(e) => toggleStatus(s, e)}
@@ -6081,7 +6095,7 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
                     {s.status === "거래중" ? "활성" : "비활성"}
                   </button>
                 </td>
-                <td className="border border-slate-200 bg-white px-2 py-1.5 text-right align-middle">
+                <td className="border border-gray-300 bg-white px-2 py-1.5 text-right align-middle">
                   <button
                     type="button"
                     onClick={(e) => deleteStore(s, e)}
@@ -6149,7 +6163,7 @@ function TargetByTypePage({ records, setRecords, month }: { records: TargetRecor
   ];
 
   return (
-    <div className="rounded-xl border border-slate-200/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+    <div className="rounded-xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-lg font-bold">Target 관리</h2>
@@ -6179,7 +6193,7 @@ function TargetByTypePage({ records, setRecords, month }: { records: TargetRecor
           <p className="text-sm font-semibold text-slate-600">비매장 Target</p>
           <input value={nonStoreAmount ? won(nonStoreAmount) : ""} onChange={(e) => updateAmount("비매장", num(e.target.value))} className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-right text-xl font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="0" />
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="rounded-2xl border border-gray-300 bg-slate-50 p-4">
           <p className="text-sm font-semibold text-slate-600">총 Target</p>
           <p className="mt-3 break-all text-right text-2xl font-bold text-slate-900">{won(storeAmount + nonStoreAmount)}</p>
         </div>
@@ -6235,7 +6249,7 @@ function TargetOrEstPage({ title, records, setRecords, stores, month }: { title:
   }
 
   return (
-    <div className="rounded-xl border border-slate-200/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+    <div className="rounded-xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-lg font-bold">{title}</h2>
@@ -6467,7 +6481,7 @@ function UploadPage({ stores, setStores, sales, setSales, month, date, timeConfi
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-5 shadow-sm backdrop-blur">
+      <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-5 shadow-sm backdrop-blur">
         <h2 className="mb-3 text-lg font-bold">매출 업로드</h2>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <UploadBox title="당월 매출 업로드" description="같은 날짜 파일을 다시 올리면 해당 날짜 기존 당월 매출을 삭제하고 새 파일로 업데이트합니다." onUpload={(file) => uploadSales(file, "current")} />
@@ -6478,13 +6492,13 @@ function UploadPage({ stores, setStores, sales, setSales, month, date, timeConfi
 
       <ProfitValidationPanel sales={sales} month={month} date={date} />
 
-      <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-5 shadow-sm backdrop-blur">
+      <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-5 shadow-sm backdrop-blur">
         <h2 className="mb-3 text-lg font-bold">당월 특정 날짜 삭제</h2>
         <input type="date" value={deleteDate} onChange={(e) => setDeleteDate(e.target.value)} className="mr-2 rounded-xl border px-3 py-2" />
         <button onClick={deleteCurrentDate} className="rounded-xl bg-red-600 px-4 py-2 text-white">해당일 당월 매출 삭제</button>
       </div>
 
-      <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-5 shadow-sm backdrop-blur">
+      <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-5 shadow-sm backdrop-blur">
         <h2 className="mb-3 text-lg font-bold">TIME GONE 공휴일 설정</h2>
         <p className="mb-3 text-sm text-slate-500">월~금 일반일 1일, 월~금 공휴일 0.5일, 토요일 0.5일, 일요일 0일 기준입니다.</p>
         <textarea value={holidayText} onChange={(e) => setHolidayText(e.target.value)} placeholder={`${month}-06\n${month}-15`} className="h-28 w-full rounded-xl border px-3 py-2" />
@@ -6524,7 +6538,7 @@ function ProfitValidationPanel({ sales, month, date }: { sales: SalesRecord[]; m
   }));
 
   return (
-    <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-5 shadow-sm backdrop-blur">
+    <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-5 shadow-sm backdrop-blur">
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-lg font-bold">이익금액 검증</h2>
@@ -6553,7 +6567,7 @@ function ProfitValidationPanel({ sales, month, date }: { sales: SalesRecord[]; m
       </div>
 
       <div className="max-h-[360px] overflow-auto">
-        <table className="w-full min-w-[640px] border border-slate-200 text-xs">
+        <table className="w-full min-w-[640px] border border-gray-300 text-xs">
           <thead>
             <tr className="bg-slate-100">
               <th className="sticky top-0 border bg-slate-100 px-3 py-2 text-left font-bold">날짜</th>
@@ -6588,7 +6602,7 @@ function ProfitValidationPanel({ sales, month, date }: { sales: SalesRecord[]; m
 
 function UploadBox({ title, description, onUpload }: { title: string; description: string; onUpload: (file: File | null) => void }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+    <div className="rounded-2xl border border-gray-300 bg-slate-50/70 p-4">
       <h3 className="font-bold text-slate-900">{title}</h3>
       <p className="mt-2 min-h-[44px] text-sm text-slate-500">{description}</p>
       <label className="mt-4 inline-block cursor-pointer rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
@@ -6622,5 +6636,5 @@ function Th({ children, right = false, tone = "default" }: { children: React.Rea
 }
 
 function Td({ children, right = false, bold = false, color = "" }: { children: React.ReactNode; right?: boolean; bold?: boolean; color?: string }) {
-  return <td className={`border border-slate-200 bg-white p-2 ${right ? "text-right" : "text-left"} ${bold ? "font-semibold" : ""} ${color}`}>{children}</td>;
+  return <td className={`border border-gray-300 bg-white p-2 ${right ? "text-right" : "text-left"} ${bold ? "font-semibold" : ""} ${color}`}>{children}</td>;
 }
