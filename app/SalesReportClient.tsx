@@ -3336,7 +3336,7 @@ function norm(v: unknown) {
 
 function normalizeStatus(v: unknown): Store["status"] {
   const t = norm(v);
-  return t === "종료" || t === "거래종료" ? "거래종료" : "거래중";
+  return t === "종료" || t === "거래종료" || t === "비활성" || t === "비활성화" || t.toLowerCase() === "inactive" || t.toLowerCase() === "closed" ? "거래종료" : "거래중";
 }
 
 function normalizeChannel(v: unknown) {
@@ -4119,17 +4119,20 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
     });
   };
 
-  const uploadedStoreInfo = (r: SalesRecord) => ({
-    code: r.storeCode || r.storeName || "미지정",
-    name: r.storeName || r.storeCode || "미지정",
-    channel: r.channel || "미지정",
-    manager: r.manager || "미지정",
-    storeType: r.storeType || "비매장",
-    brand: r.brand || "미지정",
-    status: "거래중" as const,
-    originalCode: r.storeCode,
-    originalName: r.storeName,
-  });
+  const uploadedStoreInfo = (r: SalesRecord) => {
+    const mappedStore = stMap.get(r.storeCode);
+    return {
+      code: mappedStore?.code || r.storeCode || r.storeName || "미지정",
+      name: mappedStore?.name || r.storeName || r.storeCode || "미지정",
+      channel: mappedStore?.channel || r.channel || "미지정",
+      manager: mappedStore?.manager || r.manager || "미지정",
+      storeType: mappedStore?.storeType || r.storeType || "비매장",
+      brand: mappedStore?.brand || r.brand || "미지정",
+      status: mappedStore?.status || ("거래중" as const),
+      originalCode: r.storeCode,
+      originalName: r.storeName,
+    };
+  };
 
   const resolveRecord = (r: SalesRecord) => {
     if (r.period === "prevYear" || r.period === "prevMonth") {
@@ -4185,10 +4188,12 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
       resolved.channel.toLowerCase().includes(normalizedSearch);
   };
 
-  const current = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), date) && filterByStoreSearch(s));
-  const currentFullMonthRows = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), monthEnd(month)) && filterByStoreSearch(s));
-  const prevMonthRows = sales.filter((s) => s.period === "prevMonth" && s.refMonth === month && filterByStoreSearch(s));
-  const prevYearRows = sales.filter((s) => s.period === "prevYear" && s.refMonth === month && filterByStoreSearch(s));
+  const shouldIncludeRecord = (s: SalesRecord) => !hideEndedStores || resolveRecord(s).status !== "거래종료";
+
+  const current = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), date) && filterByStoreSearch(s) && shouldIncludeRecord(s));
+  const currentFullMonthRows = sales.filter((s) => s.period === "current" && inRange(s.saleDate, monthStart(month), monthEnd(month)) && filterByStoreSearch(s) && shouldIncludeRecord(s));
+  const prevMonthRows = sales.filter((s) => s.period === "prevMonth" && s.refMonth === month && filterByStoreSearch(s) && shouldIncludeRecord(s));
+  const prevYearRows = sales.filter((s) => s.period === "prevYear" && s.refMonth === month && filterByStoreSearch(s) && shouldIncludeRecord(s));
 
   const rowKey = (r: SalesRecord) => {
     const resolved = resolveRecord(r);
@@ -4229,7 +4234,8 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
       const mappedBrand = `${mappedStore?.brand || ""} ${display.brand}`;
       const mappedManager = `${mappedStore?.manager || ""} ${display.manager}`;
       const mappedChannel = `${mappedStore?.channel || ""} ${display.channel}`;
-      return e.month === month && (!normalizedSearch ||
+      const isEnded = display.status === "거래종료" || mappedStore?.status === "거래종료";
+      return e.month === month && (!hideEndedStores || !isEnded) && (!normalizedSearch ||
         e.storeName.toLowerCase().includes(normalizedSearch) ||
         e.storeCode.toLowerCase().includes(normalizedSearch) ||
         mappedStoreName.toLowerCase().includes(normalizedSearch) ||
@@ -4247,14 +4253,14 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
 
   const baseKeySet = new Set([...currentMap.keys(), ...currentFullMonthMap.keys(), ...prevMonthMap.keys(), ...prevYearMap.keys(), ...estMap.keys()]);
   if (view === "거래처별") {
-    stores.filter((store) => store.status === "거래중").forEach((store) => baseKeySet.add(storeKey(store)));
+    stores.filter((store) => !hideEndedStores || store.status === "거래중").forEach((store) => baseKeySet.add(storeKey(store)));
   }
   const keys = Array.from(baseKeySet).sort();
 
   const lastOrderDateByKey = useMemo(() => {
     const map = new Map<string, string>();
     sales
-      .filter((r) => r.period === "current" && r.saleDate <= date)
+      .filter((r) => r.period === "current" && r.saleDate <= date && shouldIncludeRecord(r))
       .forEach((r) => {
         const key = rowKey(r);
         const prev = map.get(key);
@@ -4358,11 +4364,11 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
     setDrill({ title: `${view} 전체 · ${drillPeriodLabel(period)}`, rows });
   };
 
-  const filteredCurrentSales = rows.reduce((a, b) => a + b.currentSales, 0);
-  const filteredFullMonthSales = rows.reduce((a, b) => a + b.fullMonthSales, 0);
-  const filteredPrevMonthSales = rows.reduce((a, b) => a + b.prevMonthSales, 0);
-  const filteredPrevYearSales = rows.reduce((a, b) => a + b.prevYearSales, 0);
-  const filteredProfitAmount = rows.reduce((a, b) => a + b.profitAmount, 0);
+  const filteredCurrentSales = displayRows.reduce((a, b) => a + b.currentSales, 0);
+  const filteredFullMonthSales = displayRows.reduce((a, b) => a + b.fullMonthSales, 0);
+  const filteredPrevMonthSales = displayRows.reduce((a, b) => a + b.prevMonthSales, 0);
+  const filteredPrevYearSales = displayRows.reduce((a, b) => a + b.prevYearSales, 0);
+  const filteredProfitAmount = displayRows.reduce((a, b) => a + b.profitAmount, 0);
 
   const salesStatusExcelRows = sortedRows.map((r) => ({
     구분: r.label,
@@ -4399,11 +4405,10 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
                 ))}
               </select>
             )}
-            <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold shadow-sm ${view === "거래처별" ? "border-slate-300 bg-white text-slate-700" : "border-slate-200 bg-slate-50 text-slate-400"}`}>
+            <label className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm">
               <input
                 type="checkbox"
                 checked={hideEndedStores}
-                disabled={view !== "거래처별"}
                 onChange={(e) => setHideEndedStores(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300"
               />
@@ -5190,7 +5195,6 @@ function MonthStartManagement({
       {tab === "거래처/휴면 관리" && (
         <div className="space-y-4">
           <MappingPage stores={stores} setStores={setStores} sales={sales} month={month} codeMappings={codeMappings} setCodeMappings={setCodeMappings} />
-          <DormantAccountPage stores={stores} sales={sales} month={month} />
         </div>
       )}
       {tab === "Target/EST 관리" && (
@@ -5399,32 +5403,34 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
       </div>
 
       {mappingListOpen && (
-      <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="거래처코드" className="h-8 w-[130px] rounded-md border px-2 py-1 text-xs" />
-        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="거래처명" className="h-8 w-[200px] rounded-md border px-2 py-1 text-xs" />
-        <select value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value as Channel })} className="h-8 w-[92px] rounded-md border px-2 py-1 text-xs">
-          {CHANNELS.map((c) => <option key={c}>{c}</option>)}
-        </select>
-        <select value={form.manager} onChange={(e) => setForm({ ...form, manager: e.target.value as Manager })} className="h-8 w-[86px] rounded-md border px-2 py-1 text-xs">
-          <option value="">담당자</option>
-          {MANAGERS.map((m) => <option key={m}>{m}</option>)}
-        </select>
-        <select value={form.storeType} onChange={(e) => setForm({ ...form, storeType: e.target.value as StoreType })} className="h-8 w-[86px] rounded-md border px-2 py-1 text-xs">
-          <option>매장</option>
-          <option>비매장</option>
-        </select>
-        <input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} placeholder="브랜드" className="h-8 w-[120px] rounded-md border px-2 py-1 text-xs" />
-        <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as "거래중" | "거래종료" })} className="h-8 w-[78px] rounded-md border px-2 py-1 text-xs">
-          <option>거래중</option>
-          <option>거래종료</option>
-        </select>
-        <button onClick={save} className="h-8 w-[58px] rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white">저장</button>
+      <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-2 text-xs font-bold text-slate-700">신규 매장 추가 / 거래처 수정</div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} placeholder="브랜드" className="h-8 w-[150px] rounded-md border bg-white px-2 py-1 text-xs" />
+          <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="거래처코드" className="h-8 w-[140px] rounded-md border bg-white px-2 py-1 text-xs" />
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="거래처명" className="h-8 w-[220px] rounded-md border bg-white px-2 py-1 text-xs" />
+          <select value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value as Channel })} className="h-8 w-[110px] rounded-md border bg-white px-2 py-1 text-xs">
+            <option value="">채널1</option>
+            {CHANNELS.map((c) => <option key={c}>{c}</option>)}
+          </select>
+          <select value={form.storeType} onChange={(e) => setForm({ ...form, storeType: e.target.value as StoreType })} className="h-8 w-[105px] rounded-md border bg-white px-2 py-1 text-xs">
+            <option>매장</option>
+            <option>비매장</option>
+          </select>
+          <select value={form.manager} onChange={(e) => setForm({ ...form, manager: e.target.value as Manager })} className="h-8 w-[100px] rounded-md border bg-white px-2 py-1 text-xs">
+            <option value="">담당자</option>
+            {MANAGERS.map((m) => <option key={m}>{m}</option>)}
+          </select>
+          <button onClick={save} className="h-8 w-[70px] rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white">저장</button>
+          <button type="button" onClick={() => setForm(empty)} className="h-8 rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">초기화</button>
+          <span className="text-[11px] font-medium text-slate-500">신규 추가 시 상태는 자동으로 활성 처리됩니다. 기존 거래처 수정 시 상태는 유지됩니다.</span>
+        </div>
       </div>
       )}
 
       {mappingModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
-          <div className="flex max-h-[88vh] w-full max-w-6xl flex-col rounded-2xl bg-white shadow-2xl">
+          <div className="flex max-h-[92vh] w-full max-w-[96vw] flex-col rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 p-4">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">전년동월 거래처 매핑 검증</h3>
@@ -5445,7 +5451,7 @@ function MappingPage({ stores, setStores, sales, month, codeMappings, setCodeMap
             <span>수동완료 {mappingSummary["수동 매핑 완료"] || 0}건</span>
           </div>
         </div>
-        <div className="max-h-[260px] overflow-auto">
+        <div className="max-h-[72vh] overflow-auto">
           <table className="w-full min-w-[960px] border-separate border-spacing-0 border border-slate-200 bg-white text-xs">
             <thead>
               <tr className="bg-slate-100">
