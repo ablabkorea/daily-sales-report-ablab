@@ -4089,6 +4089,10 @@ type ItemMetric = {
 
 type ItemDetailSortKey = "saleDate" | "storeName" | "itemCode" | "itemName" | "quantity" | "salesAmount" | "costAmount" | "profitAmount" | "profitRate";
 
+type ItemBrandSortKey = "brand" | "current" | "prevMonth" | "prevMonthRate" | "prevYear" | "prevYearRate" | "storeCount";
+type ItemStoreSortKey = "brand" | "code" | "name" | "manager" | "current" | "prevMonthRate" | "prevYearRate";
+type ItemRowSortKey = "itemCode" | "itemName" | "currentQty" | "prevMonthQty" | "prevMonthDiff" | "prevMonthQtyRate" | "prevYearQty" | "prevYearDiff" | "prevYearQtyRate" | "currentSales" | "prevMonthSales" | "prevMonthSalesDiff" | "prevMonthSalesRate" | "prevYearSales" | "prevYearSalesDiff" | "prevYearSalesRate";
+
 type ItemAnalysisRow = {
   itemCode: string;
   itemName: string;
@@ -4183,6 +4187,22 @@ function PopupTh({ children, right = false }: { children: React.ReactNode; right
   );
 }
 
+function ItemAnalysisSortableTh<K extends string>({ children, sortKey, sortConfig, onSort, right = false }: { children: React.ReactNode; sortKey: K; sortConfig: { key: K; direction: SortDirection }; onSort: (key: K) => void; right?: boolean }) {
+  return (
+    <PopupTh right={right}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`flex w-full items-center gap-1 ${right ? "justify-end text-right" : "justify-start text-left"}`}
+        title="정렬"
+      >
+        <span>{children}</span>
+        <span className="text-[10px] text-slate-500">{sortArrow(sortConfig.key === sortKey, sortConfig.direction)}</span>
+      </button>
+    </PopupTh>
+  );
+}
+
 function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: SalesRecord[]; month: string; date: string }) {
   const [mode, setMode] = useState<"브랜드별" | "매장별">("브랜드별");
   const [searchDraft, setSearchDraft] = useState("");
@@ -4190,7 +4210,9 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedStoreCode, setSelectedStoreCode] = useState("");
   const [selectedItemCode, setSelectedItemCode] = useState("");
-  const [itemSortMode, setItemSortMode] = useState<"품목코드 오름차순" | "전월 수량 증감률 높은순" | "전월 수량 증감률 낮은순" | "전년 수량 증감률 높은순" | "전년 수량 증감률 낮은순">("품목코드 오름차순");
+  const [brandSortConfig, setBrandSortConfig] = useState<{ key: ItemBrandSortKey; direction: SortDirection }>({ key: "current", direction: "desc" });
+  const [storeSortConfig, setStoreSortConfig] = useState<{ key: ItemStoreSortKey; direction: SortDirection }>({ key: "current", direction: "desc" });
+  const [itemSortConfig, setItemSortConfig] = useState<{ key: ItemRowSortKey; direction: SortDirection }>({ key: "currentSales", direction: "desc" });
   const [detailSortConfig, setDetailSortConfig] = useState<{ key: ItemDetailSortKey; direction: SortDirection }>({ key: "saleDate", direction: "asc" });
   const [analysisStart, setAnalysisStart] = useState(monthStart(month));
   const [analysisEnd, setAnalysisEnd] = useState(date.startsWith(month) ? date : monthEnd(month));
@@ -4243,16 +4265,75 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
   }, [activeStores, selectedBrand, mode, sales, currentStart, currentEnd, prevStart, prevEnd, prevYearStart, prevYearEnd]);
 
   const itemRows = useMemo(() => selectedStoreCode ? buildItemAnalysisRows(sales, selectedStoreCode, currentStart, currentEnd, prevStart, prevEnd, prevYearStart, prevYearEnd) : [], [sales, selectedStoreCode, currentStart, currentEnd, prevStart, prevEnd, prevYearStart, prevYearEnd]);
+
+  const sortedBrandRows = useMemo(() => {
+    const valueOf = (r: (typeof brandRows)[number]) => {
+      if (brandSortConfig.key === "brand") return r.brand;
+      if (brandSortConfig.key === "current") return r.current;
+      if (brandSortConfig.key === "prevMonth") return r.prevMonth;
+      if (brandSortConfig.key === "prevMonthRate") return itemMetricRate(r.current, r.prevMonth);
+      if (brandSortConfig.key === "prevYear") return r.prevYear;
+      if (brandSortConfig.key === "prevYearRate") return itemMetricRate(r.current, r.prevYear);
+      return r.stores.length;
+    };
+    return [...brandRows].sort((a, b) => {
+      const aValue = valueOf(a);
+      const bValue = valueOf(b);
+      const result = typeof aValue === "string" || typeof bValue === "string"
+        ? String(aValue ?? "").localeCompare(String(bValue ?? ""), "ko-KR", { numeric: true })
+        : Number(aValue || 0) - Number(bValue || 0);
+      return brandSortConfig.direction === "asc" ? result : -result;
+    });
+  }, [brandRows, brandSortConfig]);
+
+  const sortedStoreRows = useMemo(() => {
+    const valueOf = (r: (typeof storeRows)[number]) => {
+      if (storeSortConfig.key === "brand") return r.store.brand;
+      if (storeSortConfig.key === "code") return r.store.code;
+      if (storeSortConfig.key === "name") return r.store.name;
+      if (storeSortConfig.key === "manager") return r.store.manager || "미지정";
+      if (storeSortConfig.key === "current") return r.current;
+      if (storeSortConfig.key === "prevMonthRate") return itemMetricRate(r.current, r.prevMonth);
+      return itemMetricRate(r.current, r.prevYear);
+    };
+    return [...storeRows].sort((a, b) => {
+      const aValue = valueOf(a);
+      const bValue = valueOf(b);
+      const result = typeof aValue === "string" || typeof bValue === "string"
+        ? String(aValue ?? "").localeCompare(String(bValue ?? ""), "ko-KR", { numeric: true })
+        : Number(aValue || 0) - Number(bValue || 0);
+      return storeSortConfig.direction === "asc" ? result : -result;
+    });
+  }, [storeRows, storeSortConfig]);
+
   const sortedItemRows = useMemo(() => {
-    const rows = [...itemRows];
-    const prevRate = (r: ItemAnalysisRow) => itemMetricRate(r.current.qty, r.prevMonth.qty);
-    const prevYearRate = (r: ItemAnalysisRow) => itemMetricRate(r.current.qty, r.prevYear.qty);
-    if (itemSortMode === "전월 수량 증감률 높은순") return rows.sort((a, b) => prevRate(b) - prevRate(a));
-    if (itemSortMode === "전월 수량 증감률 낮은순") return rows.sort((a, b) => prevRate(a) - prevRate(b));
-    if (itemSortMode === "전년 수량 증감률 높은순") return rows.sort((a, b) => prevYearRate(b) - prevYearRate(a));
-    if (itemSortMode === "전년 수량 증감률 낮은순") return rows.sort((a, b) => prevYearRate(a) - prevYearRate(b));
-    return rows.sort((a, b) => String(a.itemCode).localeCompare(String(b.itemCode), "ko-KR", { numeric: true }));
-  }, [itemRows, itemSortMode]);
+    const valueOf = (r: ItemAnalysisRow) => {
+      if (itemSortConfig.key === "itemCode") return r.itemCode;
+      if (itemSortConfig.key === "itemName") return r.itemName;
+      if (itemSortConfig.key === "currentQty") return r.current.qty;
+      if (itemSortConfig.key === "prevMonthQty") return r.prevMonth.qty;
+      if (itemSortConfig.key === "prevMonthDiff") return itemMetricDiff(r.current.qty, r.prevMonth.qty);
+      if (itemSortConfig.key === "prevMonthQtyRate") return itemMetricRate(r.current.qty, r.prevMonth.qty);
+      if (itemSortConfig.key === "prevYearQty") return r.prevYear.qty;
+      if (itemSortConfig.key === "prevYearDiff") return itemMetricDiff(r.current.qty, r.prevYear.qty);
+      if (itemSortConfig.key === "prevYearQtyRate") return itemMetricRate(r.current.qty, r.prevYear.qty);
+      if (itemSortConfig.key === "currentSales") return r.current.sales;
+      if (itemSortConfig.key === "prevMonthSales") return r.prevMonth.sales;
+      if (itemSortConfig.key === "prevMonthSalesDiff") return itemMetricDiff(r.current.sales, r.prevMonth.sales);
+      if (itemSortConfig.key === "prevMonthSalesRate") return itemMetricRate(r.current.sales, r.prevMonth.sales);
+      if (itemSortConfig.key === "prevYearSales") return r.prevYear.sales;
+      if (itemSortConfig.key === "prevYearSalesDiff") return itemMetricDiff(r.current.sales, r.prevYear.sales);
+      return itemMetricRate(r.current.sales, r.prevYear.sales);
+    };
+    return [...itemRows].sort((a, b) => {
+      const aValue = valueOf(a);
+      const bValue = valueOf(b);
+      const result = typeof aValue === "string" || typeof bValue === "string"
+        ? String(aValue ?? "").localeCompare(String(bValue ?? ""), "ko-KR", { numeric: true })
+        : Number(aValue || 0) - Number(bValue || 0);
+      return itemSortConfig.direction === "asc" ? result : -result;
+    });
+  }, [itemRows, itemSortConfig]);
   const selectedItem = itemRows.find((r) => r.itemCode === selectedItemCode);
   const detailRows = useMemo(() => {
     if (!selectedStoreCode || !selectedItemCode) return [];
@@ -4272,6 +4353,27 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
       return detailSortConfig.direction === "asc" ? result : -result;
     });
   }, [detailRows, detailSortConfig]);
+
+  const requestBrandSort = (key: ItemBrandSortKey) => {
+    setBrandSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "desc" ? "asc" : "desc",
+    }));
+  };
+
+  const requestStoreSort = (key: ItemStoreSortKey) => {
+    setStoreSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "desc" ? "asc" : "desc",
+    }));
+  };
+
+  const requestItemSort = (key: ItemRowSortKey) => {
+    setItemSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "desc" ? "asc" : "desc",
+    }));
+  };
 
   const requestDetailSort = (key: ItemDetailSortKey) => {
     setDetailSortConfig((prev) => ({
@@ -4339,9 +4441,24 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
           <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">브랜드별 요약</div>
           <div className="max-h-[65vh] overflow-auto isolate">
             <table className="w-full min-w-[900px] border-separate border-spacing-0 text-center text-sm">
-              <thead><tr>{["브랜드", "당일까지 매출", "전월 매출", "전월 대비", "전년 매출", "전년 대비", "거래처수", "상세"].map((h) => <PopupTh key={h}>{h}</PopupTh>)}</tr></thead>
+              <thead>
+                <tr>
+                  {([
+                    ["brand", "브랜드", false],
+                    ["current", "당일까지 매출", true],
+                    ["prevMonth", "전월 매출", true],
+                    ["prevMonthRate", "전월 대비", true],
+                    ["prevYear", "전년 매출", true],
+                    ["prevYearRate", "전년 대비", true],
+                    ["storeCount", "거래처수", true],
+                  ] as [ItemBrandSortKey, string, boolean][]).map(([key, label, right]) => (
+                    <ItemAnalysisSortableTh key={key} sortKey={key} sortConfig={brandSortConfig} onSort={requestBrandSort} right={right}>{label}</ItemAnalysisSortableTh>
+                  ))}
+                  <PopupTh>상세</PopupTh>
+                </tr>
+              </thead>
               <tbody>
-                {brandRows.map((r) => (
+                {sortedBrandRows.map((r) => (
                   <tr key={r.brand} className="hover:bg-blue-50">
                     <td className="border border-slate-300 p-2 font-semibold">{r.brand}</td>
                     <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">{won(r.current)}</td>
@@ -4368,9 +4485,24 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
           </div>
           <div className="max-h-[65vh] overflow-auto isolate">
             <table className="w-full min-w-[1000px] border-separate border-spacing-0 text-center text-sm">
-              <thead><tr>{["브랜드", "거래처코드", "거래처명", "담당자", "당일까지 매출", "전월 대비", "전년 대비", "상세"].map((h) => <PopupTh key={h}>{h}</PopupTh>)}</tr></thead>
+              <thead>
+                <tr>
+                  {([
+                    ["brand", "브랜드", false],
+                    ["code", "거래처코드", false],
+                    ["name", "거래처명", false],
+                    ["manager", "담당자", false],
+                    ["current", "당일까지 매출", true],
+                    ["prevMonthRate", "전월 대비", true],
+                    ["prevYearRate", "전년 대비", true],
+                  ] as [ItemStoreSortKey, string, boolean][]).map(([key, label, right]) => (
+                    <ItemAnalysisSortableTh key={key} sortKey={key} sortConfig={storeSortConfig} onSort={requestStoreSort} right={right}>{label}</ItemAnalysisSortableTh>
+                  ))}
+                  <PopupTh>상세</PopupTh>
+                </tr>
+              </thead>
               <tbody>
-                {storeRows.map((r) => (
+                {sortedStoreRows.map((r) => (
                   <tr key={r.store.code} className="hover:bg-blue-50">
                     <td className="border border-slate-300 p-2">{r.store.brand}</td>
                     <td className="border border-slate-300 p-2">{r.store.code}</td>
@@ -4397,19 +4529,36 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
               <div className="mt-1 text-xs text-slate-500">현재/전월/전년 동일기간 기준으로 수량과 매출을 비교합니다.</div>
             </div>
             <div className="flex items-center gap-2">
-              <select value={itemSortMode} onChange={(e) => setItemSortMode(e.target.value as typeof itemSortMode)} className="h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs outline-none focus:border-blue-500">
-                <option value="품목코드 오름차순">품목코드 오름차순</option>
-                <option value="전월 수량 증감률 높은순">전월 수량 증감률 높은순</option>
-                <option value="전월 수량 증감률 낮은순">전월 수량 증감률 낮은순</option>
-                <option value="전년 수량 증감률 높은순">전년 수량 증감률 높은순</option>
-                <option value="전년 수량 증감률 낮은순">전년 수량 증감률 낮은순</option>
-              </select>
               <button onClick={backToStores} className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200">← 거래처 목록</button>
             </div>
           </div>
           <div className="max-h-[65vh] overflow-auto isolate">
             <table className="w-full min-w-[1500px] border-separate border-spacing-0 text-center text-xs">
-              <thead><tr>{["품목코드", "품목명", "현재수량", "전월수량", "수량차이", "수량증감%", "전년수량", "수량차이", "수량증감%", "현재매출", "전월매출", "매출차이", "매출증감%", "전년매출", "매출차이", "매출증감%", "상세"].map((h) => <PopupTh key={h}>{h}</PopupTh>)}</tr></thead>
+              <thead>
+                <tr>
+                  {([
+                    ["itemCode", "품목코드", false],
+                    ["itemName", "품목명", false],
+                    ["currentQty", "현재수량", true],
+                    ["prevMonthQty", "전월수량", true],
+                    ["prevMonthDiff", "수량차이", true],
+                    ["prevMonthQtyRate", "수량증감%", true],
+                    ["prevYearQty", "전년수량", true],
+                    ["prevYearDiff", "수량차이", true],
+                    ["prevYearQtyRate", "수량증감%", true],
+                    ["currentSales", "현재매출", true],
+                    ["prevMonthSales", "전월매출", true],
+                    ["prevMonthSalesDiff", "매출차이", true],
+                    ["prevMonthSalesRate", "매출증감%", true],
+                    ["prevYearSales", "전년매출", true],
+                    ["prevYearSalesDiff", "매출차이", true],
+                    ["prevYearSalesRate", "매출증감%", true],
+                  ] as [ItemRowSortKey, string, boolean][]).map(([key, label, right]) => (
+                    <ItemAnalysisSortableTh key={key} sortKey={key} sortConfig={itemSortConfig} onSort={requestItemSort} right={right}>{label}</ItemAnalysisSortableTh>
+                  ))}
+                  <PopupTh>상세</PopupTh>
+                </tr>
+              </thead>
               <tbody>
                 {sortedItemRows.map((r) => (
                   <tr key={`${r.itemCode}-${r.itemName}`} className="hover:bg-blue-50">
