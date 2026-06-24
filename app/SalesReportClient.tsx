@@ -4087,6 +4087,8 @@ type ItemMetric = {
   profit: number;
 };
 
+type ItemDetailSortKey = "saleDate" | "storeName" | "itemCode" | "itemName" | "quantity" | "salesAmount" | "costAmount" | "profitAmount" | "profitRate";
+
 type ItemAnalysisRow = {
   itemCode: string;
   itemName: string;
@@ -4175,7 +4177,7 @@ function buildItemAnalysisRows(sales: SalesRecord[], storeCode: string, currentS
 
 function PopupTh({ children, right = false }: { children: React.ReactNode; right?: boolean }) {
   return (
-    <th className={`sticky top-0 z-50 border border-slate-300 bg-white px-3 py-2 font-bold shadow-[0_2px_0_0_#e2e8f0] ${right ? "text-right" : "text-left"}`}>
+    <th className={`sticky top-0 z-50 border border-slate-200 bg-white px-3 py-2 font-bold shadow-[0_2px_0_0_#e2e8f0] ${right ? "text-right" : "text-left"}`}>
       {children}
     </th>
   );
@@ -4189,6 +4191,7 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
   const [selectedStoreCode, setSelectedStoreCode] = useState("");
   const [selectedItemCode, setSelectedItemCode] = useState("");
   const [itemSortMode, setItemSortMode] = useState<"품목코드 오름차순" | "전월 수량 증감률 높은순" | "전월 수량 증감률 낮은순" | "전년 수량 증감률 높은순" | "전년 수량 증감률 낮은순">("품목코드 오름차순");
+  const [detailSortConfig, setDetailSortConfig] = useState<{ key: ItemDetailSortKey; direction: SortDirection }>({ key: "saleDate", direction: "asc" });
   const [analysisStart, setAnalysisStart] = useState(monthStart(month));
   const [analysisEnd, setAnalysisEnd] = useState(date.startsWith(month) ? date : monthEnd(month));
 
@@ -4253,8 +4256,29 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
   const selectedItem = itemRows.find((r) => r.itemCode === selectedItemCode);
   const detailRows = useMemo(() => {
     if (!selectedStoreCode || !selectedItemCode) return [];
-    return sales.filter((r) => r.storeCode === selectedStoreCode && r.itemCode === selectedItemCode && inRange(r.saleDate, currentStart, currentEnd)).sort((a, b) => a.saleDate.localeCompare(b.saleDate));
+    return sales.filter((r) => r.storeCode === selectedStoreCode && r.itemCode === selectedItemCode && inRange(r.saleDate, currentStart, currentEnd));
   }, [sales, selectedStoreCode, selectedItemCode, currentStart, currentEnd]);
+
+  const sortedDetailRows = useMemo(() => {
+    return [...detailRows].sort((a, b) => {
+      const aValue = a[detailSortConfig.key];
+      const bValue = b[detailSortConfig.key];
+      let result = 0;
+      if (typeof aValue === "string" || typeof bValue === "string") {
+        result = String(aValue ?? "").localeCompare(String(bValue ?? ""), "ko-KR", { numeric: true });
+      } else {
+        result = Number(aValue || 0) - Number(bValue || 0);
+      }
+      return detailSortConfig.direction === "asc" ? result : -result;
+    });
+  }, [detailRows, detailSortConfig]);
+
+  const requestDetailSort = (key: ItemDetailSortKey) => {
+    setDetailSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "desc" ? "asc" : "desc",
+    }));
+  };
 
   function applySearch() {
     setSearch(searchDraft.trim());
@@ -4445,22 +4469,48 @@ function ItemAnalysis({ stores, sales, month, date }: { stores: Store[]; sales: 
             <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">상세 발주 원본</div>
             <div className="max-h-[55vh] overflow-auto isolate">
               <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-center text-xs">
-                <thead><tr>{["주문일", "거래처", "상품코드", "상품명", "수량", "매출금액", "원가금액", "이익금액", "이익률"].map((h, idx) => <PopupTh key={h} right={idx >= 4}>{h}</PopupTh>)}</tr></thead>
+                <thead>
+                  <tr>
+                    {([
+                      ["saleDate", "주문일", false],
+                      ["storeName", "거래처", false],
+                      ["itemCode", "상품코드", false],
+                      ["itemName", "상품명", false],
+                      ["quantity", "수량", true],
+                      ["salesAmount", "매출금액", true],
+                      ["costAmount", "원가금액", true],
+                      ["profitAmount", "이익금액", true],
+                      ["profitRate", "이익률", true],
+                    ] as [ItemDetailSortKey, string, boolean][]).map(([key, label, right]) => (
+                      <PopupTh key={key} right={right}>
+                        <button
+                          type="button"
+                          onClick={() => requestDetailSort(key)}
+                          className={`flex w-full items-center gap-1 ${right ? "justify-end text-right" : "justify-start text-left"}`}
+                          title="정렬"
+                        >
+                          <span>{label}</span>
+                          <span className="text-[10px] text-slate-500">{sortArrow(detailSortConfig.key === key, detailSortConfig.direction)}</span>
+                        </button>
+                      </PopupTh>
+                    ))}
+                  </tr>
+                </thead>
                 <tbody>
-                  {detailRows.map((r) => (
+                  {sortedDetailRows.map((r) => (
                     <tr key={r.id} className="hover:bg-blue-50">
-                      <td className="border border-slate-300 p-2">{r.saleDate}</td>
-                      <td className="border border-slate-300 p-2 font-semibold">{r.storeName}</td>
-                      <td className="border border-slate-300 p-2">{r.itemCode}</td>
-                      <td className="border border-slate-300 p-2">{r.itemName}</td>
-                      <td className="border border-slate-300 p-2 text-right">{won(r.quantity)}</td>
-                      <td className="border border-slate-300 p-2 text-right font-bold text-slate-900">{won(r.salesAmount)}</td>
-                      <td className="border border-slate-300 p-2 text-right">{won(r.costAmount)}</td>
-                      <td className="border border-slate-300 p-2 text-right">{won(r.profitAmount)}</td>
-                      <td className="border border-slate-300 p-2 text-right">{pct(r.profitRate)}</td>
+                      <td className="border border-slate-200 p-2">{r.saleDate}</td>
+                      <td className="border border-slate-200 p-2 font-semibold">{r.storeName}</td>
+                      <td className="border border-slate-200 p-2">{r.itemCode}</td>
+                      <td className="border border-slate-200 p-2">{r.itemName}</td>
+                      <td className="border border-slate-200 p-2 text-right">{won(r.quantity)}</td>
+                      <td className="border border-slate-200 p-2 text-right font-bold text-slate-900">{won(r.salesAmount)}</td>
+                      <td className="border border-slate-200 p-2 text-right">{won(r.costAmount)}</td>
+                      <td className="border border-slate-200 p-2 text-right">{won(r.profitAmount)}</td>
+                      <td className="border border-slate-200 p-2 text-right">{pct(r.profitRate)}</td>
                     </tr>
                   ))}
-                  {!detailRows.length && <tr><td colSpan={9} className="border border-slate-300 p-8 text-center text-slate-500">상세 데이터가 없습니다.</td></tr>}
+                  {!sortedDetailRows.length && <tr><td colSpan={9} className="border border-slate-200 p-8 text-center text-slate-500">상세 데이터가 없습니다.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -5345,7 +5395,7 @@ function OrderDrillModal({ title, rows, allSales, onClose }: { title: string; ro
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
               닫기
             </button>
@@ -5356,25 +5406,25 @@ function OrderDrillModal({ title, rows, allSales, onClose }: { title: string; ro
           <table className="w-full min-w-[1100px] border-separate border-spacing-0 border border-slate-200 bg-white text-sm">
             <thead className="sticky top-0 z-[80] bg-white shadow-[0_2px_0_0_#e2e8f0]">
               <tr className="bg-white">
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">주문일</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">거래처</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품코드</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품명</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">수량</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">매출금액</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">원가금액</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익금액</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익률</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">주문일</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">거래처</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품코드</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">상품명</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">수량</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">매출금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">원가금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익률</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={9} className="border p-10 text-center text-slate-500">표시할 주문내역이 없습니다.</td></tr>
+                <tr><td colSpan={9} className="border border-slate-200 p-10 text-center text-slate-500">표시할 주문내역이 없습니다.</td></tr>
               ) : rows.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50">
-                  <td className="border px-3 py-2">{r.saleDate}</td>
-                  <td className="border px-3 py-2 font-semibold">{r.storeName}</td>
-                  <td className="border px-3 py-2">
+                  <td className="border border-slate-200 px-3 py-2">{r.saleDate}</td>
+                  <td className="border border-slate-200 px-3 py-2 font-semibold">{r.storeName}</td>
+                  <td className="border border-slate-200 px-3 py-2">
                     <button
                       type="button"
                       onClick={() => openItemDrill(r.itemCode, r.itemName)}
@@ -5384,12 +5434,12 @@ function OrderDrillModal({ title, rows, allSales, onClose }: { title: string; ro
                       {r.itemCode}
                     </button>
                   </td>
-                  <td className="border px-3 py-2">{r.itemName}</td>
-                  <td className="border px-3 py-2 text-right">{won(r.quantity)}</td>
-                  <td className="border px-3 py-2 text-right text-base font-bold text-slate-900">{won(r.salesAmount)}</td>
-                  <td className="border px-3 py-2 text-right font-semibold text-slate-900">{won(r.costAmount)}</td>
-                  <td className="border px-3 py-2 text-right font-semibold text-slate-900">{won(r.profitAmount)}</td>
-                  <td className="border px-3 py-2 text-right text-slate-900">{pct(r.profitRate)}</td>
+                  <td className="border border-slate-200 px-3 py-2">{r.itemName}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">{won(r.quantity)}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right text-base font-bold text-slate-900">{won(r.salesAmount)}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right font-semibold text-slate-900">{won(r.costAmount)}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right font-semibold text-slate-900">{won(r.profitAmount)}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right text-slate-900">{pct(r.profitRate)}</td>
                 </tr>
               ))}
             </tbody>
@@ -5437,7 +5487,7 @@ function ItemDrillModal({ itemCode, itemName, rows, onClose }: { itemCode: strin
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
               닫기
             </button>
@@ -5448,29 +5498,29 @@ function ItemDrillModal({ itemCode, itemName, rows, onClose }: { itemCode: strin
           <table className="w-full min-w-[920px] border-separate border-spacing-0 border border-slate-200 bg-white text-sm">
             <thead className="sticky top-0 z-[80] bg-white shadow-[0_2px_0_0_#e2e8f0]">
               <tr className="bg-white">
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">주문일</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">거래처</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">담당자</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">수량</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">매출금액</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">원가금액</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익금액</th>
-                <th className="sticky top-0 z-[80] border border-slate-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익률</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">주문일</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">거래처</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">담당자</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">수량</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">매출금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">원가금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익금액</th>
+                <th className="sticky top-0 z-[80] border border-slate-200 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">이익률</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={8} className="border p-10 text-center text-slate-500">표시할 품목별 주문내역이 없습니다.</td></tr>
+                <tr><td colSpan={8} className="border border-slate-200 p-10 text-center text-slate-500">표시할 품목별 주문내역이 없습니다.</td></tr>
               ) : rows.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50">
-                  <td className="border px-3 py-2">{r.saleDate}</td>
-                  <td className="border px-3 py-2 font-semibold">{r.storeName}</td>
-                  <td className="border px-3 py-2">{r.manager || "미지정"}</td>
-                  <td className="border px-3 py-2 text-right">{won(r.quantity)}</td>
-                  <td className="border px-3 py-2 text-right text-base font-bold text-slate-900">{won(r.salesAmount)}</td>
-                  <td className="border px-3 py-2 text-right font-semibold text-slate-900">{won(r.costAmount)}</td>
-                  <td className="border px-3 py-2 text-right font-semibold text-slate-900">{won(r.profitAmount)}</td>
-                  <td className="border px-3 py-2 text-right text-slate-900">{pct(r.profitRate)}</td>
+                  <td className="border border-slate-200 px-3 py-2">{r.saleDate}</td>
+                  <td className="border border-slate-200 px-3 py-2 font-semibold">{r.storeName}</td>
+                  <td className="border border-slate-200 px-3 py-2">{r.manager || "미지정"}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right">{won(r.quantity)}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right text-base font-bold text-slate-900">{won(r.salesAmount)}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right font-semibold text-slate-900">{won(r.costAmount)}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right font-semibold text-slate-900">{won(r.profitAmount)}</td>
+                  <td className="border border-slate-200 px-3 py-2 text-right text-slate-900">{pct(r.profitRate)}</td>
                 </tr>
               ))}
             </tbody>
