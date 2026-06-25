@@ -5367,13 +5367,13 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
                 {!compact && isStoreListView && <ThCompact tone="gray" w="w-[7%]">마지막발주일</ThCompact>}
                 <ThCompactSortable right tone="mint" w={compact ? "w-[6%]" : ""} sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>전년동월</ThCompactSortable>
                 <ThCompactSortable right tone="mint" sortKey="prevYearTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전년 Time gone</ThCompactSortable>
-                <ThCompactSortable right tone="blue" sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>전월</ThCompactSortable>
+                <ThCompactSortable right tone="blue" w={compact ? "w-[5%]" : ""} sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>전월</ThCompactSortable>
                 <ThCompactSortable right tone="blue" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전월 Time gone</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>당월 전체 매출</ThCompactSortable>
                 <ThCompactSortable right tone="gray" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>당월 Time gone</ThCompactSortable>
                 <ThCompactSortable right tone="purple" sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
-                <ThCompactSortable right tone="purple" sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
+                <ThCompactSortable right tone="purple" w={compact ? "w-[5%]" : ""} sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
                 <ThCompactSortable right tone="green" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
                 <ThCompactSortable right tone="green" w="w-[4%]" sortKey="profitRate" sortConfig={sortConfig} onSort={requestSort}>이익률</ThCompactSortable>
               </tr>
