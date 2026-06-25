@@ -5363,9 +5363,9 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
           <table className={`w-full ${compact ? "min-w-[1280px]" : "min-w-[1120px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[11px] leading-tight`}>
             <thead>
               <tr className="bg-slate-100">
-                <ThCompactSortable w={isStoreListView ? "w-[21%]" : "w-[11%]"} sortKey="label" sortConfig={sortConfig} onSort={requestSort}>{isStoreListView ? "거래처" : view.replace("별", "")}</ThCompactSortable>
+                <ThCompactSortable w={isStoreListView ? (compact ? "w-[24%]" : "w-[18%]") : "w-[11%]"} sortKey="label" sortConfig={sortConfig} onSort={requestSort}>{isStoreListView ? "거래처" : view.replace("별", "")}</ThCompactSortable>
                 {!compact && isStoreListView && <ThCompact tone="gray" w="w-[7%]">마지막발주일</ThCompact>}
-                <ThCompactSortable right tone="mint" sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>전년동월</ThCompactSortable>
+                <ThCompactSortable right tone="mint" w={compact ? "w-[6%]" : ""} sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>전년동월</ThCompactSortable>
                 <ThCompactSortable right tone="mint" sortKey="prevYearTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전년 Time gone</ThCompactSortable>
                 <ThCompactSortable right tone="blue" sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>전월</ThCompactSortable>
                 <ThCompactSortable right tone="blue" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전월 Time gone</ThCompactSortable>
