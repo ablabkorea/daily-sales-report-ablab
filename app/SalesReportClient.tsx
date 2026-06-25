@@ -5347,26 +5347,18 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
         )}
 
         <div className="relative max-h-[62vh] overflow-auto bg-white">
-          <table className={`w-full ${compact ? "min-w-[1380px]" : "min-w-[1180px]"} table-auto border-separate border-spacing-0 border border-gray-300 text-[11px] leading-tight`}>
+          <table className={`w-full ${compact ? "min-w-[1280px]" : "min-w-[1080px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[11px] leading-tight`}>
             <thead>
               <tr className="bg-slate-100">
-                <ThCompactSortable w="w-[10%]" sortKey="label" sortConfig={sortConfig} onSort={requestSort}>{view.replace("별", "")}</ThCompactSortable>
-                {!compact && view === "거래처별" && <ThCompact tone="gray">마지막 발주일</ThCompact>}
+                <ThCompactSortable w="w-[8%]" sortKey="label" sortConfig={sortConfig} onSort={requestSort}>{view === "거래처별" ? "거래처" : view.replace("별", "")}</ThCompactSortable>
+                {!compact && view === "거래처별" && <ThCompact tone="gray" w="w-[8%]">마지막발주일</ThCompact>}
                 <ThCompactSortable right tone="mint" sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>전년동월</ThCompactSortable>
-                {compact ? (
-                  <ThCompactSortable right tone="mint" sortKey="prevYearTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전년동월 대비 Time gone</ThCompactSortable>
-                ) : (
-                  <ThCompactSortable right tone="mint" sortKey="prevYearRate" sortConfig={sortConfig} onSort={requestSort}>전년대비</ThCompactSortable>
-                )}
+                <ThCompactSortable right tone="mint" sortKey="prevYearTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전년대비 타임곤</ThCompactSortable>
                 <ThCompactSortable right tone="blue" sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>전월</ThCompactSortable>
-                {compact ? (
-                  <ThCompactSortable right tone="blue" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전월 대비 Time gone</ThCompactSortable>
-                ) : (
-                  <ThCompactSortable right tone="blue" sortKey="prevMonthRate" sortConfig={sortConfig} onSort={requestSort}>전월대비</ThCompactSortable>
-                )}
+                <ThCompactSortable right tone="blue" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전월대비 타임곤</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>당월 전체 매출</ThCompactSortable>
-                <ThCompactSortable right tone="gray" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>{compact ? "당월 Time gone 대비" : "TIME GONE 대비"}</ThCompactSortable>
+                <ThCompactSortable right tone="gray" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>당월 타임곤 대비</ThCompactSortable>
                 <ThCompactSortable right tone="purple" sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
                 <ThCompactSortable right tone="purple" sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
                 <ThCompactSortable right tone="green" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
@@ -5395,16 +5387,16 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
                       </TdCompact>
                       {!compact && view === "거래처별" && (
                         <TdCompact>
-                          <div className="font-semibold text-slate-900">{r.lastOrderDate}</div>
-                          <div className={`mt-0.5 text-[11px] font-semibold ${r.daysSinceLastOrder >= 30 ? "text-red-600" : r.daysSinceLastOrder >= 7 ? "text-amber-600" : "text-slate-400"}`}>
+                          <div className="text-center font-semibold text-slate-900 whitespace-nowrap">{r.lastOrderDate}</div>
+                          <div className={`mt-0.5 text-center text-[10px] font-semibold whitespace-nowrap ${r.daysSinceLastOrder >= 30 ? "text-red-600" : r.daysSinceLastOrder >= 7 ? "text-amber-600" : "text-slate-400"}`}>
                             {r.lastOrderDate === "-" ? "발주 없음" : `${r.daysSinceLastOrder}일 경과`}
                           </div>
                         </TdCompact>
                       )}
                       <ClickableAmountCell value={r.prevYearSales} onClick={() => openDrill(r, "prevYear")} />
-                      <TdCompact right amount>{compact ? pct(r.prevYearTimeGoneGap) : pct(r.prevYearRate)}</TdCompact>
+                      <TdCompact right amount>{pct(r.prevYearTimeGoneGap)}</TdCompact>
                       <ClickableAmountCell value={r.prevMonthSales} onClick={() => openDrill(r, "prevMonth")} />
-                      <TdCompact right amount>{compact ? pct(r.prevMonthTimeGoneGap) : pct(r.prevMonthRate)}</TdCompact>
+                      <TdCompact right amount>{pct(r.prevMonthTimeGoneGap)}</TdCompact>
                       <ClickableAmountCell value={r.currentSales} onClick={() => openDrill(r, "current")} />
                       <ClickableAmountCell value={r.fullMonthSales} onClick={() => openDrill(r, "currentFullMonth")} />
                       <TdCompact right amount>{pct(r.timeGoneGap)}</TdCompact>
@@ -6003,14 +5995,14 @@ function ThCompact({ children, right = false, w = "", tone = "default" }: { chil
     "border-slate-200 bg-slate-100 text-slate-800";
 
   return (
-    <th className={`sticky top-0 z-50 border px-1 py-1.5 align-middle text-center text-[13px] font-bold leading-tight whitespace-nowrap break-keep shadow-sm bg-clip-padding ${toneClass} ${w}`}>
+    <th className={`sticky top-0 z-50 border px-0.5 py-1.5 align-middle text-center text-[12px] font-bold leading-tight whitespace-nowrap break-keep shadow-sm bg-clip-padding ${toneClass} ${w}`}>
       {children}
     </th>
   );
 }
 
 function TdCompact({ children, right = false, bold = false, color = "", amount = false }: { children: React.ReactNode; right?: boolean; bold?: boolean; color?: string; amount?: boolean }) {
-  return <td className={`border border-gray-300 bg-white px-1 py-1.5 align-middle whitespace-nowrap break-keep ${right ? "text-right" : "text-left"} ${bold ? "font-semibold" : ""} ${amount ? "text-[12px] font-bold leading-snug text-slate-900" : ""} ${color}`}>{children}</td>;
+  return <td className={`border border-gray-300 bg-white px-0.5 py-1.5 align-middle text-center whitespace-nowrap break-keep ${bold ? "font-semibold" : ""} ${amount ? "text-[11px] font-bold leading-snug text-slate-900" : ""} ${color}`}>{children}</td>;
 }
 
 function SalesCompare({ stores, sales, month, date }: { stores: Store[]; sales: SalesRecord[]; month: string; date: string }) {
