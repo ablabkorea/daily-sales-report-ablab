@@ -5213,10 +5213,10 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
   const salesStatusExcelRows = sortedRows.map((r) => ({
     구분: r.label,
     전년동월: r.prevYearSales,
-    "전년동월 대비 Time gone": pct(r.prevYearTimeGoneGap),
+    "전년 Time gone": pct(r.prevYearTimeGoneGap),
     전년대비: pct(r.prevYearRate),
     전월: r.prevMonthSales,
-    "전월 대비 Time gone": pct(r.prevMonthTimeGoneGap),
+    "전월 Time gone": pct(r.prevMonthTimeGoneGap),
     전월대비: pct(r.prevMonthRate),
     "당일까지 매출": r.currentSales,
     "당월 전체 매출": r.fullMonthSales,
@@ -5363,19 +5363,19 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
           <table className={`w-full ${compact ? "min-w-[1280px]" : "min-w-[1120px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[11px] leading-tight`}>
             <thead>
               <tr className="bg-slate-100">
-                <ThCompactSortable w={isStoreListView ? "w-[16%]" : "w-[9%]"} sortKey="label" sortConfig={sortConfig} onSort={requestSort}>{isStoreListView ? "거래처" : view.replace("별", "")}</ThCompactSortable>
-                {!compact && isStoreListView && <ThCompact tone="gray" w="w-[8%]">마지막발주일</ThCompact>}
+                <ThCompactSortable w={isStoreListView ? "w-[21%]" : "w-[11%]"} sortKey="label" sortConfig={sortConfig} onSort={requestSort}>{isStoreListView ? "거래처" : view.replace("별", "")}</ThCompactSortable>
+                {!compact && isStoreListView && <ThCompact tone="gray" w="w-[7%]">마지막발주일</ThCompact>}
                 <ThCompactSortable right tone="mint" sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>전년동월</ThCompactSortable>
-                <ThCompactSortable right tone="mint" sortKey="prevYearTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전년대비 Time gone</ThCompactSortable>
+                <ThCompactSortable right tone="mint" sortKey="prevYearTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전년 Time gone</ThCompactSortable>
                 <ThCompactSortable right tone="blue" sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>전월</ThCompactSortable>
-                <ThCompactSortable right tone="blue" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전월대비 Time gone</ThCompactSortable>
+                <ThCompactSortable right tone="blue" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전월 Time gone</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>당월 전체 매출</ThCompactSortable>
-                <ThCompactSortable right tone="gray" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>당월 Time gone 대비</ThCompactSortable>
+                <ThCompactSortable right tone="gray" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>당월 Time gone</ThCompactSortable>
                 <ThCompactSortable right tone="purple" sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
                 <ThCompactSortable right tone="purple" sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
                 <ThCompactSortable right tone="green" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
-                <ThCompactSortable right tone="green" w="w-[5%]" sortKey="profitRate" sortConfig={sortConfig} onSort={requestSort}>이익률</ThCompactSortable>
+                <ThCompactSortable right tone="green" w="w-[4%]" sortKey="profitRate" sortConfig={sortConfig} onSort={requestSort}>이익률</ThCompactSortable>
               </tr>
             </thead>
             <tbody>
