@@ -4865,16 +4865,17 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
   const prevMonthRows = sales.filter((s) => s.period === "prevMonth" && s.refMonth === month && filterByStoreSearch(s) && shouldIncludeRecord(s));
   const prevYearRows = sales.filter((s) => s.period === "prevYear" && s.refMonth === month && filterByStoreSearch(s) && shouldIncludeRecord(s));
 
+  const isStoreListView = view === "거래처별" || view === "담당자별";
+
   const rowKey = (r: SalesRecord) => {
     const resolved = resolveRecord(r);
-    if (view === "거래처별") return resolved.code || resolved.name;
+    if (isStoreListView) return resolved.code || resolved.name;
     if (view === "브랜드별") return resolved.brand || "미지정";
-    if (view === "담당자별") return resolved.manager || "미지정";
     return resolved.channel || "미지정";
   };
 
   const rowLabel = (key: string, records: SalesRecord[]) => {
-    if (view !== "거래처별") return key || "미지정";
+    if (!isStoreListView) return key || "미지정";
     const first = records[0];
     if (first) return resolveRecord(first).name;
     const mapped = stMap.get(key);
@@ -4883,9 +4884,8 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
 
   const storeKey = (store: Store) => {
     const resolved = resolveStoreInfo(store.code, store.name, store, stores);
-    if (view === "거래처별") return resolved.code || resolved.name;
+    if (isStoreListView) return resolved.code || resolved.name;
     if (view === "브랜드별") return resolved.brand || "미지정";
-    if (view === "담당자별") return resolved.manager || "미지정";
     return resolved.channel || "미지정";
   };
 
@@ -4929,13 +4929,17 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
       const s = stMap.get(e.storeCode);
       const resolved = resolveStoreInfo(e.storeCode, e.storeName, s || {}, stores);
       const display = resolved;
-      const key = s ? storeKey(s) : view === "거래처별" ? display.code || display.name || "미지정" : view === "브랜드별" ? display.brand || "미지정" : view === "담당자별" ? display.manager || "미지정" : display.channel || "미지정";
+      const key = s ? storeKey(s) : isStoreListView ? display.code || display.name || "미지정" : view === "브랜드별" ? display.brand || "미지정" : display.channel || "미지정";
       estMap.set(key, (estMap.get(key) || 0) + e.amount);
     });
 
   const baseKeySet = new Set([...currentMap.keys(), ...currentFullMonthMap.keys(), ...prevMonthMap.keys(), ...prevYearMap.keys(), ...estMap.keys()]);
-  if (view === "거래처별" && !normalizedSearch) {
-    stores.filter((store) => !hideEndedStores || store.status === "거래중").forEach((store) => baseKeySet.add(storeKey(store)));
+  if (isStoreListView && !normalizedSearch) {
+    const selectedManagerSet = new Set(selectedManagers);
+    stores
+      .filter((store) => !hideEndedStores || store.status === "거래중")
+      .filter((store) => view !== "담당자별" || selectedManagers.length === 0 || selectedManagerSet.has(store.manager || "미지정"))
+      .forEach((store) => baseKeySet.add(storeKey(store)));
   }
   const keys = Array.from(baseKeySet).sort();
 
@@ -4985,7 +4989,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
     const estRate = est ? (currentSales / est) * 100 : 0;
     const firstRecord = allRecords[0];
     const storeStatus = firstRecord ? resolveRecord(firstRecord).status : stMap.get(key)?.status;
-    const isEndedStore = view === "거래처별" && storeStatus === "거래종료";
+    const isEndedStore = isStoreListView && storeStatus === "거래종료";
     return {
       key,
       label: rowLabel(key, allRecords),
@@ -5004,11 +5008,12 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
       profitAmount,
       profitRate,
       isEndedStore,
-      lastOrderDate: view === "거래처별" ? (lastOrderDateByKey.get(key) || "-") : "-",
-      daysSinceLastOrder: view === "거래처별" ? daysBetween(lastOrderDateByKey.get(key) || "-", date) : 0,
+      manager: firstRecord ? resolveRecord(firstRecord).manager || "미지정" : stMap.get(key)?.manager || "미지정",
+      lastOrderDate: isStoreListView ? (lastOrderDateByKey.get(key) || "-") : "-",
+      daysSinceLastOrder: isStoreListView ? daysBetween(lastOrderDateByKey.get(key) || "-", date) : 0,
     };
   }).filter((row) => {
-    if (view !== "거래처별") return true;
+    if (!isStoreListView) return true;
     if (orderDateFilter === "check7") return row.daysSinceLastOrder >= 7;
     if (orderDateFilter === "no30") return row.daysSinceLastOrder >= 30;
     return true;
@@ -5016,18 +5021,26 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
 
   const displayRows = useMemo(() => {
     let nextRows = rows;
-    if (hideEndedStores && view === "거래처별") nextRows = nextRows.filter((row) => !row.isEndedStore);
+    if (hideEndedStores && isStoreListView) nextRows = nextRows.filter((row) => !row.isEndedStore);
     if (view === "담당자별" && selectedManagers.length > 0) {
       const selected = new Set(selectedManagers);
-      nextRows = nextRows.filter((row) => selected.has(row.label));
+      nextRows = nextRows.filter((row) => selected.has(row.manager || "미지정"));
     }
     return nextRows;
   }, [rows, hideEndedStores, view, selectedManagers]);
 
   const managerFilterOptions = useMemo(() => {
     if (view !== "담당자별") return [];
-    return Array.from(new Set(rows.map((row) => row.label).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ko-KR"));
-  }, [rows, view]);
+    const options = new Set<string>();
+    stores.forEach((store) => {
+      if (!hideEndedStores || store.status === "거래중") options.add(store.manager || "미지정");
+    });
+    sales.forEach((row) => {
+      const resolved = resolveRecord(row);
+      if (!hideEndedStores || resolved.status !== "거래종료") options.add(resolved.manager || "미지정");
+    });
+    return Array.from(options).filter(Boolean).sort((a, b) => a.localeCompare(b, "ko-KR"));
+  }, [sales, stores, view, hideEndedStores, codeMappings]);
 
   const managerStoreRowsByKey = useMemo(() => {
     const managerMap = new Map<string, Map<string, {
@@ -5214,7 +5227,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
     이익률: pct(r.profitRate),
   }));
 
-  const salesStatusColSpan = compact ? 12 : view === "거래처별" ? 13 : 12;
+  const salesStatusColSpan = compact ? 12 : isStoreListView ? 13 : 12;
 
   return (
     <>
@@ -5347,22 +5360,22 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
         )}
 
         <div className="relative max-h-[62vh] overflow-auto bg-white">
-          <table className={`w-full ${compact ? "min-w-[1280px]" : "min-w-[1080px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[11px] leading-tight`}>
+          <table className={`w-full ${compact ? "min-w-[1280px]" : "min-w-[1120px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[11px] leading-tight`}>
             <thead>
               <tr className="bg-slate-100">
-                <ThCompactSortable w="w-[8%]" sortKey="label" sortConfig={sortConfig} onSort={requestSort}>{view === "거래처별" ? "거래처" : view.replace("별", "")}</ThCompactSortable>
-                {!compact && view === "거래처별" && <ThCompact tone="gray" w="w-[8%]">마지막발주일</ThCompact>}
+                <ThCompactSortable w={isStoreListView ? "w-[16%]" : "w-[9%]"} sortKey="label" sortConfig={sortConfig} onSort={requestSort}>{isStoreListView ? "거래처" : view.replace("별", "")}</ThCompactSortable>
+                {!compact && isStoreListView && <ThCompact tone="gray" w="w-[8%]">마지막발주일</ThCompact>}
                 <ThCompactSortable right tone="mint" sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>전년동월</ThCompactSortable>
-                <ThCompactSortable right tone="mint" sortKey="prevYearTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전년대비 타임곤</ThCompactSortable>
+                <ThCompactSortable right tone="mint" sortKey="prevYearTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전년대비 Time gone</ThCompactSortable>
                 <ThCompactSortable right tone="blue" sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>전월</ThCompactSortable>
-                <ThCompactSortable right tone="blue" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전월대비 타임곤</ThCompactSortable>
+                <ThCompactSortable right tone="blue" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>전월대비 Time gone</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>당월 전체 매출</ThCompactSortable>
-                <ThCompactSortable right tone="gray" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>당월 타임곤 대비</ThCompactSortable>
+                <ThCompactSortable right tone="gray" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>당월 Time gone 대비</ThCompactSortable>
                 <ThCompactSortable right tone="purple" sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
                 <ThCompactSortable right tone="purple" sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
                 <ThCompactSortable right tone="green" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
-                <ThCompactSortable right tone="green" sortKey="profitRate" sortConfig={sortConfig} onSort={requestSort}>이익률</ThCompactSortable>
+                <ThCompactSortable right tone="green" w="w-[5%]" sortKey="profitRate" sortConfig={sortConfig} onSort={requestSort}>이익률</ThCompactSortable>
               </tr>
             </thead>
             <tbody>
@@ -5373,19 +5386,8 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
                 return (
                   <Fragment key={r.key}>
                     <tr>
-                      <TdCompact bold>
-                        {view === "담당자별" ? (
-                          <button
-                            type="button"
-                            onClick={() => downloadManagerLastOrders([r.label])}
-                            className="font-bold text-slate-900 underline-offset-2 hover:underline"
-                            title="해당 담당자의 거래처별 마지막 발주일 다운로드"
-                          >
-                            {r.label}
-                          </button>
-                        ) : r.label}
-                      </TdCompact>
-                      {!compact && view === "거래처별" && (
+                      <TdCompact bold>{r.label}</TdCompact>
+                      {!compact && isStoreListView && (
                         <TdCompact>
                           <div className="text-center font-semibold text-slate-900 whitespace-nowrap">{r.lastOrderDate}</div>
                           <div className={`mt-0.5 text-center text-[10px] font-semibold whitespace-nowrap ${r.daysSinceLastOrder >= 30 ? "text-red-600" : r.daysSinceLastOrder >= 7 ? "text-amber-600" : "text-slate-400"}`}>
@@ -5405,7 +5407,7 @@ function SalesStatus({ stores, sales, targets, ests, month, date, timeGone, code
                       <TdCompact right amount>{won(r.profitAmount)}</TdCompact>
                       <TdCompact right amount>{pct(r.profitRate)}</TdCompact>
                     </tr>
-                    {view === "담당자별" && managerStoreRows.length > 0 && (
+                    {false && view === "담당자별" && managerStoreRows.length > 0 && (
                       <tr>
                         <td colSpan={salesStatusColSpan} className="border border-gray-300 bg-slate-50 px-3 py-2">
                           <div className="overflow-auto rounded-lg border border-gray-200 bg-white">
