@@ -3944,6 +3944,11 @@ function orderRowsForExcel(rows: SalesRecord[]) {
 }
 
 const ADMIN_PASSWORD = "ablab2026";
+const EST_ENTRY_MANAGERS: Manager[] = ["SY", "KT", "NH"];
+
+function isEstEntryPeriodToday() {
+  return Number(today().slice(8, 10)) <= 4;
+}
 
 export default function SalesReportClient() {
   const [active, setActive] = useState("대시보드");
@@ -3976,17 +3981,25 @@ export default function SalesReportClient() {
     if (!dashDate.startsWith(dashMonth)) setDashDate(monthEnd(dashMonth));
   }, [dashMonth, dashDate]);
 
+  const isEstEntryOpen = isEstEntryPeriodToday();
+  const canAccessEstEntry = isAdmin || isEstEntryOpen;
+
   useEffect(() => {
     if (!isAdmin && active === "월초관리") setActive("대시보드");
-  }, [isAdmin, active]);
+    if (!canAccessEstEntry && active === "EST 입력") setActive("대시보드");
+  }, [isAdmin, active, canAccessEstEntry]);
 
   const tg = useMemo(
     () => getTimeGone(dashMonth, dashDate, timeConfigs),
     [dashMonth, dashDate, timeConfigs],
   );
-  const menus = isAdmin
-    ? ["대시보드", "매출현황", "품목분석", "월초관리"]
-    : ["대시보드", "매출현황", "품목분석"];
+  const menus = [
+    ...(canAccessEstEntry ? [{ label: "EST 입력", order: "0" }] : []),
+    { label: "대시보드", order: "1" },
+    { label: "매출현황", order: "2" },
+    { label: "품목분석", order: "3" },
+    ...(isAdmin ? [{ label: "월초관리", order: "4" }] : []),
+  ];
 
   function adminLogin() {
     const password = window.prompt("관리자 비밀번호를 입력하세요.");
@@ -4010,17 +4023,17 @@ export default function SalesReportClient() {
               에이비랩 코리아 Sales Report
             </div>
             <nav className="flex flex-wrap items-center gap-2">
-              {menus.map((m, index) => (
+              {menus.map((m) => (
                 <button
-                  key={m}
-                  onClick={() => setActive(m)}
+                  key={m.label}
+                  onClick={() => setActive(m.label)}
                   className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
-                    active === m
+                    active === m.label
                       ? "bg-orange-500 text-white shadow"
                       : "bg-orange-50 text-orange-900 hover:bg-orange-100"
                   }`}
                 >
-                  {index + 1}. {m}
+                  {m.order}. {m.label}
                 </button>
               ))}
             </nav>
@@ -4096,6 +4109,16 @@ export default function SalesReportClient() {
           )}
         </div>
 
+        {active === "EST 입력" && (
+          <EstQuickEntry
+            stores={stores}
+            ests={ests}
+            setEsts={setEsts}
+            month={dashMonth}
+            canEdit={isAdmin || isEstEntryOpen}
+            isAdmin={isAdmin}
+          />
+        )}
         {active === "대시보드" && (
           <Dashboard
             stores={stores}
@@ -4148,6 +4171,164 @@ export default function SalesReportClient() {
         )}
       </section>
     </main>
+  );
+}
+
+
+function EstQuickEntry({
+  stores,
+  ests,
+  setEsts,
+  month,
+  canEdit,
+  isAdmin,
+}: {
+  stores: Store[];
+  ests: EstRecord[];
+  setEsts: React.Dispatch<React.SetStateAction<EstRecord[]>>;
+  month: string;
+  canEdit: boolean;
+  isAdmin: boolean;
+}) {
+  const [selectedManager, setSelectedManager] = useState<Manager>("SY");
+  const [search, setSearch] = useState("");
+  const normalizedSearch = search.trim().toLowerCase();
+
+  const estMap = useMemo(() => {
+    const map = new Map<string, number>();
+    ests
+      .filter((e) => e.month === month)
+      .forEach((e) => map.set(e.storeCode, Number(e.amount || 0)));
+    return map;
+  }, [ests, month]);
+
+  const rows = useMemo(() => {
+    return stores
+      .filter((store) => store.status !== "거래종료")
+      .filter((store) => EST_ENTRY_MANAGERS.includes(store.manager))
+      .filter((store) => store.manager === selectedManager)
+      .filter((store) => {
+        if (!normalizedSearch) return true;
+        return [store.code, store.name, store.brand, store.channel, store.storeType]
+          .some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, "ko-KR", { numeric: true }));
+  }, [stores, selectedManager, normalizedSearch]);
+
+  const totalEst = rows.reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0);
+
+  const updateEst = (store: Store, amount: number) => {
+    if (!canEdit) return;
+    setEsts((prev) => {
+      const exists = prev.some((row) => row.month === month && row.storeCode === store.code);
+      if (exists) {
+        return prev.map((row) =>
+          row.month === month && row.storeCode === store.code
+            ? { ...row, storeName: store.name, amount }
+            : row,
+        );
+      }
+      return [...prev, { storeCode: store.code, storeName: store.name, month, amount }];
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-orange-200 bg-orange-50/70 p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-base font-extrabold text-orange-950">월초 EST 입력</div>
+            <div className="mt-1 text-xs font-medium text-orange-900/80">
+              입력 가능 기간은 매월 1일~4일이며, 담당자는 SY / KT / NH만 표시됩니다. SW는 제외됩니다.
+            </div>
+          </div>
+          <div className={`rounded-xl px-3 py-2 text-xs font-bold ${canEdit ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+            {canEdit ? (isAdmin ? "관리자 수정 가능" : "월초 입력 가능") : "입력 기간 종료"}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {EST_ENTRY_MANAGERS.map((manager) => (
+              <button
+                key={manager}
+                type="button"
+                onClick={() => setSelectedManager(manager)}
+                className={`rounded-xl px-4 py-2 text-sm font-bold ${
+                  selectedManager === manager
+                    ? "bg-orange-500 text-white shadow"
+                    : "bg-orange-50 text-orange-900 hover:bg-orange-100"
+                }`}
+              >
+                {manager}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="거래처명/코드/브랜드 검색"
+              className="h-9 w-[240px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
+            />
+            <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
+              {selectedManager} 합계 {won(totalEst)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+        <div className="max-h-[68vh] overflow-auto isolate">
+          <table className="w-full min-w-[980px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">담당자</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처코드</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처명</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">브랜드</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">채널</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">{month} EST</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((store) => {
+                const value = estMap.get(store.code) || 0;
+                return (
+                  <tr key={store.code} className="hover:bg-orange-50/60">
+                    <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{store.manager}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.code}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">{store.name}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.brand}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.channel}</td>
+                    <td className="border border-slate-300 px-3 py-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        disabled={!canEdit}
+                        value={value ? won(value) : ""}
+                        onChange={(e) => updateEst(store, num(e.target.value))}
+                        placeholder="0"
+                        className="h-9 w-full min-w-[150px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+              {!rows.length && (
+                <tr>
+                  <td colSpan={6} className="border border-slate-300 p-8 text-center text-slate-500">
+                    표시할 거래처가 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }
 
