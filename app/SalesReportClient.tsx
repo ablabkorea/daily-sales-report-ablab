@@ -4112,6 +4112,7 @@ export default function SalesReportClient() {
         {active === "EST 입력" && (
           <EstQuickEntry
             stores={stores}
+            sales={sales}
             ests={ests}
             setEsts={setEsts}
             month={dashMonth}
@@ -4177,6 +4178,7 @@ export default function SalesReportClient() {
 
 function EstQuickEntry({
   stores,
+  sales,
   ests,
   setEsts,
   month,
@@ -4184,6 +4186,7 @@ function EstQuickEntry({
   isAdmin,
 }: {
   stores: Store[];
+  sales: SalesRecord[];
   ests: EstRecord[];
   setEsts: React.Dispatch<React.SetStateAction<EstRecord[]>>;
   month: string;
@@ -4193,6 +4196,7 @@ function EstQuickEntry({
   const [selectedManager, setSelectedManager] = useState<Manager>("SY");
   const [search, setSearch] = useState("");
   const normalizedSearch = search.trim().toLowerCase();
+  const prevMonth = previousMonth(month);
 
   const estMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -4201,6 +4205,30 @@ function EstQuickEntry({
       .forEach((e) => map.set(e.storeCode, Number(e.amount || 0)));
     return map;
   }, [ests, month]);
+
+  const prevEstMap = useMemo(() => {
+    const map = new Map<string, number>();
+    ests
+      .filter((e) => e.month === prevMonth)
+      .forEach((e) => map.set(e.storeCode, Number(e.amount || 0)));
+    return map;
+  }, [ests, prevMonth]);
+
+  const prevSalesMap = useMemo(() => {
+    const map = new Map<string, number>();
+    sales
+      .filter((row) => row.period === "prevMonth" && row.refMonth === month)
+      .forEach((row) => map.set(row.storeCode, (map.get(row.storeCode) || 0) + Number(row.salesAmount || 0)));
+
+    // 전월 비교용 업로드가 없고 실제 전월 데이터가 current로 저장되어 있는 경우를 대비한 보조 계산입니다.
+    if (map.size === 0) {
+      sales
+        .filter((row) => row.period === "current" && inRange(row.saleDate, monthStart(prevMonth), monthEnd(prevMonth)))
+        .forEach((row) => map.set(row.storeCode, (map.get(row.storeCode) || 0) + Number(row.salesAmount || 0)));
+    }
+
+    return map;
+  }, [sales, month, prevMonth]);
 
   const rows = useMemo(() => {
     return stores
@@ -4270,7 +4298,7 @@ function EstQuickEntry({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="거래처명/코드/브랜드 검색"
+              placeholder="거래처명/코드/채널 검색"
               className="h-9 w-[240px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
             />
             <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
@@ -4282,27 +4310,45 @@ function EstQuickEntry({
 
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="max-h-[68vh] overflow-auto isolate">
-          <table className="w-full min-w-[980px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+          <table className="w-full min-w-[1250px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">담당자</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처코드</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처명</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">브랜드</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">채널</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">{month} EST</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-800">전월 매출</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-purple-50 px-3 py-2 font-bold text-purple-800">전월 EST</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-50 px-3 py-2 font-bold text-yellow-900">전월 EST 달성률</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">{month} EST 입력</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((store) => {
                 const value = estMap.get(store.code) || 0;
+                const prevSales = prevSalesMap.get(store.code) || 0;
+                const prevEst = prevEstMap.get(store.code) || 0;
+                const prevEstRate = prevEst ? (prevSales / prevEst) * 100 : 0;
+                const rateTone = !prevEst
+                  ? "bg-slate-100 text-slate-500 ring-slate-200"
+                  : prevEstRate >= 100
+                    ? "bg-emerald-100 text-emerald-800 ring-emerald-300"
+                    : prevEstRate >= 90
+                      ? "bg-yellow-100 text-yellow-900 ring-yellow-300"
+                      : "bg-red-100 text-red-700 ring-red-300";
                 return (
                   <tr key={store.code} className="hover:bg-orange-50/60">
                     <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{store.manager}</td>
                     <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.code}</td>
                     <td className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">{store.name}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.brand}</td>
                     <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.channel}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevSales)}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevEst)}</td>
+                    <td className="border border-slate-300 px-3 py-2">
+                      <span className={`inline-flex min-w-[86px] justify-center rounded-full px-3 py-1.5 text-xs font-extrabold ring-2 shadow-sm animate-pulse ${rateTone}`}>
+                        ✨ {prevEst ? pct(prevEstRate) : "-"}
+                      </span>
+                    </td>
                     <td className="border border-slate-300 px-3 py-2">
                       <input
                         type="text"
@@ -4319,7 +4365,7 @@ function EstQuickEntry({
               })}
               {!rows.length && (
                 <tr>
-                  <td colSpan={6} className="border border-slate-300 p-8 text-center text-slate-500">
+                  <td colSpan={8} className="border border-slate-300 p-8 text-center text-slate-500">
                     표시할 거래처가 없습니다.
                   </td>
                 </tr>
