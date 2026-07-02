@@ -4286,6 +4286,15 @@ function DashboardTopKpis({
   const currentNonStoreSales = current
     .filter((s) => storeTypeOf(s) !== "매장")
     .reduce((total, row) => total + Number(row.salesAmount || 0), 0);
+  const nextMonth = addMonths(month, 1);
+  const nextMonthNonStoreOrderAmount = sales
+    .filter(
+      (s) =>
+        s.period === "current" &&
+        inRange(s.saleDate, monthStart(nextMonth), monthEnd(nextMonth)) &&
+        storeTypeOf(s) !== "매장",
+    )
+    .reduce((total, row) => total + Number(row.salesAmount || 0), 0);
   const currentSales = sum(current, "salesAmount");
   const fullMonthSales = sum(currentFullMonth, "salesAmount");
   const profitAmount = sum(current, "profitAmount");
@@ -4363,6 +4372,12 @@ function DashboardTopKpis({
             title: "이익률",
             value: profitRate,
             format: "percent",
+            color: "text-slate-900",
+          },
+          {
+            title: "익월 비매장 발주 접수액",
+            value: nextMonthNonStoreOrderAmount,
+            format: "won",
             color: "text-slate-900",
           },
         ]}
