@@ -4266,9 +4266,6 @@ function EstQuickEntry({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-base font-extrabold text-orange-950">월초 EST 입력</div>
-            <div className="mt-1 text-xs font-medium text-orange-900/80">
-              입력 가능 기간은 매월 1일~4일이며, 담당자는 SY / KT / NH만 표시됩니다. SW는 제외됩니다.
-            </div>
           </div>
           <div className={`rounded-xl px-3 py-2 text-xs font-bold ${canEdit ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
             {canEdit ? (isAdmin ? "관리자 수정 가능" : "월초 입력 가능") : "입력 기간 종료"}
@@ -4329,13 +4326,16 @@ function EstQuickEntry({
                 const prevSales = prevSalesMap.get(store.code) || 0;
                 const prevEst = prevEstMap.get(store.code) || 0;
                 const prevEstRate = prevEst ? (prevSales / prevEst) * 100 : 0;
+                const isCriticalRate = Boolean(prevEst && prevEstRate < 50);
                 const rateTone = !prevEst
                   ? "bg-slate-100 text-slate-500 ring-slate-200"
-                  : prevEstRate >= 100
-                    ? "bg-emerald-100 text-emerald-800 ring-emerald-300"
-                    : prevEstRate >= 90
-                      ? "bg-yellow-100 text-yellow-900 ring-yellow-300"
-                      : "bg-red-100 text-red-700 ring-red-300";
+                  : isCriticalRate
+                    ? "bg-red-600 text-white ring-red-300 shadow-red-300 animate-pulse"
+                    : prevEstRate >= 100
+                      ? "bg-emerald-100 text-emerald-800 ring-emerald-200"
+                      : prevEstRate >= 90
+                        ? "bg-yellow-100 text-yellow-900 ring-yellow-200"
+                        : "bg-slate-100 text-slate-700 ring-slate-200";
                 return (
                   <tr key={store.code} className="hover:bg-orange-50/60">
                     <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{store.manager}</td>
@@ -4345,8 +4345,8 @@ function EstQuickEntry({
                     <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevSales)}</td>
                     <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevEst)}</td>
                     <td className="border border-slate-300 px-3 py-2">
-                      <span className={`inline-flex min-w-[86px] justify-center rounded-full px-3 py-1.5 text-xs font-extrabold ring-2 shadow-sm animate-pulse ${rateTone}`}>
-                        ✨ {prevEst ? pct(prevEstRate) : "-"}
+                      <span className={`inline-flex min-w-[86px] justify-center rounded-full px-3 py-1.5 text-xs font-extrabold ring-2 shadow-sm ${rateTone}`}>
+                        {isCriticalRate ? "🚨 " : ""}{prevEst ? pct(prevEstRate) : "-"}
                       </span>
                     </td>
                     <td className="border border-slate-300 px-3 py-2">
