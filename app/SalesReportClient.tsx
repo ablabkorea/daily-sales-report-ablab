@@ -4345,7 +4345,10 @@ function EstQuickEntry({
                     <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevSales)}</td>
                     <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevEst)}</td>
                     <td className="border border-slate-300 px-3 py-2">
-                      <span className={`inline-flex min-w-[86px] justify-center rounded-full px-3 py-1.5 text-xs font-extrabold ring-2 shadow-sm ${rateTone}`}>
+                      <span
+                        className={`inline-flex min-w-[86px] justify-center rounded-full px-3 py-1.5 text-xs font-extrabold ring-2 shadow-sm ${rateTone}`}
+                        style={isCriticalRate ? { animationDuration: "0.65s" } : undefined}
+                      >
                         {isCriticalRate ? "🚨 " : ""}{prevEst ? pct(prevEstRate) : "-"}
                       </span>
                     </td>
