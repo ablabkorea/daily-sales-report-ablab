@@ -4394,7 +4394,7 @@ function EstQuickEntry({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-start justify-end gap-2">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -4405,48 +4405,42 @@ function EstQuickEntry({
               선택 담당자 EST {won(totalEst)}
             </div>
             <div className="rounded-lg bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-900">
-              매장 EST {won(storeEstTotal)}
+              <div>매장 EST {won(storeEstTotal)}</div>
+              {selectedManager === "SY" && (
+                <label className="mt-2 block text-[11px] font-bold text-emerald-900">
+                  매장 Target
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    disabled={!canEditTarget}
+                    value={targetByType.store ? won(targetByType.store) : ""}
+                    onChange={(e) => updateTargetByType("매장", num(e.target.value))}
+                    placeholder={canEditTarget ? "0" : "입력 기간 종료"}
+                    className="mt-1 h-8 w-[150px] rounded-lg border border-emerald-200 bg-white px-2 text-right text-xs font-extrabold text-slate-900 outline-none focus:border-emerald-500 disabled:bg-slate-100 disabled:text-slate-500"
+                  />
+                </label>
+              )}
             </div>
             <div className="rounded-lg bg-blue-100 px-3 py-2 text-xs font-bold text-blue-900">
-              비매장 EST {won(nonStoreEstTotal)}
+              <div>비매장 EST {won(nonStoreEstTotal)}</div>
+              {selectedManager === "SY" && (
+                <label className="mt-2 block text-[11px] font-bold text-blue-900">
+                  비매장 Target
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    disabled={!canEditTarget}
+                    value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
+                    onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
+                    placeholder={canEditTarget ? "0" : "입력 기간 종료"}
+                    className="mt-1 h-8 w-[150px] rounded-lg border border-blue-200 bg-white px-2 text-right text-xs font-extrabold text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                  />
+                </label>
+              )}
             </div>
           </div>
         </div>
       </div>
-
-      {selectedManager === "SY" && (
-        <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm font-extrabold text-blue-950">Target 입력</div>
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="text-xs font-bold text-blue-900">
-                매장 Target
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  disabled={!canEditTarget}
-                  value={targetByType.store ? won(targetByType.store) : ""}
-                  onChange={(e) => updateTargetByType("매장", num(e.target.value))}
-                  placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                  className="mt-1 h-9 w-[160px] rounded-lg border border-blue-200 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
-                />
-              </label>
-              <label className="text-xs font-bold text-blue-900">
-                비매장 Target
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  disabled={!canEditTarget}
-                  value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
-                  onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
-                  placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                  className="mt-1 h-9 w-[160px] rounded-lg border border-blue-200 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
-                />
-              </label>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="max-h-[68vh] overflow-auto isolate">
