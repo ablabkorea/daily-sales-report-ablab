@@ -4363,17 +4363,6 @@ function EstQuickEntry({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-orange-200 bg-orange-50/70 p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-base font-extrabold text-orange-950">월초 EST 입력</div>
-          </div>
-          <div className={`rounded-xl px-3 py-2 text-xs font-bold ${canEdit ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
-            {canEdit ? (isAdmin ? "관리자 수정 가능" : "월초 입력 가능") : "입력 기간 종료"}
-          </div>
-        </div>
-      </div>
-
       <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-3">
@@ -4393,18 +4382,14 @@ function EstQuickEntry({
                 </button>
               ))}
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {managerEstTotals.map((item) => (
-                <div
-                  key={item.manager}
-                  className={`rounded-lg px-3 py-2 text-xs font-bold ${
-                    selectedManager === item.manager
-                      ? "bg-orange-100 text-orange-900"
-                      : "bg-slate-100 text-slate-700"
-                  }`}
-                >
-                  {item.manager} EST {won(item.amount)}
-                </div>
+            <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-800">
+              담당자별 EST - {managerEstTotals.map((item, index) => (
+                <Fragment key={item.manager}>
+                  {index > 0 ? " / " : ""}
+                  <span className={selectedManager === item.manager ? "text-orange-700" : "text-slate-700"}>
+                    {item.manager} : {won(item.amount)}
+                  </span>
+                </Fragment>
               ))}
             </div>
           </div>
@@ -4429,42 +4414,39 @@ function EstQuickEntry({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+      {selectedManager === "SY" && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm font-extrabold text-blue-950">Target 입력</div>
-            <div className="mt-1 text-xs font-medium text-blue-700">
-              Target은 매장 / 비매장 2개 기준으로만 입력됩니다.
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="text-xs font-bold text-blue-900">
+                매장 Target
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  disabled={!canEditTarget}
+                  value={targetByType.store ? won(targetByType.store) : ""}
+                  onChange={(e) => updateTargetByType("매장", num(e.target.value))}
+                  placeholder={canEditTarget ? "0" : "입력 기간 종료"}
+                  className="mt-1 h-9 w-[160px] rounded-lg border border-blue-200 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                />
+              </label>
+              <label className="text-xs font-bold text-blue-900">
+                비매장 Target
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  disabled={!canEditTarget}
+                  value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
+                  onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
+                  placeholder={canEditTarget ? "0" : "입력 기간 종료"}
+                  className="mt-1 h-9 w-[160px] rounded-lg border border-blue-200 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                />
+              </label>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="text-xs font-bold text-blue-900">
-              매장 Target
-              <input
-                type="text"
-                inputMode="numeric"
-                disabled={!canEditTarget}
-                value={targetByType.store ? won(targetByType.store) : ""}
-                onChange={(e) => updateTargetByType("매장", num(e.target.value))}
-                placeholder={canEditTarget ? "0" : "SY만 입력"}
-                className="mt-1 h-9 w-[160px] rounded-lg border border-blue-200 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
-              />
-            </label>
-            <label className="text-xs font-bold text-blue-900">
-              비매장 Target
-              <input
-                type="text"
-                inputMode="numeric"
-                disabled={!canEditTarget}
-                value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
-                onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
-                placeholder={canEditTarget ? "0" : "SY만 입력"}
-                className="mt-1 h-9 w-[160px] rounded-lg border border-blue-200 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
-              />
-            </label>
-          </div>
         </div>
-      </div>
+      )}
 
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="max-h-[68vh] overflow-auto isolate">
