@@ -3997,8 +3997,9 @@ export default function SalesReportClient() {
     ...(canAccessEstEntry ? [{ label: "EST 입력", order: "0" }] : []),
     { label: "대시보드", order: "1" },
     { label: "매출현황", order: "2" },
-    { label: "품목분석", order: "3" },
-    ...(isAdmin ? [{ label: "월초관리", order: "4" }] : []),
+    { label: "거래처별 분석", order: "3" },
+    { label: "품목분석", order: "4" },
+    ...(isAdmin ? [{ label: "월초관리", order: "5" }] : []),
   ];
 
   function adminLogin() {
@@ -4146,12 +4147,22 @@ export default function SalesReportClient() {
             codeMappings={codeMappings}
           />
         )}
+        {active === "거래처별 분석" && (
+          <ItemAnalysis
+            stores={stores}
+            sales={sales}
+            month={dashMonth}
+            date={dashDate}
+            pageTitle="거래처별 분석"
+          />
+        )}
         {active === "품목분석" && (
           <ItemAnalysis
             stores={stores}
             sales={sales}
             month={dashMonth}
             date={dashDate}
+            pageTitle="품목분석"
           />
         )}
         {isAdmin && active === "월초관리" && (
@@ -4402,7 +4413,7 @@ function EstQuickEntry({
               className="h-9 w-[240px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
             />
             <div className="rounded-lg bg-orange-100 px-3 py-2 text-xs font-bold text-orange-900">
-              선택 담당자 EST {won(totalEst)}
+              {selectedManager} EST {won(totalEst)}
             </div>
             <div className="rounded-lg bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-900">
               <div>매장 EST {won(storeEstTotal)}</div>
@@ -4476,7 +4487,7 @@ function EstQuickEntry({
                         : "bg-slate-100 text-slate-700 ring-slate-200";
                 return (
                   <tr key={store.code} className="hover:bg-orange-50/60">
-                    <td className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">{store.name}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-center font-semibold text-slate-900">{store.name}</td>
                     <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{store.manager}</td>
                     <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.storeType === "매장" ? "매장" : "비매장"}</td>
                     <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevYearSales)}</td>
@@ -5261,11 +5272,13 @@ function ItemAnalysis({
   sales,
   month,
   date,
+  pageTitle = "품목분석",
 }: {
   stores: Store[];
   sales: SalesRecord[];
   month: string;
   date: string;
+  pageTitle?: string;
 }) {
   const [mode, setMode] = useState<"브랜드별" | "매장별">("브랜드별");
   const [searchDraft, setSearchDraft] = useState("");
@@ -5614,7 +5627,7 @@ function ItemAnalysis({
       <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-base font-bold text-slate-900">품목분석</div>
+            <div className="text-base font-bold text-slate-900">{pageTitle}</div>
             <div className="mt-1 text-xs text-slate-500">
               현재 {currentStart} ~ {currentEnd} / 전월 {prevStart} ~ {prevEnd}{" "}
               / 전년 {prevYearStart} ~ {prevYearEnd}
