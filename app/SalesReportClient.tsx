@@ -4157,12 +4157,11 @@ export default function SalesReportClient() {
           />
         )}
         {active === "품목분석" && (
-          <ItemAnalysis
+          <ItemShipmentAnalysis
             stores={stores}
             sales={sales}
             month={dashMonth}
             date={dashDate}
-            pageTitle="품목분석"
           />
         )}
         {isAdmin && active === "월초관리" && (
@@ -5895,7 +5894,7 @@ function ItemAnalysis({
             </div>
           </div>
           <div className="max-h-[65vh] overflow-auto isolate">
-            <table className="w-full min-w-[1500px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
+            <table className="w-full min-w-[1280px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
               <thead>
                 <tr>
                   {(
@@ -5904,18 +5903,14 @@ function ItemAnalysis({
                       ["itemName", "품목명", false],
                       ["currentQty", "현재수량", true],
                       ["prevMonthQty", "전월수량", true],
-                      ["prevMonthDiff", "수량차이", true],
-                      ["prevMonthQtyRate", "수량증감%", true],
                       ["prevYearQty", "전년수량", true],
-                      ["prevYearDiff", "수량차이", true],
-                      ["prevYearQtyRate", "수량증감%", true],
                       ["currentSales", "현재매출", true],
                       ["prevMonthSales", "전월매출", true],
-                      ["prevMonthSalesDiff", "매출차이", true],
-                      ["prevMonthSalesRate", "매출증감%", true],
-                      ["prevYearSales", "전년매출", true],
-                      ["prevYearSalesDiff", "매출차이", true],
-                      ["prevYearSalesRate", "매출증감%", true],
+                      ["prevMonthSalesDiff", "전월 대비 매출차이", true],
+                      ["prevMonthSalesRate", "전월 대비 매출증감%", true],
+                      ["prevYearSales", "전년동월매출", true],
+                      ["prevYearSalesDiff", "전년동월대비 매출차이", true],
+                      ["prevYearSalesRate", "전년동월대비 매출증감%", true],
                     ] as [ItemRowSortKey, string, boolean][]
                   ).map(([key, label, right]) => (
                     <ItemAnalysisSortableTh
@@ -5949,37 +5944,11 @@ function ItemAnalysis({
                     <td className="border border-slate-300 p-2 text-right">
                       {won(r.prevMonth.qty)}
                     </td>
-                    <td
-                      className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.qty, r.prevMonth.qty) >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                    >
-                      {itemSignedNumber(
-                        itemMetricDiff(r.current.qty, r.prevMonth.qty),
-                      )}
-                    </td>
-                    <td
-                      className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.qty, r.prevMonth.qty) >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                    >
-                      {itemSignedPct(
-                        itemMetricRate(r.current.qty, r.prevMonth.qty),
-                      )}
-                    </td>
+
                     <td className="border border-slate-300 p-2 text-right">
                       {won(r.prevYear.qty)}
                     </td>
-                    <td
-                      className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.qty, r.prevYear.qty) >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                    >
-                      {itemSignedNumber(
-                        itemMetricDiff(r.current.qty, r.prevYear.qty),
-                      )}
-                    </td>
-                    <td
-                      className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.qty, r.prevYear.qty) >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                    >
-                      {itemSignedPct(
-                        itemMetricRate(r.current.qty, r.prevYear.qty),
-                      )}
-                    </td>
+
                     <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">
                       {won(r.current.sales)}
                     </td>
@@ -6032,7 +6001,7 @@ function ItemAnalysis({
                 {!sortedItemRows.length && (
                   <tr>
                     <td
-                      colSpan={17}
+                      colSpan={13}
                       className="border border-slate-300 p-8 text-center text-slate-500"
                     >
                       표시할 품목이 없습니다.
@@ -6200,6 +6169,362 @@ function ItemAnalysis({
             </div>
           </div>
         )}
+    </div>
+  );
+}
+
+function ItemShipmentAnalysis({
+  stores,
+  sales,
+  month,
+  date,
+}: {
+  stores: Store[];
+  sales: SalesRecord[];
+  month: string;
+  date: string;
+}) {
+  const [searchDraft, setSearchDraft] = useState("");
+  const [search, setSearch] = useState("");
+  const [selectedItemCode, setSelectedItemCode] = useState("");
+  const [analysisStart, setAnalysisStart] = useState(monthStart(month));
+  const [analysisEnd, setAnalysisEnd] = useState(
+    date.startsWith(month) ? date : monthEnd(month),
+  );
+
+  useEffect(() => {
+    setAnalysisStart(monthStart(month));
+    setAnalysisEnd(date.startsWith(month) ? date : monthEnd(month));
+    setSelectedItemCode("");
+  }, [month, date]);
+
+  const currentStart =
+    analysisStart <= analysisEnd ? analysisStart : analysisEnd;
+  const currentEnd = analysisStart <= analysisEnd ? analysisEnd : analysisStart;
+  const prevStart = sameDayPrevMonth(currentStart);
+  const prevEnd = sameDayPrevMonth(currentEnd);
+  const prevYearStart = sameDayPrevYear(currentStart);
+  const prevYearEnd = sameDayPrevYear(currentEnd);
+  const normalizedSearch = search.trim().toLowerCase();
+  const storeByCode = useMemo(
+    () => new Map(stores.map((s) => [s.code, s])),
+    [stores],
+  );
+
+  const itemRows = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        itemCode: string;
+        itemName: string;
+        current: ItemMetric;
+        prevMonth: ItemMetric;
+        prevYear: ItemMetric;
+        storeCodes: Set<string>;
+      }
+    >();
+    const ensure = (row: SalesRecord) => {
+      const key = row.itemCode || row.itemName || "미지정";
+      if (!map.has(key)) {
+        map.set(key, {
+          itemCode: row.itemCode || "-",
+          itemName: row.itemName || "미지정",
+          current: emptyItemMetric(),
+          prevMonth: emptyItemMetric(),
+          prevYear: emptyItemMetric(),
+          storeCodes: new Set<string>(),
+        });
+      }
+      return map.get(key)!;
+    };
+
+    sales.forEach((row) => {
+      const item = ensure(row);
+      const store = storeByCode.get(row.storeCode);
+      const haystack = [
+        row.itemCode,
+        row.itemName,
+        row.storeCode,
+        row.storeName,
+        store?.name,
+        store?.manager,
+        store?.channel,
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (normalizedSearch && !haystack.includes(normalizedSearch)) return;
+      if (inRange(row.saleDate, currentStart, currentEnd)) {
+        addItemMetric(item.current, row);
+        item.storeCodes.add(row.storeCode);
+      }
+      if (inRange(row.saleDate, prevStart, prevEnd)) {
+        addItemMetric(item.prevMonth, row);
+        item.storeCodes.add(row.storeCode);
+      }
+      if (inRange(row.saleDate, prevYearStart, prevYearEnd)) {
+        addItemMetric(item.prevYear, row);
+        item.storeCodes.add(row.storeCode);
+      }
+    });
+
+    return Array.from(map.values())
+      .filter(
+        (r) =>
+          r.current.qty ||
+          r.prevMonth.qty ||
+          r.prevYear.qty ||
+          r.current.sales ||
+          r.prevMonth.sales ||
+          r.prevYear.sales,
+      )
+      .sort((a, b) => b.current.sales - a.current.sales);
+  }, [sales, storeByCode, normalizedSearch, currentStart, currentEnd, prevStart, prevEnd, prevYearStart, prevYearEnd]);
+
+  const selectedItem = itemRows.find((r) => r.itemCode === selectedItemCode);
+
+  const storeRows = useMemo(() => {
+    if (!selectedItemCode) return [];
+    const map = new Map<
+      string,
+      {
+        storeCode: string;
+        storeName: string;
+        manager: string;
+        channel: string;
+        current: ItemMetric;
+        prevMonth: ItemMetric;
+        prevYear: ItemMetric;
+      }
+    >();
+    const ensure = (row: SalesRecord) => {
+      const store = storeByCode.get(row.storeCode);
+      const key = row.storeCode || row.storeName || "미지정";
+      if (!map.has(key)) {
+        map.set(key, {
+          storeCode: row.storeCode || "-",
+          storeName: store?.name || row.storeName || "미지정",
+          manager: store?.manager || row.manager || "미지정",
+          channel: store?.channel || row.channel || "미지정",
+          current: emptyItemMetric(),
+          prevMonth: emptyItemMetric(),
+          prevYear: emptyItemMetric(),
+        });
+      }
+      return map.get(key)!;
+    };
+
+    sales
+      .filter((row) => (row.itemCode || row.itemName || "미지정") === selectedItemCode)
+      .forEach((row) => {
+        const storeRow = ensure(row);
+        if (inRange(row.saleDate, currentStart, currentEnd))
+          addItemMetric(storeRow.current, row);
+        if (inRange(row.saleDate, prevStart, prevEnd))
+          addItemMetric(storeRow.prevMonth, row);
+        if (inRange(row.saleDate, prevYearStart, prevYearEnd))
+          addItemMetric(storeRow.prevYear, row);
+      });
+
+    return Array.from(map.values())
+      .filter(
+        (r) =>
+          r.current.qty ||
+          r.prevMonth.qty ||
+          r.prevYear.qty ||
+          r.current.sales ||
+          r.prevMonth.sales ||
+          r.prevYear.sales,
+      )
+      .sort((a, b) => b.current.sales - a.current.sales);
+  }, [sales, selectedItemCode, storeByCode, currentStart, currentEnd, prevStart, prevEnd, prevYearStart, prevYearEnd]);
+
+  function applySearch() {
+    setSearch(searchDraft.trim());
+    setSelectedItemCode("");
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-base font-bold text-slate-900">품목분석</div>
+            <div className="mt-1 text-xs text-slate-500">
+              품목별 출고 현황 / 현재 {currentStart} ~ {currentEnd} / 전월 {prevStart} ~ {prevEnd} / 전년 {prevYearStart} ~ {prevYearEnd}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <input
+              value={searchDraft}
+              onChange={(e) => {
+                const next = e.target.value;
+                setSearchDraft(next);
+                if (!next.trim()) setSearch("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applySearch();
+              }}
+              placeholder="품목/거래처/담당자 검색 후 Enter"
+              className="h-8 w-[260px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
+            />
+            <button
+              type="button"
+              onClick={applySearch}
+              className="h-8 rounded-lg bg-slate-800 px-3 text-xs font-semibold text-white hover:bg-slate-700"
+            >
+              검색
+            </button>
+            <label className="flex items-center gap-1 text-slate-600">
+              시작일
+              <input
+                type="date"
+                value={analysisStart}
+                onChange={(e) => setAnalysisStart(e.target.value)}
+                className="h-8 rounded-lg border border-slate-300 px-2 text-xs outline-none focus:border-blue-500"
+              />
+            </label>
+            <label className="flex items-center gap-1 text-slate-600">
+              종료일
+              <input
+                type="date"
+                value={analysisEnd}
+                onChange={(e) => setAnalysisEnd(e.target.value)}
+                className="h-8 rounded-lg border border-slate-300 px-2 text-xs outline-none focus:border-blue-500"
+              />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {!selectedItemCode && (
+        <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+          <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">
+            품목별 출고 요약
+          </div>
+          <div className="max-h-[68vh] overflow-auto isolate">
+            <table className="w-full min-w-[1150px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
+              <thead>
+                <tr>
+                  <PopupTh>품목코드</PopupTh>
+                  <PopupTh>품목명</PopupTh>
+                  <PopupTh right>현재수량</PopupTh>
+                  <PopupTh right>현재매출</PopupTh>
+                  <PopupTh right>전월매출</PopupTh>
+                  <PopupTh right>전월 대비 매출차이</PopupTh>
+                  <PopupTh right>전년동월매출</PopupTh>
+                  <PopupTh right>전년동월대비 매출차이</PopupTh>
+                  <PopupTh right>거래처수</PopupTh>
+                  <PopupTh>상세</PopupTh>
+                </tr>
+              </thead>
+              <tbody>
+                {itemRows.map((r) => (
+                  <tr key={`${r.itemCode}-${r.itemName}`} className="hover:bg-blue-50">
+                    <td className="border border-slate-300 p-2">{r.itemCode}</td>
+                    <td className="border border-slate-300 p-2 font-semibold">{r.itemName}</td>
+                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">{won(r.current.qty)}</td>
+                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">{won(r.current.sales)}</td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.sales)}</td>
+                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.sales, r.prevMonth.sales) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                      {itemSignedNumber(itemMetricDiff(r.current.sales, r.prevMonth.sales), true)}
+                    </td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevYear.sales)}</td>
+                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.sales, r.prevYear.sales) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                      {itemSignedNumber(itemMetricDiff(r.current.sales, r.prevYear.sales), true)}
+                    </td>
+                    <td className="border border-slate-300 p-2 text-right">{r.storeCodes.size}</td>
+                    <td className="border border-slate-300 p-2">
+                      <button
+                        onClick={() => setSelectedItemCode(r.itemCode)}
+                        className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white"
+                      >
+                        거래처 보기
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!itemRows.length && (
+                  <tr>
+                    <td colSpan={10} className="border border-slate-300 p-8 text-center text-slate-500">
+                      표시할 품목이 없습니다.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {selectedItemCode && selectedItem && (
+        <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-300 px-4 py-3">
+            <div>
+              <div className="text-sm font-bold text-slate-800">
+                {selectedItem.itemName} 거래처별 출고 현황
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                품목코드 {selectedItem.itemCode} / 선택 기간 기준 거래처별 출고 수량과 매출입니다.
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedItemCode("")}
+              className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+            >
+              ← 품목 목록
+            </button>
+          </div>
+          <div className="max-h-[68vh] overflow-auto isolate">
+            <table className="w-full min-w-[1300px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
+              <thead>
+                <tr>
+                  <PopupTh>거래처코드</PopupTh>
+                  <PopupTh>거래처명</PopupTh>
+                  <PopupTh>담당자</PopupTh>
+                  <PopupTh>채널</PopupTh>
+                  <PopupTh right>현재수량</PopupTh>
+                  <PopupTh right>현재매출</PopupTh>
+                  <PopupTh right>전월수량</PopupTh>
+                  <PopupTh right>전월매출</PopupTh>
+                  <PopupTh right>전월 대비 매출차이</PopupTh>
+                  <PopupTh right>전년수량</PopupTh>
+                  <PopupTh right>전년동월매출</PopupTh>
+                  <PopupTh right>전년동월대비 매출차이</PopupTh>
+                </tr>
+              </thead>
+              <tbody>
+                {storeRows.map((r) => (
+                  <tr key={r.storeCode} className="hover:bg-blue-50">
+                    <td className="border border-slate-300 p-2">{r.storeCode}</td>
+                    <td className="border border-slate-300 p-2 font-semibold">{r.storeName}</td>
+                    <td className="border border-slate-300 p-2">{r.manager}</td>
+                    <td className="border border-slate-300 p-2">{r.channel}</td>
+                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">{won(r.current.qty)}</td>
+                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">{won(r.current.sales)}</td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.qty)}</td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.sales)}</td>
+                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.sales, r.prevMonth.sales) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                      {itemSignedNumber(itemMetricDiff(r.current.sales, r.prevMonth.sales), true)}
+                    </td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevYear.qty)}</td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevYear.sales)}</td>
+                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.sales, r.prevYear.sales) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                      {itemSignedNumber(itemMetricDiff(r.current.sales, r.prevYear.sales), true)}
+                    </td>
+                  </tr>
+                ))}
+                {!storeRows.length && (
+                  <tr>
+                    <td colSpan={12} className="border border-slate-300 p-8 text-center text-slate-500">
+                      표시할 거래처가 없습니다.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
