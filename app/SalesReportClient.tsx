@@ -4999,7 +4999,7 @@ function KpiGroup({
   }[];
 }) {
   return (
-    <div className="h-full rounded-xl border border-gray-300/70 bg-slate-50/75 p-3 shadow-sm backdrop-blur">
+    <div className="h-full rounded-xl border border-gray-300/70 bg-slate-50/75 p-2.5 shadow-sm backdrop-blur">
       <div className="divide-y divide-slate-200/70">
         {items.map((item) => {
           const value =
@@ -5015,13 +5015,13 @@ function KpiGroup({
           return (
             <div
               key={item.title}
-              className="flex min-h-[34px] flex-wrap items-center justify-between gap-x-2 gap-y-0.5 py-1 first:pt-0 last:pb-0"
+              className="flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 py-0.5 first:pt-0 last:pb-0"
             >
-              <p className="shrink-0 break-keep text-[12px] font-semibold text-slate-500">
+              <p className="shrink-0 break-keep text-[11px] font-semibold text-slate-500">
                 {item.title}
               </p>
               <p
-                className={`min-w-0 max-w-full flex-1 whitespace-normal break-all text-right text-[15px] font-bold leading-tight tracking-tight md:text-[17px] xl:text-[16px] 2xl:text-[17px] ${item.color || "text-slate-900"}`}
+                className={`min-w-0 max-w-full flex-1 whitespace-normal break-all text-right text-[14px] font-bold leading-tight tracking-tight md:text-[15px] xl:text-[15px] 2xl:text-[16px] ${item.color || "text-slate-900"}`}
               >
                 {value}
               </p>
@@ -5116,12 +5116,18 @@ function DashboardTopKpis({
     metricsByStoreType(stores, targets, ests, month);
   const targetTotal = storeTarget + nonStoreTarget;
   const estTotal = storeEst + nonStoreEst;
+
   const scheduledCostItems = itemCosts.filter(
     (item) => item.effectiveDate && Number(item.nextCost || 0) > 0,
   );
-  const dueTodayCount = scheduledCostItems.filter(
-    (item) => daysBetween(today(), item.effectiveDate || today()) <= 0,
-  ).length;
+  const overdueCount = scheduledCostItems.filter((item) => {
+    const dday = daysBetween(today(), item.effectiveDate || today());
+    return dday < 0;
+  }).length;
+  const dueTodayCount = scheduledCostItems.filter((item) => {
+    const dday = daysBetween(today(), item.effectiveDate || today());
+    return dday === 0;
+  }).length;
   const dueSoonCount = scheduledCostItems.filter((item) => {
     const dday = daysBetween(today(), item.effectiveDate || today());
     return dday > 0 && dday <= 7;
@@ -5130,17 +5136,19 @@ function DashboardTopKpis({
     const dday = daysBetween(today(), item.effectiveDate || today());
     return dday > 7 && dday <= 30;
   }).length;
-  const costAlertText = scheduledCostItems.length
-    ? `오늘/지남 ${dueTodayCount}건 · 임박 ${dueSoonCount}건 · 예정 ${upcomingCount}건`
-    : "변동 예정 없음";
-  const costAlertColor = dueTodayCount || dueSoonCount
-    ? "text-red-600"
-    : upcomingCount
-      ? "text-amber-600"
-      : "text-slate-500";
+  const recentHistoryCount = itemCosts.reduce((total, item) => {
+    return (
+      total +
+      (item.history || []).filter((history) => {
+        const diff = daysBetween(history.changedAt, today());
+        return diff >= 0 && diff <= 30;
+      }).length
+    );
+  }, 0);
+  const activeCostAlertCount = overdueCount + dueTodayCount + dueSoonCount + upcomingCount;
 
   return (
-    <div className="grid w-full grid-cols-1 gap-3 lg:grid-cols-4">
+    <div className="grid w-full grid-cols-1 gap-2 lg:grid-cols-5">
       <KpiGroup
         items={[
           { title: "매장 Target", value: storeTarget, format: "won" },
@@ -5215,10 +5223,33 @@ function DashboardTopKpis({
             format: "won",
             color: "text-slate-900",
           },
+        ]}
+      />
+      <KpiGroup
+        items={[
           {
-            title: "매입가 변동 알림",
-            value: costAlertText,
-            color: costAlertColor,
+            title: "매입가 알림",
+            value: activeCostAlertCount ? `${activeCostAlertCount}건` : "정상",
+            color: overdueCount || dueTodayCount || dueSoonCount
+              ? "text-red-600"
+              : upcomingCount
+                ? "text-amber-600"
+                : "text-emerald-700",
+          },
+          {
+            title: "오늘 적용",
+            value: `${dueTodayCount}건${overdueCount ? ` / 지남 ${overdueCount}건` : ""}`,
+            color: overdueCount || dueTodayCount ? "text-red-600" : "text-slate-500",
+          },
+          {
+            title: "7일 이내",
+            value: `${dueSoonCount}건`,
+            color: dueSoonCount ? "text-orange-600" : "text-slate-500",
+          },
+          {
+            title: "30일 이내",
+            value: `${upcomingCount}건 · 최근변경 ${recentHistoryCount}건`,
+            color: upcomingCount || recentHistoryCount ? "text-amber-600" : "text-slate-500",
           },
         ]}
       />
