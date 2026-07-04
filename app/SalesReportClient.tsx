@@ -4213,12 +4213,18 @@ function EstQuickEntry({
     return map;
   }, [ests, month]);
 
-  const targetMap = useMemo(() => {
-    const map = new Map<string, number>();
+  const targetByType = useMemo(() => {
+    const totals = { store: 0, nonStore: 0 };
+
     targets
-      .filter((t) => t.month === month && t.storeCode)
-      .forEach((t) => map.set(String(t.storeCode), Number(t.amount || 0)));
-    return map;
+      .filter((t) => t.month === month && !t.storeCode)
+      .forEach((t) => {
+        if (t.storeType === "매장") totals.store += Number(t.amount || 0);
+        else if (t.storeType === "비매장")
+          totals.nonStore += Number(t.amount || 0);
+      });
+
+    return totals;
   }, [targets, month]);
 
   const prevEstMap = useMemo(() => {
@@ -4292,8 +4298,32 @@ function EstQuickEntry({
       .sort((a, b) => a.name.localeCompare(b.name, "ko-KR", { numeric: true }));
   }, [stores, selectedManager, normalizedSearch]);
 
-  const totalEst = rows.reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0);
-  const totalTarget = rows.reduce((total, store) => total + Number(targetMap.get(store.code) || 0), 0);
+  const allEntryStores = useMemo(
+    () =>
+      stores.filter(
+        (store) =>
+          store.status !== "거래종료" &&
+          EST_ENTRY_MANAGERS.includes(store.manager),
+      ),
+    [stores],
+  );
+
+  const totalEst = rows.reduce(
+    (total, store) => total + Number(estMap.get(store.code) || 0),
+    0,
+  );
+  const storeEstTotal = allEntryStores
+    .filter((store) => store.storeType === "매장")
+    .reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0);
+  const nonStoreEstTotal = allEntryStores
+    .filter((store) => store.storeType !== "매장")
+    .reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0);
+  const managerEstTotals = EST_ENTRY_MANAGERS.map((manager) => ({
+    manager,
+    amount: allEntryStores
+      .filter((store) => store.manager === manager)
+      .reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0),
+  }));
   const canEditTarget = canEdit && (isAdmin || selectedManager === "SY");
 
   const updateEst = (store: Store, amount: number) => {
@@ -4311,23 +4341,19 @@ function EstQuickEntry({
     });
   };
 
-  const updateTarget = (store: Store, amount: number) => {
+  const updateTargetByType = (storeType: StoreType, amount: number) => {
     if (!canEditTarget) return;
     setTargets((prev) => {
-      const exists = prev.some((row) => row.month === month && row.storeCode === store.code);
-      if (exists) {
-        return prev.map((row) =>
-          row.month === month && row.storeCode === store.code
-            ? { ...row, storeName: store.name, storeType: store.storeType, amount }
-            : row,
-        );
-      }
+      const withoutCurrentMonthTarget = prev.filter(
+        (row) =>
+          row.month !== month ||
+          (row.storeType !== storeType && !row.storeCode),
+      );
+
       return [
-        ...prev,
+        ...withoutCurrentMonthTarget,
         {
-          storeCode: store.code,
-          storeName: store.name,
-          storeType: store.storeType,
+          storeType,
           month,
           amount,
         },
@@ -4349,24 +4375,41 @@ function EstQuickEntry({
       </div>
 
       <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {EST_ENTRY_MANAGERS.map((manager) => (
-              <button
-                key={manager}
-                type="button"
-                onClick={() => setSelectedManager(manager)}
-                className={`rounded-xl px-4 py-2 text-sm font-bold ${
-                  selectedManager === manager
-                    ? "bg-orange-500 text-white shadow"
-                    : "bg-orange-50 text-orange-900 hover:bg-orange-100"
-                }`}
-              >
-                {manager}
-              </button>
-            ))}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {EST_ENTRY_MANAGERS.map((manager) => (
+                <button
+                  key={manager}
+                  type="button"
+                  onClick={() => setSelectedManager(manager)}
+                  className={`rounded-xl px-4 py-2 text-sm font-bold ${
+                    selectedManager === manager
+                      ? "bg-orange-500 text-white shadow"
+                      : "bg-orange-50 text-orange-900 hover:bg-orange-100"
+                  }`}
+                >
+                  {manager}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {managerEstTotals.map((item) => (
+                <div
+                  key={item.manager}
+                  className={`rounded-lg px-3 py-2 text-xs font-bold ${
+                    selectedManager === item.manager
+                      ? "bg-orange-100 text-orange-900"
+                      : "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  {item.manager} EST {won(item.amount)}
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -4374,18 +4417,58 @@ function EstQuickEntry({
               className="h-9 w-[240px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
             />
             <div className="rounded-lg bg-orange-100 px-3 py-2 text-xs font-bold text-orange-900">
-              현재 입력 EST 합계 {won(totalEst)}
+              선택 담당자 EST {won(totalEst)}
+            </div>
+            <div className="rounded-lg bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-900">
+              매장 EST {won(storeEstTotal)}
             </div>
             <div className="rounded-lg bg-blue-100 px-3 py-2 text-xs font-bold text-blue-900">
-              현재 입력 Target 합계 {won(totalTarget)}
+              비매장 EST {won(nonStoreEstTotal)}
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-extrabold text-blue-950">Target 입력</div>
+            <div className="mt-1 text-xs font-medium text-blue-700">
+              Target은 매장 / 비매장 2개 기준으로만 입력됩니다.
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-xs font-bold text-blue-900">
+              매장 Target
+              <input
+                type="text"
+                inputMode="numeric"
+                disabled={!canEditTarget}
+                value={targetByType.store ? won(targetByType.store) : ""}
+                onChange={(e) => updateTargetByType("매장", num(e.target.value))}
+                placeholder={canEditTarget ? "0" : "SY만 입력"}
+                className="mt-1 h-9 w-[160px] rounded-lg border border-blue-200 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+              />
+            </label>
+            <label className="text-xs font-bold text-blue-900">
+              비매장 Target
+              <input
+                type="text"
+                inputMode="numeric"
+                disabled={!canEditTarget}
+                value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
+                onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
+                placeholder={canEditTarget ? "0" : "SY만 입력"}
+                className="mt-1 h-9 w-[160px] rounded-lg border border-blue-200 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+              />
+            </label>
           </div>
         </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="max-h-[68vh] overflow-auto isolate">
-          <table className="w-full min-w-[1430px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+          <table className="w-full min-w-[1280px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처명</th>
@@ -4395,14 +4478,12 @@ function EstQuickEntry({
                 <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-800">전월 매출</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-purple-50 px-3 py-2 font-bold text-purple-800">전월 EST</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-50 px-3 py-2 font-bold text-yellow-900">전월 EST 달성률</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-800">{month} Target 입력</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">{month} EST 입력</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((store) => {
                 const value = estMap.get(store.code) || 0;
-                const targetValue = targetMap.get(store.code) || 0;
                 const prevYearSales = prevYearSalesMap.get(store.code) || 0;
                 const prevSales = prevSalesMap.get(store.code) || 0;
                 const prevEst = prevEstMap.get(store.code) || 0;
@@ -4437,17 +4518,6 @@ function EstQuickEntry({
                       <input
                         type="text"
                         inputMode="numeric"
-                        disabled={!canEditTarget}
-                        value={targetValue ? won(targetValue) : ""}
-                        onChange={(e) => updateTarget(store, num(e.target.value))}
-                        placeholder={selectedManager === "SY" || isAdmin ? "0" : "SY만 입력"}
-                        className="h-9 w-full min-w-[150px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
-                      />
-                    </td>
-                    <td className="border border-slate-300 px-3 py-2">
-                      <input
-                        type="text"
-                        inputMode="numeric"
                         disabled={!canEdit}
                         value={value ? won(value) : ""}
                         onChange={(e) => updateEst(store, num(e.target.value))}
@@ -4460,7 +4530,7 @@ function EstQuickEntry({
               })}
               {!rows.length && (
                 <tr>
-                  <td colSpan={9} className="border border-slate-300 p-8 text-center text-slate-500">
+                  <td colSpan={8} className="border border-slate-300 p-8 text-center text-slate-500">
                     표시할 거래처가 없습니다.
                   </td>
                 </tr>
