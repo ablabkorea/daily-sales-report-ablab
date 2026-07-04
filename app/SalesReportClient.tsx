@@ -4115,6 +4115,8 @@ export default function SalesReportClient() {
             sales={sales}
             ests={ests}
             setEsts={setEsts}
+            targets={targets}
+            setTargets={setTargets}
             month={dashMonth}
             canEdit={isAdmin || isEstEntryOpen}
             isAdmin={isAdmin}
@@ -4181,6 +4183,8 @@ function EstQuickEntry({
   sales,
   ests,
   setEsts,
+  targets,
+  setTargets,
   month,
   canEdit,
   isAdmin,
@@ -4189,6 +4193,8 @@ function EstQuickEntry({
   sales: SalesRecord[];
   ests: EstRecord[];
   setEsts: React.Dispatch<React.SetStateAction<EstRecord[]>>;
+  targets: TargetRecord[];
+  setTargets: React.Dispatch<React.SetStateAction<TargetRecord[]>>;
   month: string;
   canEdit: boolean;
   isAdmin: boolean;
@@ -4206,6 +4212,14 @@ function EstQuickEntry({
       .forEach((e) => map.set(e.storeCode, Number(e.amount || 0)));
     return map;
   }, [ests, month]);
+
+  const targetMap = useMemo(() => {
+    const map = new Map<string, number>();
+    targets
+      .filter((t) => t.month === month && t.storeCode)
+      .forEach((t) => map.set(String(t.storeCode), Number(t.amount || 0)));
+    return map;
+  }, [targets, month]);
 
   const prevEstMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -4279,6 +4293,8 @@ function EstQuickEntry({
   }, [stores, selectedManager, normalizedSearch]);
 
   const totalEst = rows.reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0);
+  const totalTarget = rows.reduce((total, store) => total + Number(targetMap.get(store.code) || 0), 0);
+  const canEditTarget = canEdit && (isAdmin || selectedManager === "SY");
 
   const updateEst = (store: Store, amount: number) => {
     if (!canEdit) return;
@@ -4292,6 +4308,30 @@ function EstQuickEntry({
         );
       }
       return [...prev, { storeCode: store.code, storeName: store.name, month, amount }];
+    });
+  };
+
+  const updateTarget = (store: Store, amount: number) => {
+    if (!canEditTarget) return;
+    setTargets((prev) => {
+      const exists = prev.some((row) => row.month === month && row.storeCode === store.code);
+      if (exists) {
+        return prev.map((row) =>
+          row.month === month && row.storeCode === store.code
+            ? { ...row, storeName: store.name, storeType: store.storeType, amount }
+            : row,
+        );
+      }
+      return [
+        ...prev,
+        {
+          storeCode: store.code,
+          storeName: store.name,
+          storeType: store.storeType,
+          month,
+          amount,
+        },
+      ];
     });
   };
 
@@ -4333,8 +4373,11 @@ function EstQuickEntry({
               placeholder="거래처명/코드/채널 검색"
               className="h-9 w-[240px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
             />
-            <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
-              {selectedManager} 합계 {won(totalEst)}
+            <div className="rounded-lg bg-orange-100 px-3 py-2 text-xs font-bold text-orange-900">
+              현재 입력 EST 합계 {won(totalEst)}
+            </div>
+            <div className="rounded-lg bg-blue-100 px-3 py-2 text-xs font-bold text-blue-900">
+              현재 입력 Target 합계 {won(totalTarget)}
             </div>
           </div>
         </div>
@@ -4342,7 +4385,7 @@ function EstQuickEntry({
 
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="max-h-[68vh] overflow-auto isolate">
-          <table className="w-full min-w-[1250px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+          <table className="w-full min-w-[1430px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처명</th>
@@ -4352,12 +4395,14 @@ function EstQuickEntry({
                 <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-800">전월 매출</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-purple-50 px-3 py-2 font-bold text-purple-800">전월 EST</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-50 px-3 py-2 font-bold text-yellow-900">전월 EST 달성률</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-800">{month} Target 입력</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">{month} EST 입력</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((store) => {
                 const value = estMap.get(store.code) || 0;
+                const targetValue = targetMap.get(store.code) || 0;
                 const prevYearSales = prevYearSalesMap.get(store.code) || 0;
                 const prevSales = prevSalesMap.get(store.code) || 0;
                 const prevEst = prevEstMap.get(store.code) || 0;
@@ -4392,6 +4437,17 @@ function EstQuickEntry({
                       <input
                         type="text"
                         inputMode="numeric"
+                        disabled={!canEditTarget}
+                        value={targetValue ? won(targetValue) : ""}
+                        onChange={(e) => updateTarget(store, num(e.target.value))}
+                        placeholder={selectedManager === "SY" || isAdmin ? "0" : "SY만 입력"}
+                        className="h-9 w-full min-w-[150px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                      />
+                    </td>
+                    <td className="border border-slate-300 px-3 py-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
                         disabled={!canEdit}
                         value={value ? won(value) : ""}
                         onChange={(e) => updateEst(store, num(e.target.value))}
@@ -4404,7 +4460,7 @@ function EstQuickEntry({
               })}
               {!rows.length && (
                 <tr>
-                  <td colSpan={8} className="border border-slate-300 p-8 text-center text-slate-500">
+                  <td colSpan={9} className="border border-slate-300 p-8 text-center text-slate-500">
                     표시할 거래처가 없습니다.
                   </td>
                 </tr>
