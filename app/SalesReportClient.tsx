@@ -4130,6 +4130,7 @@ export default function SalesReportClient() {
               sales={sales}
               targets={targets}
               ests={ests}
+              itemCosts={itemCosts}
               month={dashMonth}
               date={dashDate}
             />
@@ -4751,15 +4752,20 @@ function ItemCostStatus({
     });
   };
 
+  const deleteHistory = (row: (typeof rows)[number], historyId: string) => {
+    if (!isAdmin) return;
+    if (!window.confirm("선택한 매입가 변경 이력을 삭제할까요?")) return;
+    upsertItemCost(row, {
+      history: row.history.filter((h) => h.id !== historyId),
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-base font-extrabold text-slate-900">품목현황</div>
-            <div className="mt-1 text-xs text-slate-500">
-              매입가 변경 예정일을 미래 날짜로 입력하고, 변경 이력은 History로 누적 관리합니다.
-            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -4898,6 +4904,7 @@ function ItemCostStatus({
                                   <th className="border border-slate-300 px-2 py-1">변경가</th>
                                   <th className="border border-slate-300 px-2 py-1">증감</th>
                                   <th className="border border-slate-300 px-2 py-1">메모</th>
+                                  {isAdmin && <th className="border border-slate-300 px-2 py-1">관리</th>}
                                 </tr>
                               </thead>
                               <tbody>
@@ -4911,11 +4918,22 @@ function ItemCostStatus({
                                       {h.newCost - h.previousCost >= 0 ? "+" : ""}{won(h.newCost - h.previousCost)}
                                     </td>
                                     <td className="border border-slate-300 px-2 py-1 text-left">{h.memo || "-"}</td>
+                                    {isAdmin && (
+                                      <td className="border border-slate-300 px-2 py-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => deleteHistory(row, h.id)}
+                                          className="rounded-md bg-red-50 px-2 py-1 text-[11px] font-bold text-red-600 hover:bg-red-100"
+                                        >
+                                          삭제
+                                        </button>
+                                      </td>
+                                    )}
                                   </tr>
                                 ))}
                                 {!row.history.length && (
                                   <tr>
-                                    <td colSpan={6} className="border border-slate-300 p-5 text-center text-slate-500">
+                                    <td colSpan={isAdmin ? 7 : 6} className="border border-slate-300 p-5 text-center text-slate-500">
                                       아직 저장된 변경 이력이 없습니다.
                                     </td>
                                   </tr>
@@ -5051,6 +5069,7 @@ function DashboardTopKpis({
   sales,
   targets,
   ests,
+  itemCosts,
   month,
   date,
 }: {
@@ -5058,6 +5077,7 @@ function DashboardTopKpis({
   sales: SalesRecord[];
   targets: TargetRecord[];
   ests: EstRecord[];
+  itemCosts: ItemCostRecord[];
   month: string;
   date: string;
 }) {
@@ -5096,6 +5116,28 @@ function DashboardTopKpis({
     metricsByStoreType(stores, targets, ests, month);
   const targetTotal = storeTarget + nonStoreTarget;
   const estTotal = storeEst + nonStoreEst;
+  const scheduledCostItems = itemCosts.filter(
+    (item) => item.effectiveDate && Number(item.nextCost || 0) > 0,
+  );
+  const dueTodayCount = scheduledCostItems.filter(
+    (item) => daysBetween(today(), item.effectiveDate || today()) <= 0,
+  ).length;
+  const dueSoonCount = scheduledCostItems.filter((item) => {
+    const dday = daysBetween(today(), item.effectiveDate || today());
+    return dday > 0 && dday <= 7;
+  }).length;
+  const upcomingCount = scheduledCostItems.filter((item) => {
+    const dday = daysBetween(today(), item.effectiveDate || today());
+    return dday > 7 && dday <= 30;
+  }).length;
+  const costAlertText = scheduledCostItems.length
+    ? `오늘/지남 ${dueTodayCount}건 · 임박 ${dueSoonCount}건 · 예정 ${upcomingCount}건`
+    : "변동 예정 없음";
+  const costAlertColor = dueTodayCount || dueSoonCount
+    ? "text-red-600"
+    : upcomingCount
+      ? "text-amber-600"
+      : "text-slate-500";
 
   return (
     <div className="grid w-full grid-cols-1 gap-3 lg:grid-cols-4">
@@ -5172,6 +5214,11 @@ function DashboardTopKpis({
             value: nextMonthNonStoreOrderAmount,
             format: "won",
             color: "text-slate-900",
+          },
+          {
+            title: "매입가 변동 알림",
+            value: costAlertText,
+            color: costAlertColor,
           },
         ]}
       />
