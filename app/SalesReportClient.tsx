@@ -83,6 +83,25 @@ type EstRecord = {
   amount: number;
 };
 
+type ItemCostHistory = {
+  id: string;
+  changedAt: string;
+  effectiveDate: string;
+  previousCost: number;
+  newCost: number;
+  memo?: string;
+};
+
+type ItemCostRecord = {
+  itemCode: string;
+  itemName: string;
+  currentCost: number;
+  nextCost?: number;
+  effectiveDate?: string;
+  memo?: string;
+  history: ItemCostHistory[];
+};
+
 type TimeConfig = {
   month: string;
   holidays: string[];
@@ -3256,6 +3275,8 @@ const initialEsts: EstRecord[] = [
   },
 ];
 
+const initialItemCosts: ItemCostRecord[] = [];
+
 const initialSales: SalesRecord[] = [
   makeSale(
     "current",
@@ -3974,6 +3995,10 @@ export default function SalesReportClient() {
     "ablab_code_mappings_v1",
     [],
   );
+  const [itemCosts, setItemCosts] = useLocal<ItemCostRecord[]>(
+    "ablab_item_costs_v1",
+    initialItemCosts,
+  );
   const [dashMonth, setDashMonth] = useState(thisMonth());
   const [dashDate, setDashDate] = useState(today());
 
@@ -3999,7 +4024,8 @@ export default function SalesReportClient() {
     { label: "매출현황", order: "2" },
     { label: "거래처별 분석", order: "3" },
     { label: "품목분석", order: "4" },
-    ...(isAdmin ? [{ label: "월초관리", order: "5" }] : []),
+    { label: "품목현황", order: "5" },
+    ...(isAdmin ? [{ label: "월초관리", order: "6" }] : []),
   ];
 
   function adminLogin() {
@@ -4162,6 +4188,14 @@ export default function SalesReportClient() {
             sales={sales}
             month={dashMonth}
             date={dashDate}
+          />
+        )}
+        {active === "품목현황" && (
+          <ItemCostStatus
+            sales={sales}
+            itemCosts={itemCosts}
+            setItemCosts={setItemCosts}
+            isAdmin={isAdmin}
           />
         )}
         {isAdmin && active === "월초관리" && (
@@ -4518,6 +4552,387 @@ function EstQuickEntry({
                 <tr>
                   <td colSpan={8} className="border border-slate-300 p-8 text-center text-slate-500">
                     표시할 거래처가 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ItemCostStatus({
+  sales,
+  itemCosts,
+  setItemCosts,
+  isAdmin,
+}: {
+  sales: SalesRecord[];
+  itemCosts: ItemCostRecord[];
+  setItemCosts: React.Dispatch<React.SetStateAction<ItemCostRecord[]>>;
+  isAdmin: boolean;
+}) {
+  const [search, setSearch] = useState("");
+  const [showChangedOnly, setShowChangedOnly] = useState(false);
+  const [openItemCode, setOpenItemCode] = useState("");
+  const normalizedSearch = search.trim().toLowerCase();
+
+  useEffect(() => {
+    const todayText = today();
+    setItemCosts((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        const scheduledCost = Number(item.nextCost || 0);
+        const shouldApply =
+          item.effectiveDate &&
+          item.effectiveDate <= todayText &&
+          scheduledCost > 0 &&
+          scheduledCost !== Number(item.currentCost || 0);
+        if (!shouldApply) return item;
+
+        const historyId = `${item.itemCode}|${item.effectiveDate}|${scheduledCost}`;
+        const alreadyRecorded = (item.history || []).some(
+          (h) => h.id === historyId,
+        );
+        changed = true;
+        return {
+          ...item,
+          currentCost: scheduledCost,
+          nextCost: undefined,
+          effectiveDate: undefined,
+          history: alreadyRecorded
+            ? item.history || []
+            : [
+                {
+                  id: historyId,
+                  changedAt: todayText,
+                  effectiveDate: item.effectiveDate || todayText,
+                  previousCost: Number(item.currentCost || 0),
+                  newCost: scheduledCost,
+                  memo: item.memo || "예정 매입가 자동 적용",
+                },
+                ...(item.history || []),
+              ],
+        };
+      });
+      return changed ? next : prev;
+    });
+  }, [setItemCosts]);
+
+  const itemBaseRows = useMemo(() => {
+    const map = new Map<
+      string,
+      { itemCode: string; itemName: string; estimatedCost: number }
+    >();
+    sales.forEach((row) => {
+      const key = row.itemCode || row.itemName || "미지정";
+      if (!map.has(key)) {
+        const quantity = Number(row.quantity || 0);
+        map.set(key, {
+          itemCode: row.itemCode || "-",
+          itemName: row.itemName || "미지정",
+          estimatedCost: quantity ? Number(row.costAmount || 0) / quantity : 0,
+        });
+      }
+    });
+    itemCosts.forEach((item) => {
+      const key = item.itemCode || item.itemName || "미지정";
+      if (!map.has(key)) {
+        map.set(key, {
+          itemCode: item.itemCode || "-",
+          itemName: item.itemName || "미지정",
+          estimatedCost: Number(item.currentCost || 0),
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      a.itemName.localeCompare(b.itemName, "ko-KR", { numeric: true }),
+    );
+  }, [sales, itemCosts]);
+
+  const costMap = useMemo(
+    () => new Map(itemCosts.map((item) => [item.itemCode, item])),
+    [itemCosts],
+  );
+
+  const rows = useMemo(() => {
+    return itemBaseRows
+      .map((base) => {
+        const saved = costMap.get(base.itemCode);
+        const currentCost = Number(
+          saved?.currentCost || base.estimatedCost || 0,
+        );
+        const nextCost = Number(saved?.nextCost || 0);
+        const diff = nextCost ? nextCost - currentCost : 0;
+        const rate = currentCost ? (diff / currentCost) * 100 : 0;
+        const dday = saved?.effectiveDate
+          ? daysBetween(today(), saved.effectiveDate)
+          : null;
+        const status = !saved?.effectiveDate
+          ? "-"
+          : dday !== null && dday > 0
+            ? "예정"
+            : "적용완료";
+        return {
+          ...base,
+          saved,
+          currentCost,
+          nextCost,
+          effectiveDate: saved?.effectiveDate || "",
+          memo: saved?.memo || "",
+          history: saved?.history || [],
+          diff,
+          rate,
+          dday,
+          status,
+        };
+      })
+      .filter((row) => {
+        if (showChangedOnly && !row.nextCost && !row.history.length) return false;
+        if (!normalizedSearch) return true;
+        return [row.itemCode, row.itemName, row.memo]
+          .some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
+      });
+  }, [itemBaseRows, costMap, normalizedSearch, showChangedOnly]);
+
+  const upsertItemCost = (
+    base: { itemCode: string; itemName: string; estimatedCost: number },
+    patch: Partial<ItemCostRecord>,
+  ) => {
+    if (!isAdmin) return;
+    setItemCosts((prev) => {
+      const exists = prev.some((item) => item.itemCode === base.itemCode);
+      if (exists) {
+        return prev.map((item) =>
+          item.itemCode === base.itemCode
+            ? {
+                ...item,
+                itemName: base.itemName,
+                history: item.history || [],
+                ...patch,
+              }
+            : item,
+        );
+      }
+      return [
+        ...prev,
+        {
+          itemCode: base.itemCode,
+          itemName: base.itemName,
+          currentCost: Number(base.estimatedCost || 0),
+          history: [],
+          ...patch,
+        },
+      ];
+    });
+  };
+
+  const applyNow = (row: (typeof rows)[number]) => {
+    if (!isAdmin || !row.nextCost) return;
+    const todayText = today();
+    const historyId = `${row.itemCode}|${row.effectiveDate || todayText}|${row.nextCost}`;
+    upsertItemCost(row, {
+      currentCost: row.nextCost,
+      nextCost: undefined,
+      effectiveDate: undefined,
+      history: [
+        {
+          id: historyId,
+          changedAt: todayText,
+          effectiveDate: row.effectiveDate || todayText,
+          previousCost: row.currentCost,
+          newCost: row.nextCost,
+          memo: row.memo || "매입가 변경",
+        },
+        ...row.history.filter((h) => h.id !== historyId),
+      ],
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-base font-extrabold text-slate-900">품목현황</div>
+            <div className="mt-1 text-xs text-slate-500">
+              매입가 변경 예정일을 미래 날짜로 입력하고, 변경 이력은 History로 누적 관리합니다.
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="품목코드/품목명/메모 검색"
+              className="h-9 w-[260px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
+            />
+            <label className="flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 text-xs font-bold text-slate-700">
+              <input
+                type="checkbox"
+                checked={showChangedOnly}
+                onChange={(e) => setShowChangedOnly(e.target.checked)}
+              />
+              변동 품목만
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+        <div className="max-h-[70vh] overflow-auto isolate">
+          <table className="w-full min-w-[1350px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목코드</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목명</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-800">현재 매입가</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">다음 매입가</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">적용 예정일</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">상태</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">D-Day</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">변동금액</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">변동률</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">메모</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">History</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const isDueSoon = row.dday !== null && row.dday <= 7 && row.dday >= 0;
+                const isUpcoming = row.dday !== null && row.dday > 7 && row.dday <= 30;
+                const diffTone = row.diff > 0 ? "text-red-600" : row.diff < 0 ? "text-blue-600" : "text-slate-500";
+                return (
+                  <Fragment key={row.itemCode}>
+                    <tr className={isDueSoon ? "bg-red-50 hover:bg-red-100" : isUpcoming ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-slate-50"}>
+                      <td className="border border-slate-300 px-3 py-2 text-slate-700">{row.itemCode}</td>
+                      <td className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">{row.itemName}</td>
+                      <td className="border border-slate-300 px-3 py-2">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          disabled={!isAdmin}
+                          value={row.currentCost ? won(row.currentCost) : ""}
+                          onChange={(e) => upsertItemCost(row, { currentCost: num(e.target.value) })}
+                          placeholder="0"
+                          className="h-9 w-full min-w-[120px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                        />
+                      </td>
+                      <td className="border border-slate-300 px-3 py-2">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          disabled={!isAdmin}
+                          value={row.nextCost ? won(row.nextCost) : ""}
+                          onChange={(e) => upsertItemCost(row, { nextCost: num(e.target.value) || undefined })}
+                          placeholder="변경 예정가"
+                          className="h-9 w-full min-w-[120px] rounded-lg border border-orange-300 bg-orange-50 px-3 text-right text-sm font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                        />
+                      </td>
+                      <td className="border border-slate-300 px-3 py-2">
+                        <input
+                          type="date"
+                          disabled={!isAdmin}
+                          value={row.effectiveDate}
+                          onChange={(e) => upsertItemCost(row, { effectiveDate: e.target.value || undefined })}
+                          className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                        />
+                      </td>
+                      <td className="border border-slate-300 px-3 py-2">
+                        <span className={`rounded-full px-3 py-1 text-xs font-extrabold ${row.status === "예정" ? "bg-yellow-100 text-yellow-800" : row.status === "적용완료" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"}`}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="border border-slate-300 px-3 py-2 font-bold">
+                        {row.dday === null ? "-" : row.dday > 0 ? `D-${row.dday}` : row.dday === 0 ? "D-Day" : "적용완료"}
+                      </td>
+                      <td className={`border border-slate-300 px-3 py-2 text-right font-extrabold ${diffTone}`}>
+                        {row.diff > 0 ? "▲ " : row.diff < 0 ? "▼ " : ""}{row.diff ? won(Math.abs(row.diff)) : "-"}
+                      </td>
+                      <td className={`border border-slate-300 px-3 py-2 text-right font-bold ${diffTone}`}>
+                        {row.nextCost ? pct(row.rate) : "-"}
+                      </td>
+                      <td className="border border-slate-300 px-3 py-2">
+                        <input
+                          type="text"
+                          disabled={!isAdmin}
+                          value={row.memo}
+                          onChange={(e) => upsertItemCost(row, { memo: e.target.value })}
+                          placeholder="예: 공급가 인상, 환율 반영"
+                          className="h-9 w-full min-w-[180px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                        />
+                      </td>
+                      <td className="border border-slate-300 px-3 py-2">
+                        <div className="flex items-center justify-center gap-2">
+                          {isAdmin && row.nextCost > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => applyNow(row)}
+                              className="rounded-lg bg-orange-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-orange-700"
+                            >
+                              적용
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setOpenItemCode(openItemCode === row.itemCode ? "" : row.itemCode)}
+                            className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold text-white hover:bg-slate-700"
+                          >
+                            {openItemCode === row.itemCode ? "닫기" : `보기 ${row.history.length}`}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {openItemCode === row.itemCode && (
+                      <tr>
+                        <td colSpan={11} className="border border-slate-300 bg-slate-50 p-3">
+                          <div className="text-left text-xs font-bold text-slate-700">{row.itemName} 매입가 History</div>
+                          <div className="mt-2 overflow-auto rounded-xl border border-slate-300 bg-white">
+                            <table className="w-full min-w-[760px] text-center text-[11px]">
+                              <thead className="bg-slate-100">
+                                <tr>
+                                  <th className="border border-slate-300 px-2 py-1">변경입력일</th>
+                                  <th className="border border-slate-300 px-2 py-1">적용일</th>
+                                  <th className="border border-slate-300 px-2 py-1">이전가</th>
+                                  <th className="border border-slate-300 px-2 py-1">변경가</th>
+                                  <th className="border border-slate-300 px-2 py-1">증감</th>
+                                  <th className="border border-slate-300 px-2 py-1">메모</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {row.history.map((h) => (
+                                  <tr key={h.id}>
+                                    <td className="border border-slate-300 px-2 py-1">{h.changedAt}</td>
+                                    <td className="border border-slate-300 px-2 py-1">{h.effectiveDate}</td>
+                                    <td className="border border-slate-300 px-2 py-1 text-right">{won(h.previousCost)}</td>
+                                    <td className="border border-slate-300 px-2 py-1 text-right font-bold">{won(h.newCost)}</td>
+                                    <td className={`border border-slate-300 px-2 py-1 text-right font-bold ${h.newCost - h.previousCost >= 0 ? "text-red-600" : "text-blue-600"}`}>
+                                      {h.newCost - h.previousCost >= 0 ? "+" : ""}{won(h.newCost - h.previousCost)}
+                                    </td>
+                                    <td className="border border-slate-300 px-2 py-1 text-left">{h.memo || "-"}</td>
+                                  </tr>
+                                ))}
+                                {!row.history.length && (
+                                  <tr>
+                                    <td colSpan={6} className="border border-slate-300 p-5 text-center text-slate-500">
+                                      아직 저장된 변경 이력이 없습니다.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+              {!rows.length && (
+                <tr>
+                  <td colSpan={11} className="border border-slate-300 p-8 text-center text-slate-500">
+                    표시할 품목이 없습니다.
                   </td>
                 </tr>
               )}
