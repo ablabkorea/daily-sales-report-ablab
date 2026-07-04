@@ -4197,6 +4197,7 @@ function EstQuickEntry({
   const [search, setSearch] = useState("");
   const normalizedSearch = search.trim().toLowerCase();
   const prevMonth = previousMonth(month);
+  const prevYearMonthValue = previousYearMonth(month);
 
   const estMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -4229,6 +4230,40 @@ function EstQuickEntry({
 
     return map;
   }, [sales, month, prevMonth]);
+
+  const prevYearSalesMap = useMemo(() => {
+    const map = new Map<string, number>();
+    sales
+      .filter((row) => row.period === "prevYear" && row.refMonth === month)
+      .forEach((row) =>
+        map.set(
+          row.storeCode,
+          (map.get(row.storeCode) || 0) + Number(row.salesAmount || 0),
+        ),
+      );
+
+    // 전년동월 비교용 업로드가 없고 실제 전년동월 데이터가 current로 저장되어 있는 경우를 대비한 보조 계산입니다.
+    if (map.size === 0) {
+      sales
+        .filter(
+          (row) =>
+            row.period === "current" &&
+            inRange(
+              row.saleDate,
+              monthStart(prevYearMonthValue),
+              monthEnd(prevYearMonthValue),
+            ),
+        )
+        .forEach((row) =>
+          map.set(
+            row.storeCode,
+            (map.get(row.storeCode) || 0) + Number(row.salesAmount || 0),
+          ),
+        );
+    }
+
+    return map;
+  }, [sales, month, prevYearMonthValue]);
 
   const rows = useMemo(() => {
     return stores
@@ -4310,10 +4345,10 @@ function EstQuickEntry({
           <table className="w-full min-w-[1250px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">담당자</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처코드</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처명</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">담당자</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">채널</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-emerald-50 px-3 py-2 font-bold text-emerald-800">전년동월 매출</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-800">전월 매출</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-purple-50 px-3 py-2 font-bold text-purple-800">전월 EST</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-50 px-3 py-2 font-bold text-yellow-900">전월 EST 달성률</th>
@@ -4323,6 +4358,7 @@ function EstQuickEntry({
             <tbody>
               {rows.map((store) => {
                 const value = estMap.get(store.code) || 0;
+                const prevYearSales = prevYearSalesMap.get(store.code) || 0;
                 const prevSales = prevSalesMap.get(store.code) || 0;
                 const prevEst = prevEstMap.get(store.code) || 0;
                 const prevEstRate = prevEst ? (prevSales / prevEst) * 100 : 0;
@@ -4338,10 +4374,10 @@ function EstQuickEntry({
                         : "bg-slate-100 text-slate-700 ring-slate-200";
                 return (
                   <tr key={store.code} className="hover:bg-orange-50/60">
-                    <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{store.manager}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.code}</td>
                     <td className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">{store.name}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.channel}</td>
+                    <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{store.manager}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.storeType === "매장" ? "매장" : "비매장"}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevYearSales)}</td>
                     <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevSales)}</td>
                     <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevEst)}</td>
                     <td className="border border-slate-300 px-3 py-2">
