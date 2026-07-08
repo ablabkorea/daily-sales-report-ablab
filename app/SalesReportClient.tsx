@@ -3599,6 +3599,7 @@ function supabaseConfig() {
 
   return {
     endpoint: `${url}/rest/v1/app_state`,
+    realtimeEndpoint: `${url.replace(/^http/, "ws")}/realtime/v1/websocket?apikey=${encodeURIComponent(key)}&vsn=1.0.0`,
     headers: {
       apikey: key,
       Authorization: `Bearer ${key}`,
@@ -3709,6 +3710,106 @@ function reportSharedSaveError(error: unknown) {
   );
 }
 
+function dispatchSharedUpdate(key: string) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("ablab_shared_update", {
+      detail: { key, updatedAt: new Date().toISOString() },
+    }),
+  );
+}
+
+function subscribeSharedState(key: string, onRemoteChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const config = supabaseConfig();
+  if (!config) return () => {};
+
+  let socket: WebSocket | null = null;
+  let heartbeatTimer: number | null = null;
+  let reconnectTimer: number | null = null;
+  let closed = false;
+  let ref = 1;
+
+  const cleanupSocket = () => {
+    if (heartbeatTimer) window.clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+    if (socket && socket.readyState <= WebSocket.OPEN) socket.close();
+    socket = null;
+  };
+
+  const connect = () => {
+    if (closed) return;
+    cleanupSocket();
+    socket = new WebSocket(config.realtimeEndpoint);
+
+    socket.onopen = () => {
+      const topic = `realtime:public:app_state:${key}`;
+      socket?.send(
+        JSON.stringify({
+          topic,
+          event: "phx_join",
+          payload: {
+            config: {
+              broadcast: { self: false },
+              presence: { key },
+              postgres_changes: [
+                {
+                  event: "*",
+                  schema: "public",
+                  table: "app_state",
+                  filter: `id=eq.${key}`,
+                },
+              ],
+            },
+          },
+          ref: String(ref++),
+          join_ref: String(ref++),
+        }),
+      );
+      heartbeatTimer = window.setInterval(() => {
+        if (socket?.readyState === WebSocket.OPEN) {
+          socket.send(
+            JSON.stringify({
+              topic: "phoenix",
+              event: "heartbeat",
+              payload: {},
+              ref: String(ref++),
+            }),
+          );
+        }
+      }, 25000);
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(String(event.data));
+        if (message.event === "postgres_changes") onRemoteChange();
+      } catch (error) {
+        console.warn("Realtime 메시지 처리 실패", error);
+      }
+    };
+
+    socket.onerror = () => {
+      // Realtime이 비활성화되어 있어도 아래 polling이 최신화를 보완합니다.
+    };
+
+    socket.onclose = () => {
+      cleanupSocket();
+      if (!closed) {
+        reconnectTimer = window.setTimeout(connect, 5000);
+      }
+    };
+  };
+
+  connect();
+
+  return () => {
+    closed = true;
+    if (reconnectTimer) window.clearTimeout(reconnectTimer);
+    cleanupSocket();
+  };
+}
+
 function useLocal<T>(key: string, initial: T) {
   const [value, rawSetValue] = useState<T>(initial);
   const [loaded, setLoaded] = useState(false);
@@ -3776,11 +3877,17 @@ function useLocal<T>(key: string, initial: T) {
 
     const remoteSaved = await loadSharedState<T>(keyRef.current);
     if (remoteSaved === null) return;
+
+    const before = JSON.stringify(valueRef.current);
+    const after = JSON.stringify(remoteSaved);
+    if (before === after) return;
+
     applyValue(remoteSaved);
     setLocalMeta(keyRef.current, {
       editedAt: Date.now(),
       pending: false,
     });
+    dispatchSharedUpdate(keyRef.current);
   };
 
   useEffect(() => {
@@ -3860,15 +3967,17 @@ function useLocal<T>(key: string, initial: T) {
       if (document.visibilityState === "visible") refreshLatest();
     };
 
+    const unsubscribeRealtime = subscribeSharedState(key, refreshLatest);
     const interval = window.setInterval(() => {
       retryPendingSave();
       refreshLatest();
-    }, 15000);
+    }, 10000);
     window.addEventListener("focus", refreshLatest);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.clearInterval(interval);
+      unsubscribeRealtime();
       window.removeEventListener("focus", refreshLatest);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
@@ -4040,6 +4149,59 @@ function orderRowsForExcel(rows: SalesRecord[]) {
 const ADMIN_PASSWORD = "ablab2026";
 const EST_ENTRY_MANAGERS: Manager[] = ["SY", "KT", "NH"];
 
+function SharedUpdateToast() {
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let timer: number | null = null;
+    const onSharedUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<{ key?: string }>).detail;
+      const labelMap: Record<string, string> = {
+        ablab_sales_v14: "매출 데이터",
+        ablab_stores_v15: "거래처 데이터",
+        ablab_targets_v14: "Target 데이터",
+        ablab_ests_v14: "EST 데이터",
+        ablab_time_configs_v14: "Time Gone 설정",
+        ablab_code_mappings_v1: "거래처 매핑",
+        ablab_item_costs_v1: "품목현황 데이터",
+      };
+      const label = detail?.key ? labelMap[detail.key] || "공유 데이터" : "공유 데이터";
+      setMessage(`${label}가 다른 사용자 변경으로 최신 반영되었습니다.`);
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => setMessage(""), 5500);
+    };
+
+    window.addEventListener("ablab_shared_update", onSharedUpdate);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      window.removeEventListener("ablab_shared_update", onSharedUpdate);
+    };
+  }, []);
+
+  if (!message) return null;
+
+  return (
+    <div className="fixed right-4 top-[78px] z-[80] max-w-[360px] rounded-2xl border border-orange-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 shadow-xl">
+      <div className="flex items-start gap-3">
+        <span className="text-lg">🔔</span>
+        <div className="min-w-0 flex-1">
+          <p>{message}</p>
+          <p className="mt-1 text-[11px] font-semibold text-slate-500">
+            새로고침하지 않아도 화면 데이터가 자동으로 갱신됩니다.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setMessage("")}
+          className="rounded-full px-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function isEstEntryPeriodToday() {
   return Number(today().slice(8, 10)) <= 4;
 }
@@ -4162,6 +4324,7 @@ export default function SalesReportClient() {
           </div>
         </div>
       </header>
+      <SharedUpdateToast />
 
       <section className="min-w-0 p-4 lg:p-5">
         <div className="mb-4 space-y-3 rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
