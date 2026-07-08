@@ -3630,11 +3630,36 @@ function localMetaKey(key: string) {
   return `${key}__local_meta`;
 }
 
+
+function safeSetLocalStorage(key: string, value: string) {
+  if (typeof window === "undefined") return false;
+  try {
+    window.localStorage.setItem(key, value);
+    return true;
+  } catch (error) {
+    console.warn(
+      "브라우저 저장소 용량이 부족해 localStorage 저장을 건너뜁니다. Supabase 저장은 계속 시도합니다.",
+      error,
+    );
+    return false;
+  }
+}
+
+function safeGetLocalStorage(key: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch (error) {
+    console.warn("브라우저 저장소 읽기 실패", error);
+    return null;
+  }
+}
+
 function getLocalMeta(key: string) {
   if (typeof window === "undefined") return { editedAt: 0, pending: false };
   try {
     const parsed = JSON.parse(
-      window.localStorage.getItem(localMetaKey(key)) || "{}",
+      safeGetLocalStorage(localMetaKey(key)) || "{}",
     );
     return {
       editedAt: Number(parsed.editedAt || 0),
@@ -3650,7 +3675,7 @@ function setLocalMeta(
   meta: { editedAt: number; pending: boolean },
 ) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(localMetaKey(key), JSON.stringify(meta));
+  safeSetLocalStorage(localMetaKey(key), JSON.stringify(meta));
 }
 
 async function saveSharedState<T>(key: string, value: T) {
@@ -3692,7 +3717,7 @@ function useLocal<T>(key: string, initial: T) {
     const editedAt = Date.now();
     valueRef.current = nextValue;
     lastSavedJsonRef.current = json;
-    window.localStorage.setItem(keyRef.current, json);
+    safeSetLocalStorage(keyRef.current, json);
     setLocalMeta(keyRef.current, { editedAt, pending: true });
 
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
@@ -3731,7 +3756,7 @@ function useLocal<T>(key: string, initial: T) {
 
     async function hydrate() {
       try {
-        const localSaved = window.localStorage.getItem(key);
+        const localSaved = safeGetLocalStorage(key);
         const meta = getLocalMeta(key);
 
         if (localSaved && !cancelled) {
@@ -3749,7 +3774,7 @@ function useLocal<T>(key: string, initial: T) {
             const remoteJson = JSON.stringify(remoteSaved);
             valueRef.current = remoteSaved;
             lastSavedJsonRef.current = remoteJson;
-            window.localStorage.setItem(key, remoteJson);
+            safeSetLocalStorage(key, remoteJson);
             setLocalMeta(key, {
               editedAt: meta.editedAt || Date.now(),
               pending: false,
@@ -3782,7 +3807,7 @@ function useLocal<T>(key: string, initial: T) {
       try {
         const meta = getLocalMeta(key);
         if (!meta.pending) return;
-        const localSaved = window.localStorage.getItem(key);
+        const localSaved = safeGetLocalStorage(key);
         if (!localSaved) return;
         const parsed = JSON.parse(localSaved) as T;
         await saveSharedState(key, parsed);
