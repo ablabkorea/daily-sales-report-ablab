@@ -3701,51 +3701,91 @@ function useLocal<T>(key: string, initial: T) {
   const [value, rawSetValue] = useState<T>(initial);
   const [loaded, setLoaded] = useState(false);
   const valueRef = useRef<T>(initial);
-  const saveTimerRef = useRef<number | null>(null);
-  const lastSavedJsonRef = useRef("");
+  const saveSeqRef = useRef(0);
   const keyRef = useRef(key);
 
   useEffect(() => {
     keyRef.current = key;
   }, [key]);
 
-  const persistNow = (nextValue: T) => {
-    if (typeof window === "undefined") return;
-
-    const json = JSON.stringify(nextValue);
-    const editedAt = Date.now();
-    valueRef.current = nextValue;
-    lastSavedJsonRef.current = json;
+  const applyRemoteValue = (remoteValue: T) => {
+    const json = JSON.stringify(remoteValue);
+    valueRef.current = remoteValue;
     safeSetLocalStorage(keyRef.current, json);
+    setLocalMeta(keyRef.current, { editedAt: Date.now(), pending: false });
+    rawSetValue(remoteValue);
+  };
+
+  const loadRemoteFirst = async (allowLocalFallback: boolean) => {
+    try {
+      const remoteSaved = await loadSharedState<T>(keyRef.current);
+      if (remoteSaved !== null) {
+        applyRemoteValue(remoteSaved);
+        return;
+      }
+
+      if (allowLocalFallback) {
+        const localSaved = safeGetLocalStorage(keyRef.current);
+        if (localSaved) {
+          const parsed = JSON.parse(localSaved) as T;
+          valueRef.current = parsed;
+          rawSetValue(parsed);
+        }
+      }
+    } catch (error) {
+      console.warn(
+        "Supabase 최신 데이터 불러오기 실패, 임시 브라우저 캐시를 사용합니다.",
+        error,
+      );
+
+      if (allowLocalFallback) {
+        const localSaved = safeGetLocalStorage(keyRef.current);
+        if (localSaved) {
+          const parsed = JSON.parse(localSaved) as T;
+          valueRef.current = parsed;
+          rawSetValue(parsed);
+        }
+      }
+    }
+  };
+
+  const persistToSupabase = async (nextValue: T, saveSeq: number) => {
+    const editedAt = Date.now();
     setLocalMeta(keyRef.current, { editedAt, pending: true });
 
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(() => {
-      saveSharedState(keyRef.current, nextValue)
-        .then(() => {
-          const meta = getLocalMeta(keyRef.current);
-          if (meta.editedAt === editedAt)
-            setLocalMeta(keyRef.current, { editedAt, pending: false });
-        })
-        .catch((error) => {
-          // Supabase 저장이 실패해도 화면의 최신 업로드값은 유지합니다.
-          // 다음 업로드/수정 때 다시 저장을 시도합니다.
-          console.warn(
-            "공유 데이터 저장 실패, 브라우저 저장소에 최신 데이터를 유지합니다.",
-            error,
-          );
-          const meta = getLocalMeta(keyRef.current);
-          if (meta.editedAt === editedAt)
-            setLocalMeta(keyRef.current, { editedAt, pending: true });
-        });
-    }, 120);
+    try {
+      await saveSharedState(keyRef.current, nextValue);
+      if (saveSeqRef.current !== saveSeq) return;
+
+      const json = JSON.stringify(nextValue);
+      safeSetLocalStorage(keyRef.current, json);
+      setLocalMeta(keyRef.current, { editedAt, pending: false });
+    } catch (error) {
+      console.warn(
+        "Supabase 저장 실패. 다른 사용자에게는 아직 반영되지 않았습니다.",
+        error,
+      );
+      if (saveSeqRef.current !== saveSeq) return;
+
+      // 저장 실패 시에도 현재 화면은 유지하되, 원본 저장소에는 반영되지 않았음을 표시합니다.
+      safeSetLocalStorage(keyRef.current, JSON.stringify(nextValue));
+      setLocalMeta(keyRef.current, { editedAt, pending: true });
+      window.alert(
+        "공유 저장소(Supabase) 저장에 실패했습니다. 새로고침하거나 다른 사용자에게는 아직 반영되지 않을 수 있습니다.",
+      );
+    }
   };
 
   const setValue: React.Dispatch<React.SetStateAction<T>> = (next) => {
     rawSetValue((prev) => {
       const resolved =
         typeof next === "function" ? (next as (prev: T) => T)(prev) : next;
-      persistNow(resolved);
+
+      valueRef.current = resolved;
+      const saveSeq = saveSeqRef.current + 1;
+      saveSeqRef.current = saveSeq;
+
+      void persistToSupabase(resolved, saveSeq);
       return resolved;
     });
   };
@@ -3754,76 +3794,34 @@ function useLocal<T>(key: string, initial: T) {
     let cancelled = false;
 
     async function hydrate() {
-      try {
-        const localSaved = safeGetLocalStorage(key);
-        const meta = getLocalMeta(key);
-
-        if (localSaved && !cancelled) {
-          const parsed = JSON.parse(localSaved) as T;
-          valueRef.current = parsed;
-          lastSavedJsonRef.current = JSON.stringify(parsed);
-          rawSetValue(parsed);
-        }
-
-        // 로컬에 업로드/수정 데이터가 있으면 원격의 과거값으로 덮어쓰지 않습니다.
-        // 로컬이 비어있는 첫 접속일 때만 Supabase 값을 불러옵니다.
-        if (!localSaved) {
-          const remoteSaved = await loadSharedState<T>(key);
-          if (!cancelled && remoteSaved !== null) {
-            const remoteJson = JSON.stringify(remoteSaved);
-            valueRef.current = remoteSaved;
-            lastSavedJsonRef.current = remoteJson;
-            safeSetLocalStorage(key, remoteJson);
-            setLocalMeta(key, {
-              editedAt: meta.editedAt || Date.now(),
-              pending: false,
-            });
-            rawSetValue(remoteSaved);
-          }
-        }
-      } catch (error) {
-        console.warn(
-          "공유 데이터 불러오기 실패, 브라우저 저장소를 우선 사용합니다.",
-          error,
-        );
-      } finally {
-        if (!cancelled) setLoaded(true);
-      }
+      await loadRemoteFirst(true);
+      if (!cancelled) setLoaded(true);
     }
 
     hydrate();
 
     return () => {
       cancelled = true;
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     };
   }, [key]);
 
   useEffect(() => {
     if (!loaded) return;
 
-    const retryPendingSave = async () => {
-      try {
-        const meta = getLocalMeta(key);
-        if (!meta.pending) return;
-        const localSaved = safeGetLocalStorage(key);
-        if (!localSaved) return;
-        const parsed = JSON.parse(localSaved) as T;
-        await saveSharedState(key, parsed);
-        setLocalMeta(key, { editedAt: meta.editedAt, pending: false });
-      } catch {
-        // 저장 재시도 실패 시에도 화면 데이터는 유지합니다.
-      }
+    const refreshFromSupabase = async () => {
+      const meta = getLocalMeta(keyRef.current);
+      if (meta.pending) return;
+      await loadRemoteFirst(false);
     };
 
-    const interval = window.setInterval(retryPendingSave, 5000);
-    window.addEventListener("focus", retryPendingSave);
+    const interval = window.setInterval(refreshFromSupabase, 10000);
+    window.addEventListener("focus", refreshFromSupabase);
 
     return () => {
       window.clearInterval(interval);
-      window.removeEventListener("focus", retryPendingSave);
+      window.removeEventListener("focus", refreshFromSupabase);
     };
-  }, [key, loaded]);
+  }, [loaded, key]);
 
   return [value, setValue] as const;
 }
