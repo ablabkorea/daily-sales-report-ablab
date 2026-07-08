@@ -8,7 +8,7 @@ type Manager = string;
 type StoreType = string;
 type PeriodType = "current" | "prevMonth" | "prevYear";
 type SalesView = "거래처별" | "브랜드별" | "담당자별" | "채널별";
-type MonthStartTab = "거래처/휴면 관리" | "Target/EST 관리" | "업로드 관리";
+type MonthStartTab = "거래처/휴면 관리" | "업로드 관리";
 type DrillPeriod = "prevYear" | "prevMonth" | "current" | "currentFullMonth";
 type SalesStatusSortKey =
   | "label"
@@ -125,7 +125,6 @@ const MANAGERS: Manager[] = ["SY", "KT", "SW", "NH", "Bomi", "BM", "bomi"];
 const SALES_VIEWS: SalesView[] = ["거래처별", "브랜드별", "담당자별", "채널별"];
 const MONTH_TABS: MonthStartTab[] = [
   "거래처/휴면 관리",
-  "Target/EST 관리",
   "업로드 관리",
 ];
 
@@ -9506,22 +9505,6 @@ function MonthStartManagement({
             month={month}
             codeMappings={codeMappings}
             setCodeMappings={setCodeMappings}
-          />
-        </div>
-      )}
-      {tab === "Target/EST 관리" && (
-        <div className="space-y-4">
-          <TargetByTypePage
-            records={targets}
-            setRecords={setTargets}
-            month={month}
-          />
-          <TargetOrEstPage
-            title="EST 관리"
-            records={ests}
-            setRecords={setEsts}
-            stores={stores}
-            month={month}
           />
         </div>
       )}
