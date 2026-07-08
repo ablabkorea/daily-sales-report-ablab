@@ -3599,7 +3599,6 @@ function supabaseConfig() {
 
   return {
     endpoint: `${url}/rest/v1/app_state`,
-    realtimeEndpoint: `${url.replace(/^http/, "ws")}/realtime/v1/websocket?apikey=${encodeURIComponent(key)}&vsn=1.0.0`,
     headers: {
       apikey: key,
       Authorization: `Bearer ${key}`,
@@ -3608,12 +3607,14 @@ function supabaseConfig() {
   };
 }
 
-async function loadSharedState<T>(key: string): Promise<T | null> {
+async function loadSharedStateRow<T>(
+  key: string,
+): Promise<AppStateRow<T> | null> {
   const config = supabaseConfig();
   if (!config) return null;
 
   const response = await fetch(
-    `${config.endpoint}?id=eq.${encodeURIComponent(key)}&select=data&limit=1`,
+    `${config.endpoint}?id=eq.${encodeURIComponent(key)}&select=data,updated_at&limit=1`,
     {
       method: "GET",
       headers: config.headers,
@@ -3623,7 +3624,12 @@ async function loadSharedState<T>(key: string): Promise<T | null> {
 
   if (!response.ok) throw new Error(`Supabase load failed: ${response.status}`);
   const rows = (await response.json()) as AppStateRow<T>[];
-  return rows[0]?.data ?? null;
+  return rows[0] ?? null;
+}
+
+async function loadSharedState<T>(key: string): Promise<T | null> {
+  const row = await loadSharedStateRow<T>(key);
+  return row?.data ?? null;
 }
 
 function localMetaKey(key: string) {
@@ -3680,22 +3686,25 @@ function setLocalMeta(
 
 async function saveSharedState<T>(key: string, value: T) {
   const config = supabaseConfig();
-  if (!config) return;
+  if (!config) return null;
 
-  const response = await fetch(`${config.endpoint}?on_conflict=id`, {
+  const updatedAt = new Date().toISOString();
+  const response = await fetch(`${config.endpoint}?on_conflict=id&select=updated_at`, {
     method: "POST",
     headers: {
       ...config.headers,
-      Prefer: "resolution=merge-duplicates,return=minimal",
+      Prefer: "resolution=merge-duplicates,return=representation",
     },
     body: JSON.stringify({
       id: key,
       data: value,
-      updated_at: new Date().toISOString(),
+      updated_at: updatedAt,
     }),
   });
 
   if (!response.ok) throw new Error(`Supabase save failed: ${response.status}`);
+  const rows = (await response.json()) as AppStateRow<T>[];
+  return rows[0]?.updated_at || updatedAt;
 }
 
 function reportSharedSaveError(error: unknown) {
@@ -3710,106 +3719,6 @@ function reportSharedSaveError(error: unknown) {
   );
 }
 
-function dispatchSharedUpdate(key: string) {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(
-    new CustomEvent("ablab_shared_update", {
-      detail: { key, updatedAt: new Date().toISOString() },
-    }),
-  );
-}
-
-function subscribeSharedState(key: string, onRemoteChange: () => void) {
-  if (typeof window === "undefined") return () => {};
-  const config = supabaseConfig();
-  if (!config) return () => {};
-
-  let socket: WebSocket | null = null;
-  let heartbeatTimer: number | null = null;
-  let reconnectTimer: number | null = null;
-  let closed = false;
-  let ref = 1;
-
-  const cleanupSocket = () => {
-    if (heartbeatTimer) window.clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
-    if (socket && socket.readyState <= WebSocket.OPEN) socket.close();
-    socket = null;
-  };
-
-  const connect = () => {
-    if (closed) return;
-    cleanupSocket();
-    socket = new WebSocket(config.realtimeEndpoint);
-
-    socket.onopen = () => {
-      const topic = `realtime:public:app_state:${key}`;
-      socket?.send(
-        JSON.stringify({
-          topic,
-          event: "phx_join",
-          payload: {
-            config: {
-              broadcast: { self: false },
-              presence: { key },
-              postgres_changes: [
-                {
-                  event: "*",
-                  schema: "public",
-                  table: "app_state",
-                  filter: `id=eq.${key}`,
-                },
-              ],
-            },
-          },
-          ref: String(ref++),
-          join_ref: String(ref++),
-        }),
-      );
-      heartbeatTimer = window.setInterval(() => {
-        if (socket?.readyState === WebSocket.OPEN) {
-          socket.send(
-            JSON.stringify({
-              topic: "phoenix",
-              event: "heartbeat",
-              payload: {},
-              ref: String(ref++),
-            }),
-          );
-        }
-      }, 25000);
-    };
-
-    socket.onmessage = (event) => {
-      try {
-        const message = JSON.parse(String(event.data));
-        if (message.event === "postgres_changes") onRemoteChange();
-      } catch (error) {
-        console.warn("Realtime 메시지 처리 실패", error);
-      }
-    };
-
-    socket.onerror = () => {
-      // Realtime이 비활성화되어 있어도 아래 polling이 최신화를 보완합니다.
-    };
-
-    socket.onclose = () => {
-      cleanupSocket();
-      if (!closed) {
-        reconnectTimer = window.setTimeout(connect, 5000);
-      }
-    };
-  };
-
-  connect();
-
-  return () => {
-    closed = true;
-    if (reconnectTimer) window.clearTimeout(reconnectTimer);
-    cleanupSocket();
-  };
-}
-
 function useLocal<T>(key: string, initial: T) {
   const [value, rawSetValue] = useState<T>(initial);
   const [loaded, setLoaded] = useState(false);
@@ -3817,6 +3726,9 @@ function useLocal<T>(key: string, initial: T) {
   const saveTimerRef = useRef<number | null>(null);
   const isSavingRef = useRef(false);
   const keyRef = useRef(key);
+  const lastRemoteUpdatedAtRef = useRef<string | null>(null);
+  const isReloadingRemoteRef = useRef(false);
+  const alertOpenRef = useRef(false);
 
   useEffect(() => {
     keyRef.current = key;
@@ -3827,6 +3739,29 @@ function useLocal<T>(key: string, initial: T) {
     rawSetValue(nextValue);
     if (cacheLocal && typeof window !== "undefined") {
       safeSetLocalStorage(keyRef.current, JSON.stringify(nextValue));
+    }
+  };
+
+  const refreshFromSupabase = async (options?: { allowDuringPending?: boolean }) => {
+    const config = supabaseConfig();
+    if (!config || typeof window === "undefined") return;
+
+    const meta = getLocalMeta(keyRef.current);
+    if (meta.pending && !options?.allowDuringPending) return;
+    if (isSavingRef.current && !options?.allowDuringPending) return;
+
+    isReloadingRemoteRef.current = true;
+    try {
+      const remoteRow = await loadSharedStateRow<T>(keyRef.current);
+      if (!remoteRow || remoteRow.data === null || remoteRow.data === undefined) return;
+      lastRemoteUpdatedAtRef.current = remoteRow.updated_at || null;
+      applyValue(remoteRow.data);
+      setLocalMeta(keyRef.current, {
+        editedAt: Date.now(),
+        pending: false,
+      });
+    } finally {
+      isReloadingRemoteRef.current = false;
     }
   };
 
@@ -3842,7 +3777,8 @@ function useLocal<T>(key: string, initial: T) {
     saveTimerRef.current = window.setTimeout(async () => {
       try {
         isSavingRef.current = true;
-        await saveSharedState(keyRef.current, nextValue);
+        const savedUpdatedAt = await saveSharedState(keyRef.current, nextValue);
+        if (savedUpdatedAt) lastRemoteUpdatedAtRef.current = savedUpdatedAt;
         const meta = getLocalMeta(keyRef.current);
         if (meta.editedAt === editedAt)
           setLocalMeta(keyRef.current, { editedAt, pending: false });
@@ -3867,27 +3803,40 @@ function useLocal<T>(key: string, initial: T) {
     });
   };
 
-  const refreshFromSupabase = async (options?: { allowDuringPending?: boolean }) => {
+  const checkRemoteUpdate = async () => {
     const config = supabaseConfig();
     if (!config || typeof window === "undefined") return;
+    if (alertOpenRef.current || isSavingRef.current || isReloadingRemoteRef.current) return;
 
     const meta = getLocalMeta(keyRef.current);
-    if (meta.pending && !options?.allowDuringPending) return;
-    if (isSavingRef.current && !options?.allowDuringPending) return;
+    if (meta.pending) return;
 
-    const remoteSaved = await loadSharedState<T>(keyRef.current);
-    if (remoteSaved === null) return;
+    const remoteRow = await loadSharedStateRow<T>(keyRef.current);
+    if (!remoteRow?.updated_at) return;
 
-    const before = JSON.stringify(valueRef.current);
-    const after = JSON.stringify(remoteSaved);
-    if (before === after) return;
+    if (!lastRemoteUpdatedAtRef.current) {
+      lastRemoteUpdatedAtRef.current = remoteRow.updated_at;
+      return;
+    }
 
-    applyValue(remoteSaved);
-    setLocalMeta(keyRef.current, {
-      editedAt: Date.now(),
-      pending: false,
-    });
-    dispatchSharedUpdate(keyRef.current);
+    if (remoteRow.updated_at === lastRemoteUpdatedAtRef.current) return;
+
+    alertOpenRef.current = true;
+    try {
+      const shouldRefresh = window.confirm(
+        "다른 사용자가 데이터를 수정했습니다. 최신 데이터로 새로고침할까요?",
+      );
+      if (shouldRefresh) {
+        lastRemoteUpdatedAtRef.current = remoteRow.updated_at;
+        applyValue(remoteRow.data);
+        setLocalMeta(keyRef.current, { editedAt: Date.now(), pending: false });
+      } else {
+        // 같은 알림이 반복해서 뜨지 않도록 현재 원격 버전은 확인 처리만 합니다.
+        lastRemoteUpdatedAtRef.current = remoteRow.updated_at;
+      }
+    } finally {
+      alertOpenRef.current = false;
+    }
   };
 
   useEffect(() => {
@@ -3896,10 +3845,11 @@ function useLocal<T>(key: string, initial: T) {
     async function hydrate() {
       try {
         // Supabase를 원본으로 사용합니다. 로컬 캐시가 있어도 원격 최신값을 먼저 불러옵니다.
-        const remoteSaved = await loadSharedState<T>(key);
-        if (!cancelled && remoteSaved !== null) {
+        const remoteRow = await loadSharedStateRow<T>(key);
+        if (!cancelled && remoteRow?.data !== null && remoteRow?.data !== undefined) {
           keyRef.current = key;
-          applyValue(remoteSaved);
+          lastRemoteUpdatedAtRef.current = remoteRow.updated_at || null;
+          applyValue(remoteRow.data);
           setLocalMeta(key, { editedAt: Date.now(), pending: false });
           return;
         }
@@ -3950,41 +3900,41 @@ function useLocal<T>(key: string, initial: T) {
         const localSaved = safeGetLocalStorage(key);
         if (!localSaved) return;
         const parsed = JSON.parse(localSaved) as T;
-        await saveSharedState(key, parsed);
+        const savedUpdatedAt = await saveSharedState(key, parsed);
+        if (savedUpdatedAt) lastRemoteUpdatedAtRef.current = savedUpdatedAt;
         setLocalMeta(key, { editedAt: meta.editedAt, pending: false });
       } catch (error) {
         console.warn("공유 데이터 저장 재시도 실패", error);
       }
     };
 
-    const refreshLatest = () => {
-      refreshFromSupabase().catch((error) =>
-        console.warn("공유 데이터 최신화 실패", error),
+    const safeCheckRemoteUpdate = () => {
+      checkRemoteUpdate().catch((error) =>
+        console.warn("공유 데이터 변경 확인 실패", error),
       );
     };
 
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") refreshLatest();
+      if (document.visibilityState === "visible") safeCheckRemoteUpdate();
     };
 
-    const unsubscribeRealtime = subscribeSharedState(key, refreshLatest);
     const interval = window.setInterval(() => {
       retryPendingSave();
-      refreshLatest();
-    }, 10000);
-    window.addEventListener("focus", refreshLatest);
+      safeCheckRemoteUpdate();
+    }, 15000);
+    window.addEventListener("focus", safeCheckRemoteUpdate);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.clearInterval(interval);
-      unsubscribeRealtime();
-      window.removeEventListener("focus", refreshLatest);
+      window.removeEventListener("focus", safeCheckRemoteUpdate);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [key, loaded]);
 
   return [value, setValue] as const;
 }
+
 
 function readFileRows(file: File): Promise<Record<string, unknown>[]> {
   return new Promise((resolve, reject) => {
@@ -4149,59 +4099,6 @@ function orderRowsForExcel(rows: SalesRecord[]) {
 const ADMIN_PASSWORD = "ablab2026";
 const EST_ENTRY_MANAGERS: Manager[] = ["SY", "KT", "NH"];
 
-function SharedUpdateToast() {
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    let timer: number | null = null;
-    const onSharedUpdate = (event: Event) => {
-      const detail = (event as CustomEvent<{ key?: string }>).detail;
-      const labelMap: Record<string, string> = {
-        ablab_sales_v14: "매출 데이터",
-        ablab_stores_v15: "거래처 데이터",
-        ablab_targets_v14: "Target 데이터",
-        ablab_ests_v14: "EST 데이터",
-        ablab_time_configs_v14: "Time Gone 설정",
-        ablab_code_mappings_v1: "거래처 매핑",
-        ablab_item_costs_v1: "품목현황 데이터",
-      };
-      const label = detail?.key ? labelMap[detail.key] || "공유 데이터" : "공유 데이터";
-      setMessage(`${label}가 다른 사용자 변경으로 최신 반영되었습니다.`);
-      if (timer) window.clearTimeout(timer);
-      timer = window.setTimeout(() => setMessage(""), 5500);
-    };
-
-    window.addEventListener("ablab_shared_update", onSharedUpdate);
-    return () => {
-      if (timer) window.clearTimeout(timer);
-      window.removeEventListener("ablab_shared_update", onSharedUpdate);
-    };
-  }, []);
-
-  if (!message) return null;
-
-  return (
-    <div className="fixed right-4 top-[78px] z-[80] max-w-[360px] rounded-2xl border border-orange-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 shadow-xl">
-      <div className="flex items-start gap-3">
-        <span className="text-lg">🔔</span>
-        <div className="min-w-0 flex-1">
-          <p>{message}</p>
-          <p className="mt-1 text-[11px] font-semibold text-slate-500">
-            새로고침하지 않아도 화면 데이터가 자동으로 갱신됩니다.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setMessage("")}
-          className="rounded-full px-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-        >
-          ×
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function isEstEntryPeriodToday() {
   return Number(today().slice(8, 10)) <= 4;
 }
@@ -4324,7 +4221,6 @@ export default function SalesReportClient() {
           </div>
         </div>
       </header>
-      <SharedUpdateToast />
 
       <section className="min-w-0 p-4 lg:p-5">
         <div className="mb-4 space-y-3 rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
