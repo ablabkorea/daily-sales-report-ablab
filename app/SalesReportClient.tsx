@@ -4787,7 +4787,7 @@ function EstQuickEntry({
 
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="max-h-[68vh] overflow-auto isolate">
-          <table className="w-full min-w-[1280px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+          <table className="w-full min-w-[1450px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처명</th>
@@ -4798,6 +4798,7 @@ function EstQuickEntry({
                 <th className="sticky top-0 z-20 border border-slate-300 bg-purple-50 px-3 py-2 font-bold text-purple-800">전월 EST</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-50 px-3 py-2 font-bold text-yellow-900">전월 EST 달성률</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">{month} EST 입력</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-cyan-50 px-3 py-2 font-bold text-cyan-800">전월 EST 대비 차이</th>
               </tr>
             </thead>
             <tbody>
@@ -4807,16 +4808,22 @@ function EstQuickEntry({
                 const prevSales = prevSalesMap.get(store.code) || 0;
                 const prevEst = prevEstMap.get(store.code) || 0;
                 const prevEstRate = prevEst ? (prevSales / prevEst) * 100 : 0;
-                const isCriticalRate = Boolean(prevEst && prevEstRate < 50);
+                const estDifference = Number(value || 0) - Number(prevEst || 0);
+                const isCriticalRate = Boolean(prevEst && prevEstRate < 30);
                 const rateTone = !prevEst
                   ? "bg-slate-100 text-slate-500 ring-slate-200"
                   : isCriticalRate
                     ? "bg-red-600 text-white ring-red-300 shadow-red-300 animate-pulse"
-                    : prevEstRate >= 100
-                      ? "bg-emerald-100 text-emerald-800 ring-emerald-200"
-                      : prevEstRate >= 90
-                        ? "bg-yellow-100 text-yellow-900 ring-yellow-200"
+                    : prevEstRate > 120
+                      ? "bg-yellow-100 text-yellow-900 ring-yellow-300"
+                      : prevEstRate >= 80
+                        ? "bg-emerald-100 text-emerald-800 ring-emerald-300"
                         : "bg-slate-100 text-slate-700 ring-slate-200";
+                const differenceTone = estDifference > 0
+                  ? "text-emerald-700 bg-emerald-50"
+                  : estDifference < 0
+                    ? "text-red-600 bg-red-50"
+                    : "text-slate-500 bg-slate-50";
                 return (
                   <tr key={store.code} className="hover:bg-orange-50/60">
                     <td className="border border-slate-300 px-3 py-2 text-center font-semibold text-slate-900">{store.name}</td>
@@ -4844,12 +4851,17 @@ function EstQuickEntry({
                         className="h-9 w-full min-w-[150px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
                       />
                     </td>
+                    <td className={`border border-slate-300 px-3 py-2 text-right font-extrabold ${differenceTone}`}>
+                      {value || prevEst
+                        ? `${estDifference > 0 ? "+" : ""}${won(estDifference)}`
+                        : "-"}
+                    </td>
                   </tr>
                 );
               })}
               {!rows.length && (
                 <tr>
-                  <td colSpan={8} className="border border-slate-300 p-8 text-center text-slate-500">
+                  <td colSpan={9} className="border border-slate-300 p-8 text-center text-slate-500">
                     표시할 거래처가 없습니다.
                   </td>
                 </tr>
@@ -5288,16 +5300,19 @@ function HeaderMetricInfo({
 
 function KpiGroup({
   items,
+  className = "bg-slate-50/75",
 }: {
   items: {
     title: string;
     value: string | number;
     color?: string;
     format?: "won" | "percent" | "number";
+    highlightClass?: string;
   }[];
+  className?: string;
 }) {
   return (
-    <div className="h-full rounded-xl border border-gray-300/70 bg-slate-50/75 p-2.5 shadow-sm backdrop-blur">
+    <div className={`h-full rounded-xl border border-gray-300/70 p-2.5 shadow-sm backdrop-blur ${className}`}>
       <div className="divide-y divide-slate-200/70">
         {items.map((item) => {
           const value =
@@ -5313,7 +5328,7 @@ function KpiGroup({
           return (
             <div
               key={item.title}
-              className="flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 py-0.5 first:pt-0 last:pb-0"
+              className={`flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 rounded-lg px-1.5 py-0.5 first:pt-0 last:pb-0 ${item.highlightClass || ""}`}
             >
               <p className="shrink-0 break-keep text-[11px] font-semibold text-slate-500">
                 {item.title}
@@ -5461,11 +5476,13 @@ function DashboardTopKpis({
             title: "Target 달성률",
             value: targetTotal ? (currentSales / targetTotal) * 100 : 0,
             format: "percent",
-            color: "text-slate-900",
+            color: "text-orange-950",
+            highlightClass: "bg-orange-200/80 ring-1 ring-orange-300/80",
           },
         ]}
       />
       <KpiGroup
+        className="bg-purple-50/90 ring-1 ring-purple-200/80"
         items={[
           { title: "매장 EST", value: storeEst, format: "won" },
           { title: "비매장 EST", value: nonStoreEst, format: "won" },
@@ -8143,6 +8160,26 @@ function SalesStatus({
   }));
 
   const salesStatusColSpan = compact ? 12 : isStoreListView ? 13 : 12;
+  const { storeTarget: salesStoreTarget, nonStoreTarget: salesNonStoreTarget } =
+    metricsByStoreType(stores, targets, ests, month);
+  const salesTargetTotal = salesStoreTarget + salesNonStoreTarget;
+  const overallCurrentSales = sales
+    .filter(
+      (row) =>
+        row.period === "current" &&
+        inRange(row.saleDate, monthStart(month), date),
+    )
+    .reduce((total, row) => total + Number(row.salesAmount || 0), 0);
+  const salesTargetRate = salesTargetTotal
+    ? (overallCurrentSales / salesTargetTotal) * 100
+    : 0;
+  const salesTargetTone = !salesTargetTotal
+    ? "border-slate-200 bg-slate-50 text-slate-500"
+    : salesTargetRate >= 100
+      ? "border-emerald-300 bg-emerald-100 text-emerald-800"
+      : salesTargetRate >= 80
+        ? "border-orange-300 bg-orange-100 text-orange-900"
+        : "border-red-200 bg-red-50 text-red-700";
 
   return (
     <>
@@ -8156,6 +8193,15 @@ function SalesStatus({
             </p>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            <div className={`min-w-[178px] rounded-2xl border px-4 py-2 text-right shadow-sm ${salesTargetTone}`}>
+              <div className="text-[11px] font-extrabold tracking-wide opacity-80">TARGET 달성률</div>
+              <div className="mt-0.5 text-3xl font-black leading-none tracking-tight">
+                {salesTargetTotal ? pct(salesTargetRate) : "-"}
+              </div>
+              <div className="mt-1 text-[10px] font-bold opacity-75">
+                {won(overallCurrentSales)} / {won(salesTargetTotal)}
+              </div>
+            </div>
             {compact && (
               <select
                 value={view}
