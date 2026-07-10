@@ -3423,6 +3423,11 @@ function norm(v: unknown) {
   return String(v ?? "").trim();
 }
 
+function displayBrand(v: unknown) {
+  const brand = norm(v);
+  return !brand || brand === "미지정" ? "당월 신규 거래처" : brand;
+}
+
 function normalizeStatus(v: unknown): Store["status"] {
   const t = norm(v);
   return t === "종료" ||
@@ -3536,7 +3541,7 @@ function resolveStoreInfo(
     channel: original?.channel || fallback.channel || "미지정",
     manager: original?.manager || fallback.manager || "미지정",
     storeType: original?.storeType || fallback.storeType || "비매장",
-    brand: original?.brand || fallback.brand || "미지정",
+    brand: displayBrand(original?.brand || fallback.brand),
     status: original?.status || "거래중",
     originalCode: storeCode,
     originalName: original?.name || fallbackName || storeCode,
@@ -3574,7 +3579,7 @@ function makeSale(
     channel: s?.channel || "매장",
     manager: s?.manager || "",
     storeType: s?.storeType || "매장",
-    brand: s?.brand || "미지정",
+    brand: displayBrand(s?.brand),
     itemCode,
     itemName,
     quantity,
@@ -4330,9 +4335,9 @@ export default function SalesReportClient() {
     ...(canAccessEstEntry ? [{ label: "EST 입력", order: "0" }] : []),
     { label: "대시보드", order: "1" },
     { label: "매출현황", order: "2" },
-    { label: "거래처별 분석", order: "3" },
+    { label: "거래처별 상세", order: "3" },
     { label: "품목분석", order: "4" },
-    { label: "품목현황", order: "5" },
+    { label: "매입가 정보", order: "5" },
     ...(isAdmin ? [{ label: "월초관리", order: "6" }] : []),
   ];
 
@@ -4492,13 +4497,13 @@ export default function SalesReportClient() {
             codeMappings={codeMappings}
           />
         )}
-        {active === "거래처별 분석" && (
+        {active === "거래처별 상세" && (
           <ItemAnalysis
             stores={stores}
             sales={sales}
             month={dashMonth}
             date={dashDate}
-            pageTitle="거래처별 분석"
+            pageTitle="거래처별 상세"
           />
         )}
         {active === "품목분석" && (
@@ -4509,7 +4514,7 @@ export default function SalesReportClient() {
             date={dashDate}
           />
         )}
-        {active === "품목현황" && (
+        {active === "매입가 정보" && (
           <ItemCostStatus
             sales={sales}
             itemCosts={itemCosts}
@@ -5085,7 +5090,7 @@ function ItemCostStatus({
       <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-base font-extrabold text-slate-900">품목현황</div>
+            <div className="text-base font-extrabold text-slate-900">매입가 정보</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -5340,11 +5345,11 @@ function KpiGroup({
               key={item.title}
               className={`flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 rounded-lg px-1.5 py-0.5 first:pt-0 last:pb-0 ${item.highlightClass || ""}`}
             >
-              <p className="shrink-0 break-keep text-[11px] font-semibold text-black">
+              <p className="shrink-0 break-keep text-[13px] font-semibold text-black">
                 {item.title}
               </p>
               <p
-                className={`min-w-0 max-w-full flex-1 whitespace-normal break-all text-right text-[14px] font-bold leading-tight tracking-tight md:text-[15px] xl:text-[15px] 2xl:text-[16px] ${item.color || "text-black"}`}
+                className={`min-w-0 max-w-full flex-1 whitespace-normal break-all text-right text-[16px] font-bold leading-tight tracking-tight md:text-[16px] xl:text-[17px] 2xl:text-[18px] ${item.color || "text-black"}`}
               >
                 {value}
               </p>
@@ -6215,7 +6220,7 @@ function ItemAnalysis({
       }
     >();
     activeStores.forEach((s) => {
-      const brand = s.brand || "미지정";
+      const brand = displayBrand(s.brand);
       if (!map.has(brand))
         map.set(brand, {
           brand,
@@ -6260,7 +6265,7 @@ function ItemAnalysis({
   const storeRows = useMemo(() => {
     const base =
       mode === "브랜드별" && selectedBrand
-        ? activeStores.filter((s) => (s.brand || "미지정") === selectedBrand)
+        ? activeStores.filter((s) => displayBrand(s.brand) === selectedBrand)
         : activeStores;
     return base
       .map((s) => ({
@@ -7587,7 +7592,7 @@ function SalesStatus({
       channel: mappedStore?.channel || r.channel || "미지정",
       manager: mappedStore?.manager || r.manager || "미지정",
       storeType: mappedStore?.storeType || r.storeType || "비매장",
-      brand: mappedStore?.brand || r.brand || "미지정",
+      brand: displayBrand(mappedStore?.brand || r.brand),
       status: mappedStore?.status || ("거래중" as const),
       originalCode: r.storeCode,
       originalName: r.storeName,
@@ -7714,7 +7719,7 @@ function SalesStatus({
   const rowKey = (r: SalesRecord) => {
     const resolved = resolveRecord(r);
     if (isStoreListView) return resolved.code || resolved.name;
-    if (view === "브랜드별") return resolved.brand || "미지정";
+    if (view === "브랜드별") return displayBrand(resolved.brand);
     return resolved.channel || "미지정";
   };
 
@@ -7729,7 +7734,7 @@ function SalesStatus({
   const storeKey = (store: Store) => {
     const resolved = resolveStoreInfo(store.code, store.name, store, stores);
     if (isStoreListView) return resolved.code || resolved.name;
-    if (view === "브랜드별") return resolved.brand || "미지정";
+    if (view === "브랜드별") return displayBrand(resolved.brand);
     return resolved.channel || "미지정";
   };
 
@@ -7789,7 +7794,7 @@ function SalesStatus({
         : isStoreListView
           ? display.code || display.name || "미지정"
           : view === "브랜드별"
-            ? display.brand || "미지정"
+            ? displayBrand(display.brand)
             : display.channel || "미지정";
       estMap.set(key, (estMap.get(key) || 0) + e.amount);
     });
@@ -7999,7 +8004,7 @@ function SalesStatus({
       const prev = storeMapForManager.get(storeKeyValue) || {
         code: resolved.code || record.storeCode || "미지정",
         name: resolved.name || record.storeName || "미지정",
-        brand: resolved.brand || "미지정",
+        brand: displayBrand(resolved.brand),
         channel: resolved.channel || "미지정",
         storeType: resolved.storeType || "미지정",
         prevYearSales: 0,
@@ -9901,7 +9906,7 @@ function MappingPage({
     channel: "도매",
     manager: "",
     storeType: "비매장",
-    brand: "미지정",
+    brand: "당월 신규 거래처",
     status: "거래중",
   };
   const [form, setForm] = useState<Store>(empty);
@@ -9974,7 +9979,7 @@ function MappingPage({
           channel,
           manager: norm(r["담당자"]) as Manager,
           storeType: normalizeStoreType(r["채널2"] ?? r["매장구분"], channel),
-          brand: norm(r["브랜드"]) || "미지정",
+          brand: displayBrand(r["브랜드"]),
           status: normalizeStatus(r["거래상태"]),
         };
       })
@@ -10959,7 +10964,7 @@ function buildAutoClosedStoresFromPrevYear(
       channel: r.channel || "미지정",
       manager: (r.manager || "") as Manager,
       storeType: r.storeType || "비매장",
-      brand: r.brand || "미지정",
+      brand: displayBrand(r.brand),
       status: "거래종료",
     });
   });
@@ -11082,7 +11087,7 @@ function UploadPage({
               channel: "매장" as Channel,
               manager: "" as Manager,
               storeType: "매장" as StoreType,
-              brand: r.brand || "미지정",
+              brand: displayBrand(r.brand),
               status: "거래중" as const,
             }));
 
