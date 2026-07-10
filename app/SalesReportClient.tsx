@@ -6672,67 +6672,103 @@ function ItemAnalysis({
             )}
           </div>
           <div className="max-h-[65vh] overflow-auto isolate">
-            <table className="w-full min-w-[1000px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
-              <thead>
-                <tr>
-                  <ItemAnalysisSortableTh rowSpan={2} sortKey="brand" sortConfig={storeSortConfig} onSort={requestStoreSort}>브랜드</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh rowSpan={2} sortKey="code" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처코드</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh rowSpan={2} sortKey="name" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처명</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh rowSpan={2} sortKey="manager" sortConfig={storeSortConfig} onSort={requestStoreSort}>담당자</ItemAnalysisSortableTh>
-                  <PopupTh colSpan={2} className="bg-emerald-100 text-center text-emerald-900">전년동월</PopupTh>
-                  <PopupTh colSpan={2} className="bg-blue-100 text-center text-blue-900">전월</PopupTh>
-                  <PopupTh colSpan={1} className="bg-yellow-100 text-center text-yellow-900">당월</PopupTh>
-                  <PopupTh rowSpan={2}>상세</PopupTh>
-                </tr>
-                <tr>
-                  <PopupTh top="top-[37px]" className="bg-emerald-50 text-right">매출</PopupTh>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-emerald-50" sortKey="prevYearRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
-                  <PopupTh top="top-[37px]" className="bg-blue-50 text-right">매출</PopupTh>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-blue-50" sortKey="prevMonthRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-yellow-50" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>매출</ItemAnalysisSortableTh>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedStoreRows.map((r) => (
-                  <tr key={r.store.code} className="hover:bg-blue-50">
-                    <td className="border border-slate-300 p-2">
-                      {r.store.brand}
-                    </td>
-                    <td className="border border-slate-300 p-2">
-                      {r.store.code}
-                    </td>
-                    <td className="border border-slate-300 p-2 font-semibold">
-                      {r.store.name}
-                    </td>
-                    <td className="border border-slate-300 p-2">
-                      {r.store.manager || "미지정"}
-                    </td>
-                    <td className="border border-slate-300 p-2 text-right">{won(r.prevYear)}</td>
-                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevYear) >= 0 ? "text-emerald-600" : "text-red-600"}`}>{itemSignedPct(itemMetricRate(r.current, r.prevYear))}</td>
-                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth)}</td>
-                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevMonth) >= 0 ? "text-emerald-600" : "text-red-600"}`}>{itemSignedPct(itemMetricRate(r.current, r.prevMonth))}</td>
-                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">{won(r.current)}</td>
-                    <td className="border border-slate-300 p-2">
-                      <button
-                        onClick={() => setSelectedStoreCode(r.store.code)}
-                        className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white"
-                      >
-                        품목 보기
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {!storeRows.length && (
-                  <tr>
-                    <td
-                      colSpan={10}
-                      className="border border-slate-300 p-8 text-center text-slate-500"
-                    >
-                      표시할 데이터가 없습니다.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
+            <table className="w-full min-w-[900px] border-separate border-spacing-0 text-center text-[12px] text-slate-900 whitespace-nowrap">
+              {mode === "매장별" && !selectedBrand ? (
+                <>
+                  <thead>
+                    <tr>
+                      <ItemAnalysisSortableTh rowSpan={2} sortKey="name" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처명</ItemAnalysisSortableTh>
+                      <ItemAnalysisSortableTh rowSpan={2} sortKey="manager" sortConfig={storeSortConfig} onSort={requestStoreSort}>담당자</ItemAnalysisSortableTh>
+                      <PopupTh rowSpan={2} className="bg-slate-100 text-center font-bold text-slate-900">구분</PopupTh>
+                      <PopupTh colSpan={3} className="bg-emerald-100 text-center text-[13px] font-extrabold text-slate-900">Time Gone 대비</PopupTh>
+                      <PopupTh rowSpan={2} className="bg-slate-100 text-center font-bold text-slate-900">상세</PopupTh>
+                    </tr>
+                    <tr>
+                      <PopupTh top="top-[37px]" className="bg-emerald-50 text-center font-bold text-slate-900">전년동월</PopupTh>
+                      <PopupTh top="top-[37px]" className="bg-blue-50 text-center font-bold text-slate-900">전월</PopupTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-yellow-50 text-slate-900" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당일까지 매출</ItemAnalysisSortableTh>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedStoreRows.map((r) => (
+                      <tr key={r.store.code} className="hover:bg-slate-50">
+                        <td className="border border-slate-300 px-3 py-2 text-center text-[12px] font-semibold text-slate-900 whitespace-nowrap">
+                          {r.store.name}
+                        </td>
+                        <td className="border border-slate-300 px-3 py-2 text-center text-[12px] font-semibold text-slate-900 whitespace-nowrap">
+                          {r.store.manager || "미지정"}
+                        </td>
+                        <td className="border border-slate-300 px-3 py-2 text-center text-[12px] font-semibold text-slate-900 whitespace-nowrap">
+                          {r.store.storeType === "매장" ? "매장" : "비매장"}
+                        </td>
+                        <td className="border border-slate-300 px-3 py-2 text-right text-[13px] font-bold text-slate-900 tabular-nums whitespace-nowrap">{won(r.prevYear)}</td>
+                        <td className="border border-slate-300 px-3 py-2 text-right text-[13px] font-bold text-slate-900 tabular-nums whitespace-nowrap">{won(r.prevMonth)}</td>
+                        <td className="border border-slate-300 px-3 py-2 text-right text-[13px] font-extrabold text-slate-900 tabular-nums whitespace-nowrap">{won(r.current)}</td>
+                        <td className="border border-slate-300 px-3 py-2 text-center whitespace-nowrap">
+                          <button
+                            onClick={() => setSelectedStoreCode(r.store.code)}
+                            className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white"
+                          >
+                            품목 보기
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {!storeRows.length && (
+                      <tr>
+                        <td colSpan={7} className="border border-slate-300 p-8 text-center text-slate-500">
+                          표시할 데이터가 없습니다.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </>
+              ) : (
+                <>
+                  <thead>
+                    <tr>
+                      <ItemAnalysisSortableTh rowSpan={2} sortKey="brand" sortConfig={storeSortConfig} onSort={requestStoreSort}>브랜드</ItemAnalysisSortableTh>
+                      <ItemAnalysisSortableTh rowSpan={2} sortKey="code" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처코드</ItemAnalysisSortableTh>
+                      <ItemAnalysisSortableTh rowSpan={2} sortKey="name" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처명</ItemAnalysisSortableTh>
+                      <ItemAnalysisSortableTh rowSpan={2} sortKey="manager" sortConfig={storeSortConfig} onSort={requestStoreSort}>담당자</ItemAnalysisSortableTh>
+                      <PopupTh colSpan={2} className="bg-emerald-100 text-center text-slate-900">전년동월</PopupTh>
+                      <PopupTh colSpan={2} className="bg-blue-100 text-center text-slate-900">전월</PopupTh>
+                      <PopupTh colSpan={1} className="bg-yellow-100 text-center text-slate-900">당월</PopupTh>
+                      <PopupTh rowSpan={2}>상세</PopupTh>
+                    </tr>
+                    <tr>
+                      <PopupTh top="top-[37px]" className="bg-emerald-50 text-right text-slate-900">매출</PopupTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-emerald-50" sortKey="prevYearRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
+                      <PopupTh top="top-[37px]" className="bg-blue-50 text-right text-slate-900">매출</PopupTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-blue-50" sortKey="prevMonthRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-yellow-50" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>매출</ItemAnalysisSortableTh>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedStoreRows.map((r) => (
+                      <tr key={r.store.code} className="hover:bg-blue-50">
+                        <td className="border border-slate-300 p-2 text-slate-900">{r.store.brand}</td>
+                        <td className="border border-slate-300 p-2 text-slate-900">{r.store.code}</td>
+                        <td className="border border-slate-300 p-2 font-semibold text-slate-900">{r.store.name}</td>
+                        <td className="border border-slate-300 p-2 text-slate-900">{r.store.manager || "미지정"}</td>
+                        <td className="border border-slate-300 p-2 text-right font-semibold text-slate-900">{won(r.prevYear)}</td>
+                        <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevYear) >= 0 ? "text-emerald-600" : "text-red-600"}`}>{itemSignedPct(itemMetricRate(r.current, r.prevYear))}</td>
+                        <td className="border border-slate-300 p-2 text-right font-semibold text-slate-900">{won(r.prevMonth)}</td>
+                        <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevMonth) >= 0 ? "text-emerald-600" : "text-red-600"}`}>{itemSignedPct(itemMetricRate(r.current, r.prevMonth))}</td>
+                        <td className="border border-slate-300 p-2 text-right font-bold text-slate-900">{won(r.current)}</td>
+                        <td className="border border-slate-300 p-2">
+                          <button onClick={() => setSelectedStoreCode(r.store.code)} className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white">품목 보기</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {!storeRows.length && (
+                      <tr>
+                        <td colSpan={10} className="border border-slate-300 p-8 text-center text-slate-500">표시할 데이터가 없습니다.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </>
+              )}
             </table>
           </div>
         </div>
