@@ -7234,6 +7234,7 @@ function ItemShipmentAnalysis({
       prevRate,
       currentRate,
       rateChange: currentRate - prevRate,
+      storeCount: new Set(itemRows.flatMap((row) => Array.from(row.storeCodes))).size,
     };
   }, [itemRows]);
 
@@ -7358,57 +7359,59 @@ function ItemShipmentAnalysis({
             </div>
           </div>
           <div className="max-h-[68vh] overflow-auto isolate">
-            <table className="w-full min-w-[1550px] border-separate border-spacing-0 text-center text-[11px] text-black whitespace-nowrap">
+            <table className="w-full min-w-[1650px] border-separate border-spacing-0 text-center text-[11px] text-black whitespace-nowrap">
               <thead>
-                <tr>
-                  <PopupTh>품목코드</PopupTh>
-                  <PopupTh>품목명</PopupTh>
-                  <PopupTh>카테고리</PopupTh>
-                  <PopupTh right>전월매출</PopupTh>
-                  <PopupTh right>전월매입단가</PopupTh>
-                  <PopupTh right>전월이익금액</PopupTh>
-                  <PopupTh right>전월이익률</PopupTh>
-                  <PopupTh right>당월매출</PopupTh>
-                  <PopupTh right>당월매입단가</PopupTh>
-                  <PopupTh right>당월이익금액</PopupTh>
-                  <PopupTh right>당월이익률</PopupTh>
-                  <PopupTh right>이익률변동</PopupTh>
-                  <PopupTh>상세</PopupTh>
+                <tr className="bg-slate-100">
+                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-3 py-2 font-bold">품목코드</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-3 py-2 font-bold">품목명</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-2 py-2 font-bold">
+                    <div className="flex min-w-[130px] flex-col items-center gap-1">
+                      <span>카테고리</span>
+                      <select
+                        value={categoryFilter}
+                        onChange={(e) => {
+                          setCategoryFilter(e.target.value);
+                          setSelectedItemCode("");
+                        }}
+                        className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-black"
+                      >
+                        {categoryOptions.map((category) => (
+                          <option key={category} value={category}>{category}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </th>
+                  <th colSpan={4} className="sticky top-0 z-30 border border-blue-200 bg-blue-100 px-3 py-2 text-sm font-extrabold text-black">전월</th>
+                  <th colSpan={4} className="sticky top-0 z-30 border border-orange-200 bg-orange-100 px-3 py-2 text-sm font-extrabold text-black">당월</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-yellow-50 px-3 py-2 font-bold">이익률변동</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-emerald-50 px-3 py-2 font-bold">사용 거래처 수</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-3 py-2 font-bold">상세</th>
                 </tr>
-                <tr className="bg-slate-50">
-                  <th className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1" />
-                  <th className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1" />
-                  <th className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1">
-                    <select
-                      value={categoryFilter}
-                      onChange={(e) => {
-                        setCategoryFilter(e.target.value);
-                        setSelectedItemCode("");
-                      }}
-                      className="h-7 w-full min-w-[110px] rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-black"
-                    >
-                      {categoryOptions.map((category) => (
-                        <option key={category} value={category}>{category}</option>
-                      ))}
-                    </select>
+                <tr>
+                  <th className="sticky top-[37px] z-20 border border-blue-200 bg-blue-50 px-3 py-2 font-bold">매출</th>
+                  <th className="sticky top-[37px] z-20 border border-blue-200 bg-blue-50 px-3 py-2 font-bold">매입단가</th>
+                  <th className="sticky top-[37px] z-20 border border-blue-200 bg-blue-50 px-3 py-2 font-bold">이익금액</th>
+                  <th className="sticky top-[37px] z-20 border border-blue-200 bg-blue-50 px-3 py-2 font-bold">이익률</th>
+                  <th className="sticky top-[37px] z-20 border border-orange-200 bg-orange-50 px-3 py-2 font-bold">매출</th>
+                  <th className="sticky top-[37px] z-20 border border-orange-200 bg-orange-50 px-3 py-2 font-bold">매입단가</th>
+                  <th className="sticky top-[37px] z-20 border border-orange-200 bg-orange-50 px-3 py-2 font-bold">이익금액</th>
+                  <th className="sticky top-[37px] z-20 border border-orange-200 bg-orange-50 px-2 py-1 font-bold">
+                    <div className="flex min-w-[110px] flex-col items-center gap-1">
+                      <span>이익률</span>
+                      <select
+                        value={profitRateFilter}
+                        onChange={(e) => {
+                          setProfitRateFilter(e.target.value);
+                          setSelectedItemCode("");
+                        }}
+                        className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-black"
+                      >
+                        {["전체", "30% 미만", "30~40%", "40% 이상", "상승", "하락"].map((value) => (
+                          <option key={value} value={value}>{value}</option>
+                        ))}
+                      </select>
+                    </div>
                   </th>
-                  <th colSpan={7} className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1" />
-                  <th className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1">
-                    <select
-                      value={profitRateFilter}
-                      onChange={(e) => {
-                        setProfitRateFilter(e.target.value);
-                        setSelectedItemCode("");
-                      }}
-                      className="h-7 w-full min-w-[105px] rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-black"
-                    >
-                      {["전체", "30% 미만", "30~40%", "40% 이상", "상승", "하락"].map((value) => (
-                        <option key={value} value={value}>{value}</option>
-                      ))}
-                    </select>
-                  </th>
-                  <th className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1" />
-                  <th className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1" />
                 </tr>
               </thead>
               <tbody>
@@ -7428,6 +7431,7 @@ function ItemShipmentAnalysis({
                     <td className={`border border-slate-300 p-2 text-right font-extrabold ${r.profitRateChange > 0 ? "text-emerald-700" : r.profitRateChange < 0 ? "text-red-600" : "text-black"}`}>
                       {itemSignedPct(r.profitRateChange)}
                     </td>
+                    <td className="border border-slate-300 p-2 text-center font-extrabold">{r.storeCodes.size.toLocaleString("ko-KR")}</td>
                     <td className="border border-slate-300 p-2">
                       <button
                         onClick={() => setSelectedItemCode(r.itemCode)}
@@ -7440,7 +7444,7 @@ function ItemShipmentAnalysis({
                 ))}
                 {!itemRows.length && (
                   <tr>
-                    <td colSpan={13} className="border border-slate-300 p-8 text-center text-black">
+                    <td colSpan={14} className="border border-slate-300 p-8 text-center text-black">
                       표시할 품목이 없습니다.
                     </td>
                   </tr>
@@ -7460,6 +7464,7 @@ function ItemShipmentAnalysis({
                   <td className={`border border-slate-400 p-2 text-right ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
                     {itemSignedPct(subtotal.rateChange)}
                   </td>
+                  <td className="border border-slate-400 p-2 text-center">{subtotal.storeCount.toLocaleString("ko-KR")}</td>
                   <td className="border border-slate-400 p-2" />
                 </tr>
               </tfoot>
