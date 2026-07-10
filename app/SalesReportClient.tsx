@@ -6092,13 +6092,23 @@ function buildItemAnalysisRows(
 function PopupTh({
   children,
   right = false,
+  rowSpan,
+  colSpan,
+  top = "top-0",
+  className = "bg-white",
 }: {
   children: React.ReactNode;
   right?: boolean;
+  rowSpan?: number;
+  colSpan?: number;
+  top?: string;
+  className?: string;
 }) {
   return (
     <th
-      className={`sticky top-0 z-50 border border-gray-300 bg-white px-3 py-2 font-bold shadow-[0_2px_0_0_#e2e8f0] ${right ? "text-right" : "text-left"}`}
+      rowSpan={rowSpan}
+      colSpan={colSpan}
+      className={`sticky ${top} z-50 border border-gray-300 px-3 py-2 font-bold shadow-[0_2px_0_0_#e2e8f0] ${className} ${right ? "text-right" : "text-left"}`}
     >
       {children}
     </th>
@@ -6111,15 +6121,21 @@ function ItemAnalysisSortableTh<K extends string>({
   sortConfig,
   onSort,
   right = false,
+  rowSpan,
+  top = "top-0",
+  className = "bg-white",
 }: {
   children: React.ReactNode;
   sortKey: K;
   sortConfig: { key: K; direction: SortDirection };
   onSort: (key: K) => void;
   right?: boolean;
+  rowSpan?: number;
+  top?: string;
+  className?: string;
 }) {
   return (
-    <PopupTh right={right}>
+    <PopupTh right={right} rowSpan={rowSpan} top={top} className={className}>
       <button
         type="button"
         onClick={() => onSort(sortKey)}
@@ -6567,28 +6583,19 @@ function ItemAnalysis({
             <table className="w-full min-w-[900px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
               <thead>
                 <tr>
-                  {(
-                    [
-                      ["brand", "브랜드", false],
-                      ["current", "당일까지 매출", true],
-                      ["prevMonth", "전월 매출", true],
-                      ["prevMonthRate", "전월 대비", true],
-                      ["prevYear", "전년 매출", true],
-                      ["prevYearRate", "전년 대비", true],
-                      ["storeCount", "거래처수", true],
-                    ] as [ItemBrandSortKey, string, boolean][]
-                  ).map(([key, label, right]) => (
-                    <ItemAnalysisSortableTh
-                      key={key}
-                      sortKey={key}
-                      sortConfig={brandSortConfig}
-                      onSort={requestBrandSort}
-                      right={right}
-                    >
-                      {label}
-                    </ItemAnalysisSortableTh>
-                  ))}
-                  <PopupTh>상세</PopupTh>
+                  <ItemAnalysisSortableTh rowSpan={2} sortKey="brand" sortConfig={brandSortConfig} onSort={requestBrandSort}>브랜드</ItemAnalysisSortableTh>
+                  <PopupTh colSpan={2} className="bg-emerald-100 text-center text-emerald-900">전년동월</PopupTh>
+                  <PopupTh colSpan={2} className="bg-blue-100 text-center text-blue-900">전월</PopupTh>
+                  <PopupTh colSpan={1} className="bg-yellow-100 text-center text-yellow-900">당월</PopupTh>
+                  <ItemAnalysisSortableTh rowSpan={2} sortKey="storeCount" sortConfig={brandSortConfig} onSort={requestBrandSort} right>거래처수</ItemAnalysisSortableTh>
+                  <PopupTh rowSpan={2}>상세</PopupTh>
+                </tr>
+                <tr>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-emerald-50" sortKey="prevYear" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-emerald-50" sortKey="prevYearRate" sortConfig={brandSortConfig} onSort={requestBrandSort} right>당월 대비</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-blue-50" sortKey="prevMonth" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-blue-50" sortKey="prevMonthRate" sortConfig={brandSortConfig} onSort={requestBrandSort} right>당월 대비</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-yellow-50" sortKey="current" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
                 </tr>
               </thead>
               <tbody>
@@ -6597,25 +6604,11 @@ function ItemAnalysis({
                     <td className="border border-slate-300 p-2 font-semibold">
                       {r.brand}
                     </td>
-                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">
-                      {won(r.current)}
-                    </td>
-                    <td className="border border-slate-300 p-2 text-right">
-                      {won(r.prevMonth)}
-                    </td>
-                    <td
-                      className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevMonth) >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                    >
-                      {itemSignedPct(itemMetricRate(r.current, r.prevMonth))}
-                    </td>
-                    <td className="border border-slate-300 p-2 text-right">
-                      {won(r.prevYear)}
-                    </td>
-                    <td
-                      className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevYear) >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                    >
-                      {itemSignedPct(itemMetricRate(r.current, r.prevYear))}
-                    </td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevYear)}</td>
+                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevYear) >= 0 ? "text-emerald-600" : "text-red-600"}`}>{itemSignedPct(itemMetricRate(r.current, r.prevYear))}</td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth)}</td>
+                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevMonth) >= 0 ? "text-emerald-600" : "text-red-600"}`}>{itemSignedPct(itemMetricRate(r.current, r.prevMonth))}</td>
+                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">{won(r.current)}</td>
                     <td className="border border-slate-300 p-2 text-right">
                       {r.stores.length}
                     </td>
@@ -6664,28 +6657,21 @@ function ItemAnalysis({
             <table className="w-full min-w-[1000px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
               <thead>
                 <tr>
-                  {(
-                    [
-                      ["brand", "브랜드", false],
-                      ["code", "거래처코드", false],
-                      ["name", "거래처명", false],
-                      ["manager", "담당자", false],
-                      ["current", "당일까지 매출", true],
-                      ["prevMonthRate", "전월 대비", true],
-                      ["prevYearRate", "전년 대비", true],
-                    ] as [ItemStoreSortKey, string, boolean][]
-                  ).map(([key, label, right]) => (
-                    <ItemAnalysisSortableTh
-                      key={key}
-                      sortKey={key}
-                      sortConfig={storeSortConfig}
-                      onSort={requestStoreSort}
-                      right={right}
-                    >
-                      {label}
-                    </ItemAnalysisSortableTh>
-                  ))}
-                  <PopupTh>상세</PopupTh>
+                  <ItemAnalysisSortableTh rowSpan={2} sortKey="brand" sortConfig={storeSortConfig} onSort={requestStoreSort}>브랜드</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh rowSpan={2} sortKey="code" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처코드</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh rowSpan={2} sortKey="name" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처명</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh rowSpan={2} sortKey="manager" sortConfig={storeSortConfig} onSort={requestStoreSort}>담당자</ItemAnalysisSortableTh>
+                  <PopupTh colSpan={2} className="bg-emerald-100 text-center text-emerald-900">전년동월</PopupTh>
+                  <PopupTh colSpan={2} className="bg-blue-100 text-center text-blue-900">전월</PopupTh>
+                  <PopupTh colSpan={1} className="bg-yellow-100 text-center text-yellow-900">당월</PopupTh>
+                  <PopupTh rowSpan={2}>상세</PopupTh>
+                </tr>
+                <tr>
+                  <PopupTh top="top-[37px]" className="bg-emerald-50 text-right">매출</PopupTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-emerald-50" sortKey="prevYearRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
+                  <PopupTh top="top-[37px]" className="bg-blue-50 text-right">매출</PopupTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-blue-50" sortKey="prevMonthRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-yellow-50" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>매출</ItemAnalysisSortableTh>
                 </tr>
               </thead>
               <tbody>
@@ -6703,19 +6689,11 @@ function ItemAnalysis({
                     <td className="border border-slate-300 p-2">
                       {r.store.manager || "미지정"}
                     </td>
-                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">
-                      {won(r.current)}
-                    </td>
-                    <td
-                      className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevMonth) >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                    >
-                      {itemSignedPct(itemMetricRate(r.current, r.prevMonth))}
-                    </td>
-                    <td
-                      className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevYear) >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                    >
-                      {itemSignedPct(itemMetricRate(r.current, r.prevYear))}
-                    </td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevYear)}</td>
+                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevYear) >= 0 ? "text-emerald-600" : "text-red-600"}`}>{itemSignedPct(itemMetricRate(r.current, r.prevYear))}</td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth)}</td>
+                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevMonth) >= 0 ? "text-emerald-600" : "text-red-600"}`}>{itemSignedPct(itemMetricRate(r.current, r.prevMonth))}</td>
+                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">{won(r.current)}</td>
                     <td className="border border-slate-300 p-2">
                       <button
                         onClick={() => setSelectedStoreCode(r.store.code)}
@@ -6729,7 +6707,7 @@ function ItemAnalysis({
                 {!storeRows.length && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={10}
                       className="border border-slate-300 p-8 text-center text-slate-500"
                     >
                       표시할 데이터가 없습니다.
@@ -7415,6 +7393,22 @@ function ItemShipmentAnalysis({
                 </tr>
               </thead>
               <tbody>
+                <tr className="sticky top-[74px] z-20 bg-yellow-50 font-extrabold text-black shadow-sm">
+                  <td colSpan={3} className="border border-slate-400 p-2 text-center">SUBTOTAL</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonth.sales)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonthUnitCost)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonth.profit)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{pct(subtotal.prevRate)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.current.sales)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.currentUnitCost)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.current.profit)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{pct(subtotal.currentRate)}</td>
+                  <td className={`border border-slate-400 p-2 text-right ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
+                    {itemSignedPct(subtotal.rateChange)}
+                  </td>
+                  <td className="border border-slate-400 p-2 text-center">{subtotal.storeCount.toLocaleString("ko-KR")}</td>
+                  <td className="border border-slate-400 p-2" />
+                </tr>
                 {itemRows.map((r) => (
                   <tr key={`${r.itemCode}-${r.itemName}`} className="hover:bg-blue-50">
                     <td className="border border-slate-300 p-2">{r.itemCode}</td>
@@ -7450,24 +7444,7 @@ function ItemShipmentAnalysis({
                   </tr>
                 )}
               </tbody>
-              <tfoot>
-                <tr className="sticky bottom-0 z-20 bg-yellow-50 font-extrabold text-black shadow-[0_-2px_6px_rgba(0,0,0,0.08)]">
-                  <td colSpan={3} className="border border-slate-400 p-2 text-center">SUBTOTAL</td>
-                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonth.sales)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonthUnitCost)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonth.profit)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{pct(subtotal.prevRate)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.current.sales)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.currentUnitCost)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.current.profit)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{pct(subtotal.currentRate)}</td>
-                  <td className={`border border-slate-400 p-2 text-right ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
-                    {itemSignedPct(subtotal.rateChange)}
-                  </td>
-                  <td className="border border-slate-400 p-2 text-center">{subtotal.storeCount.toLocaleString("ko-KR")}</td>
-                  <td className="border border-slate-400 p-2" />
-                </tr>
-              </tfoot>
+
             </table>
           </div>
         </div>
@@ -8560,13 +8537,8 @@ function SalesStatus({
             <thead>
               <tr className="bg-slate-100">
                 <ThCompactSortable
-                  w={
-                    isStoreListView
-                      ? compact
-                        ? "w-[26%]"
-                        : "w-[19%]"
-                      : "w-[11%]"
-                  }
+                  rowSpan={2}
+                  w={isStoreListView ? (compact ? "w-[26%]" : "w-[19%]") : "w-[11%]"}
                   sortKey="label"
                   sortConfig={sortConfig}
                   onSort={requestSort}
@@ -8574,114 +8546,24 @@ function SalesStatus({
                   {isStoreListView ? "거래처" : view.replace("별", "")}
                 </ThCompactSortable>
                 {!compact && isStoreListView && (
-                  <ThCompact tone="gray" w="w-[7%]">
-                    마지막발주일
-                  </ThCompact>
+                  <ThCompact rowSpan={2} tone="gray" w="w-[7%]">마지막발주일</ThCompact>
                 )}
-                <ThCompactSortable
-                  right
-                  tone="mint"
-                  w={compact ? "w-[6%]" : ""}
-                  sortKey="prevYearSales"
-                  sortConfig={sortConfig}
-                  onSort={requestSort}
-                >
-                  전년동월
-                </ThCompactSortable>
-                <ThCompactSortable
-                  right
-                  tone="mint"
-                  sortKey="prevYearTimeGoneGap"
-                  sortConfig={sortConfig}
-                  onSort={requestSort}
-                >
-                  전년 Time gone
-                </ThCompactSortable>
-                <ThCompactSortable
-                  right
-                  tone="blue"
-                  w={compact ? "w-[6%]" : ""}
-                  sortKey="prevMonthSales"
-                  sortConfig={sortConfig}
-                  onSort={requestSort}
-                >
-                  전월
-                </ThCompactSortable>
-                <ThCompactSortable
-                  right
-                  tone="blue"
-                  sortKey="prevMonthTimeGoneGap"
-                  sortConfig={sortConfig}
-                  onSort={requestSort}
-                >
-                  전월 Time gone
-                </ThCompactSortable>
-                <ThCompactSortable
-                  right
-                  tone="yellow"
-                  sortKey="currentSales"
-                  sortConfig={sortConfig}
-                  onSort={requestSort}
-                >
-                  당일까지 매출
-                </ThCompactSortable>
-                <ThCompactSortable
-                  right
-                  tone="yellow"
-                  sortKey="fullMonthSales"
-                  sortConfig={sortConfig}
-                  onSort={requestSort}
-                >
-                  당월 전체 매출
-                </ThCompactSortable>
-                <ThCompactSortable
-                  right
-                  tone="gray"
-                  sortKey="timeGoneGap"
-                  sortConfig={sortConfig}
-                  onSort={requestSort}
-                >
-                  당월 Time gone
-                </ThCompactSortable>
-                <ThCompactSortable
-                  right
-                  tone="purple"
-                  w={compact ? "w-[5%]" : ""}
-                  sortKey="est"
-                  sortConfig={sortConfig}
-                  onSort={requestSort}
-                >
-                  EST
-                </ThCompactSortable>
-                <ThCompactSortable
-                  right
-                  tone="purple"
-                  w={compact ? "w-[6%]" : ""}
-                  sortKey="estRate"
-                  sortConfig={sortConfig}
-                  onSort={requestSort}
-                >
-                  EST 달성률
-                </ThCompactSortable>
-                <ThCompactSortable
-                  right
-                  tone="green"
-                  sortKey="profitAmount"
-                  sortConfig={sortConfig}
-                  onSort={requestSort}
-                >
-                  이익금액
-                </ThCompactSortable>
-                <ThCompactSortable
-                  right
-                  tone="green"
-                  w="w-[5%]"
-                  sortKey="profitRate"
-                  sortConfig={sortConfig}
-                  onSort={requestSort}
-                >
-                  이익률
-                </ThCompactSortable>
+                <ThCompact colSpan={2} tone="mint">전년동월</ThCompact>
+                <ThCompact colSpan={2} tone="blue">전월</ThCompact>
+                <ThCompact colSpan={7} tone="yellow">당월</ThCompact>
+              </tr>
+              <tr>
+                <ThCompactSortable right tone="mint" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>매출</ThCompactSortable>
+                <ThCompactSortable right tone="mint" top="top-[31px]" sortKey="prevYearTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>Time gone</ThCompactSortable>
+                <ThCompactSortable right tone="blue" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>매출</ThCompactSortable>
+                <ThCompactSortable right tone="blue" top="top-[31px]" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>Time gone</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>전체 매출</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>Time gone</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" w={compact ? "w-[5%]" : ""} sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" w="w-[5%]" sortKey="profitRate" sortConfig={sortConfig} onSort={requestSort}>이익률</ThCompactSortable>
               </tr>
             </thead>
             <tbody>
@@ -8863,6 +8745,8 @@ function ThCompactSortable({
   right = false,
   w = "",
   tone = "default",
+  rowSpan,
+  top = "top-0",
 }: {
   children: React.ReactNode;
   sortKey: SalesStatusSortKey;
@@ -8871,9 +8755,11 @@ function ThCompactSortable({
   right?: boolean;
   w?: string;
   tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green";
+  rowSpan?: number;
+  top?: string;
 }) {
   return (
-    <ThCompact right={right} w={w} tone={tone}>
+    <ThCompact right={right} w={w} tone={tone} rowSpan={rowSpan} top={top}>
       <button
         type="button"
         onClick={() => onSort(sortKey)}
@@ -9765,11 +9651,17 @@ function ThCompact({
   right = false,
   w = "",
   tone = "default",
+  rowSpan,
+  colSpan,
+  top = "top-0",
 }: {
   children: React.ReactNode;
   right?: boolean;
   w?: string;
   tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green";
+  rowSpan?: number;
+  colSpan?: number;
+  top?: string;
 }) {
   const toneClass =
     tone === "mint"
@@ -9788,7 +9680,9 @@ function ThCompact({
 
   return (
     <th
-      className={`sticky top-0 z-50 border px-0.5 py-1.5 align-middle text-center text-[12px] font-bold leading-tight whitespace-nowrap break-keep shadow-sm bg-clip-padding ${toneClass} ${w}`}
+      rowSpan={rowSpan}
+      colSpan={colSpan}
+      className={`sticky ${top} z-50 border px-0.5 py-1.5 align-middle text-center text-[12px] font-bold leading-tight whitespace-nowrap break-keep shadow-sm bg-clip-padding ${toneClass} ${w}`}
     >
       {children}
     </th>
