@@ -7042,6 +7042,17 @@ function ItemAnalysis({
   );
 }
 
+function itemCategoryFromName(itemName: string) {
+  const name = String(itemName || "").toLowerCase();
+  if (/감자|프라이|후렌치|포테이토|웨지|슈스트링|크링클|펍칩/.test(name)) return "감자/프라이";
+  if (/번|브리오슈|햄버거빵|빵/.test(name)) return "번/베이커리";
+  if (/패티|비프|소고기|치킨패티|새우패티|모짜패티/.test(name)) return "패티";
+  if (/치즈|체다|모짜렐라|스위스/.test(name)) return "치즈";
+  if (/소스|마요|케첩|머스타드|드레싱/.test(name)) return "소스";
+  if (/어니언링|치즈스틱|해쉬브라운|너겟|윙|사이드/.test(name)) return "사이드";
+  return "기타";
+}
+
 function ItemShipmentAnalysis({
   stores,
   sales,
@@ -7060,11 +7071,15 @@ function ItemShipmentAnalysis({
   const [analysisEnd, setAnalysisEnd] = useState(
     date.startsWith(month) ? date : monthEnd(month),
   );
+  const [categoryFilter, setCategoryFilter] = useState("전체");
+  const [profitRateFilter, setProfitRateFilter] = useState("전체");
 
   useEffect(() => {
     setAnalysisStart(monthStart(month));
     setAnalysisEnd(date.startsWith(month) ? date : monthEnd(month));
     setSelectedItemCode("");
+    setCategoryFilter("전체");
+    setProfitRateFilter("전체");
   }, [month, date]);
 
   const currentStart =
@@ -7072,8 +7087,6 @@ function ItemShipmentAnalysis({
   const currentEnd = analysisStart <= analysisEnd ? analysisEnd : analysisStart;
   const prevStart = sameDayPrevMonth(currentStart);
   const prevEnd = sameDayPrevMonth(currentEnd);
-  const prevYearStart = sameDayPrevYear(currentStart);
-  const prevYearEnd = sameDayPrevYear(currentEnd);
   const normalizedSearch = search.trim().toLowerCase();
   const storeByCode = useMemo(
     () => new Map(stores.map((s) => [s.code, s])),
@@ -7086,21 +7099,22 @@ function ItemShipmentAnalysis({
       {
         itemCode: string;
         itemName: string;
+        category: string;
         current: ItemMetric;
         prevMonth: ItemMetric;
-        prevYear: ItemMetric;
         storeCodes: Set<string>;
       }
     >();
+
     const ensure = (row: SalesRecord) => {
       const key = row.itemCode || row.itemName || "미지정";
       if (!map.has(key)) {
         map.set(key, {
           itemCode: row.itemCode || "-",
           itemName: row.itemName || "미지정",
+          category: itemCategoryFromName(row.itemName),
           current: emptyItemMetric(),
           prevMonth: emptyItemMetric(),
-          prevYear: emptyItemMetric(),
           storeCodes: new Set<string>(),
         });
       }
@@ -7108,7 +7122,6 @@ function ItemShipmentAnalysis({
     };
 
     sales.forEach((row) => {
-      const item = ensure(row);
       const store = storeByCode.get(row.storeCode);
       const haystack = [
         row.itemCode,
@@ -7122,6 +7135,8 @@ function ItemShipmentAnalysis({
         .join(" ")
         .toLowerCase();
       if (normalizedSearch && !haystack.includes(normalizedSearch)) return;
+
+      const item = ensure(row);
       if (inRange(row.saleDate, currentStart, currentEnd)) {
         addItemMetric(item.current, row);
         item.storeCodes.add(row.storeCode);
@@ -7130,24 +7145,97 @@ function ItemShipmentAnalysis({
         addItemMetric(item.prevMonth, row);
         item.storeCodes.add(row.storeCode);
       }
-      if (inRange(row.saleDate, prevYearStart, prevYearEnd)) {
-        addItemMetric(item.prevYear, row);
-        item.storeCodes.add(row.storeCode);
-      }
     });
 
     return Array.from(map.values())
       .filter(
         (r) =>
-          r.current.qty ||
-          r.prevMonth.qty ||
-          r.prevYear.qty ||
           r.current.sales ||
+          r.current.cost ||
+          r.current.profit ||
           r.prevMonth.sales ||
-          r.prevYear.sales,
+          r.prevMonth.cost ||
+          r.prevMonth.profit,
       )
+      .map((r) => {
+        const prevMonthUnitCost = r.prevMonth.qty
+          ? r.prevMonth.cost / r.prevMonth.qty
+          : 0;
+        const currentUnitCost = r.current.qty
+          ? r.current.cost / r.current.qty
+          : 0;
+        const prevMonthProfitRate = itemMarginRate(r.prevMonth);
+        const currentProfitRate = itemMarginRate(r.current);
+        return {
+          ...r,
+          prevMonthUnitCost,
+          currentUnitCost,
+          prevMonthProfitRate,
+          currentProfitRate,
+          profitRateChange: currentProfitRate - prevMonthProfitRate,
+        };
+      })
+      .filter((r) => categoryFilter === "전체" || r.category === categoryFilter)
+      .filter((r) => {
+        if (profitRateFilter === "전체") return true;
+        if (profitRateFilter === "30% 미만") return r.currentProfitRate < 30;
+        if (profitRateFilter === "30~40%")
+          return r.currentProfitRate >= 30 && r.currentProfitRate < 40;
+        if (profitRateFilter === "40% 이상") return r.currentProfitRate >= 40;
+        if (profitRateFilter === "하락") return r.profitRateChange < 0;
+        if (profitRateFilter === "상승") return r.profitRateChange > 0;
+        return true;
+      })
       .sort((a, b) => b.current.sales - a.current.sales);
-  }, [sales, storeByCode, normalizedSearch, currentStart, currentEnd, prevStart, prevEnd, prevYearStart, prevYearEnd]);
+  }, [
+    sales,
+    storeByCode,
+    normalizedSearch,
+    currentStart,
+    currentEnd,
+    prevStart,
+    prevEnd,
+    categoryFilter,
+    profitRateFilter,
+  ]);
+
+  const categoryOptions = useMemo(() => {
+    const categories = new Set<string>();
+    sales.forEach((row) => categories.add(itemCategoryFromName(row.itemName)));
+    return ["전체", ...Array.from(categories).sort((a, b) => a.localeCompare(b, "ko-KR"))];
+  }, [sales]);
+
+  const subtotal = useMemo(() => {
+    const prevMonth = itemRows.reduce(
+      (acc, row) => ({
+        qty: acc.qty + row.prevMonth.qty,
+        sales: acc.sales + row.prevMonth.sales,
+        cost: acc.cost + row.prevMonth.cost,
+        profit: acc.profit + row.prevMonth.profit,
+      }),
+      emptyItemMetric(),
+    );
+    const current = itemRows.reduce(
+      (acc, row) => ({
+        qty: acc.qty + row.current.qty,
+        sales: acc.sales + row.current.sales,
+        cost: acc.cost + row.current.cost,
+        profit: acc.profit + row.current.profit,
+      }),
+      emptyItemMetric(),
+    );
+    const prevRate = itemMarginRate(prevMonth);
+    const currentRate = itemMarginRate(current);
+    return {
+      prevMonth,
+      current,
+      prevMonthUnitCost: prevMonth.qty ? prevMonth.cost / prevMonth.qty : 0,
+      currentUnitCost: current.qty ? current.cost / current.qty : 0,
+      prevRate,
+      currentRate,
+      rateChange: currentRate - prevRate,
+    };
+  }, [itemRows]);
 
   const selectedItem = itemRows.find((r) => r.itemCode === selectedItemCode);
 
@@ -7162,7 +7250,6 @@ function ItemShipmentAnalysis({
         channel: string;
         current: ItemMetric;
         prevMonth: ItemMetric;
-        prevYear: ItemMetric;
       }
     >();
     const ensure = (row: SalesRecord) => {
@@ -7176,7 +7263,6 @@ function ItemShipmentAnalysis({
           channel: store?.channel || row.channel || "미지정",
           current: emptyItemMetric(),
           prevMonth: emptyItemMetric(),
-          prevYear: emptyItemMetric(),
         });
       }
       return map.get(key)!;
@@ -7190,22 +7276,20 @@ function ItemShipmentAnalysis({
           addItemMetric(storeRow.current, row);
         if (inRange(row.saleDate, prevStart, prevEnd))
           addItemMetric(storeRow.prevMonth, row);
-        if (inRange(row.saleDate, prevYearStart, prevYearEnd))
-          addItemMetric(storeRow.prevYear, row);
       });
 
     return Array.from(map.values())
       .filter(
         (r) =>
-          r.current.qty ||
-          r.prevMonth.qty ||
-          r.prevYear.qty ||
           r.current.sales ||
+          r.current.cost ||
+          r.current.profit ||
           r.prevMonth.sales ||
-          r.prevYear.sales,
+          r.prevMonth.cost ||
+          r.prevMonth.profit,
       )
       .sort((a, b) => b.current.sales - a.current.sales);
-  }, [sales, selectedItemCode, storeByCode, currentStart, currentEnd, prevStart, prevEnd, prevYearStart, prevYearEnd]);
+  }, [sales, selectedItemCode, storeByCode, currentStart, currentEnd, prevStart, prevEnd]);
 
   function applySearch() {
     setSearch(searchDraft.trim());
@@ -7217,12 +7301,12 @@ function ItemShipmentAnalysis({
       <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-base font-bold text-slate-900">품목분석</div>
-            <div className="mt-1 text-xs text-slate-500">
-              품목별 출고 현황 / 현재 {currentStart} ~ {currentEnd} / 전월 {prevStart} ~ {prevEnd} / 전년 {prevYearStart} ~ {prevYearEnd}
+            <div className="text-base font-bold text-black">품목분석</div>
+            <div className="mt-1 text-xs text-black">
+              당월 {currentStart} ~ {currentEnd} / 전월 {prevStart} ~ {prevEnd}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-black">
             <input
               value={searchDraft}
               onChange={(e) => {
@@ -7234,7 +7318,7 @@ function ItemShipmentAnalysis({
                 if (e.key === "Enter") applySearch();
               }}
               placeholder="품목/거래처/담당자 검색 후 Enter"
-              className="h-8 w-[260px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
+              className="h-8 w-[260px] rounded-lg border border-slate-300 bg-white px-3 text-xs text-black outline-none focus:border-blue-500"
             />
             <button
               type="button"
@@ -7243,22 +7327,22 @@ function ItemShipmentAnalysis({
             >
               검색
             </button>
-            <label className="flex items-center gap-1 text-slate-600">
+            <label className="flex items-center gap-1 text-black">
               시작일
               <input
                 type="date"
                 value={analysisStart}
                 onChange={(e) => setAnalysisStart(e.target.value)}
-                className="h-8 rounded-lg border border-slate-300 px-2 text-xs outline-none focus:border-blue-500"
+                className="h-8 rounded-lg border border-slate-300 px-2 text-xs text-black outline-none focus:border-blue-500"
               />
             </label>
-            <label className="flex items-center gap-1 text-slate-600">
+            <label className="flex items-center gap-1 text-black">
               종료일
               <input
                 type="date"
                 value={analysisEnd}
                 onChange={(e) => setAnalysisEnd(e.target.value)}
-                className="h-8 rounded-lg border border-slate-300 px-2 text-xs outline-none focus:border-blue-500"
+                className="h-8 rounded-lg border border-slate-300 px-2 text-xs text-black outline-none focus:border-blue-500"
               />
             </label>
           </div>
@@ -7267,41 +7351,83 @@ function ItemShipmentAnalysis({
 
       {!selectedItemCode && (
         <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-          <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">
-            품목별 출고 요약
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-300 px-4 py-3">
+            <div className="text-sm font-bold text-black">품목별 손익 요약</div>
+            <div className="text-xs font-semibold text-black">
+              필터 결과 {itemRows.length.toLocaleString("ko-KR")}개 품목
+            </div>
           </div>
           <div className="max-h-[68vh] overflow-auto isolate">
-            <table className="w-full min-w-[1150px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
+            <table className="w-full min-w-[1550px] border-separate border-spacing-0 text-center text-[11px] text-black whitespace-nowrap">
               <thead>
                 <tr>
                   <PopupTh>품목코드</PopupTh>
                   <PopupTh>품목명</PopupTh>
-                  <PopupTh right>현재수량</PopupTh>
-                  <PopupTh right>현재매출</PopupTh>
+                  <PopupTh>카테고리</PopupTh>
                   <PopupTh right>전월매출</PopupTh>
-                  <PopupTh right>전월 대비 매출차이</PopupTh>
-                  <PopupTh right>전년동월매출</PopupTh>
-                  <PopupTh right>전년동월대비 매출차이</PopupTh>
-                  <PopupTh right>거래처수</PopupTh>
+                  <PopupTh right>전월매입단가</PopupTh>
+                  <PopupTh right>전월이익금액</PopupTh>
+                  <PopupTh right>전월이익률</PopupTh>
+                  <PopupTh right>당월매출</PopupTh>
+                  <PopupTh right>당월매입단가</PopupTh>
+                  <PopupTh right>당월이익금액</PopupTh>
+                  <PopupTh right>당월이익률</PopupTh>
+                  <PopupTh right>이익률변동</PopupTh>
                   <PopupTh>상세</PopupTh>
+                </tr>
+                <tr className="bg-slate-50">
+                  <th className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1" />
+                  <th className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1" />
+                  <th className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1">
+                    <select
+                      value={categoryFilter}
+                      onChange={(e) => {
+                        setCategoryFilter(e.target.value);
+                        setSelectedItemCode("");
+                      }}
+                      className="h-7 w-full min-w-[110px] rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-black"
+                    >
+                      {categoryOptions.map((category) => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th colSpan={7} className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1" />
+                  <th className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1">
+                    <select
+                      value={profitRateFilter}
+                      onChange={(e) => {
+                        setProfitRateFilter(e.target.value);
+                        setSelectedItemCode("");
+                      }}
+                      className="h-7 w-full min-w-[105px] rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-black"
+                    >
+                      {["전체", "30% 미만", "30~40%", "40% 이상", "상승", "하락"].map((value) => (
+                        <option key={value} value={value}>{value}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1" />
+                  <th className="sticky top-[34px] z-20 border border-slate-300 bg-slate-50 p-1" />
                 </tr>
               </thead>
               <tbody>
                 {itemRows.map((r) => (
                   <tr key={`${r.itemCode}-${r.itemName}`} className="hover:bg-blue-50">
                     <td className="border border-slate-300 p-2">{r.itemCode}</td>
-                    <td className="border border-slate-300 p-2 font-semibold">{r.itemName}</td>
-                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">{won(r.current.qty)}</td>
-                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">{won(r.current.sales)}</td>
+                    <td className="border border-slate-300 p-2 text-left font-semibold">{r.itemName}</td>
+                    <td className="border border-slate-300 p-2 font-semibold">{r.category}</td>
                     <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.sales)}</td>
-                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.sales, r.prevMonth.sales) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                      {itemSignedNumber(itemMetricDiff(r.current.sales, r.prevMonth.sales), true)}
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonthUnitCost)}</td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.profit)}</td>
+                    <td className="border border-slate-300 p-2 text-right font-bold">{pct(r.prevMonthProfitRate)}</td>
+                    <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.sales)}</td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.currentUnitCost)}</td>
+                    <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.profit)}</td>
+                    <td className="border border-slate-300 p-2 text-right font-extrabold">{pct(r.currentProfitRate)}</td>
+                    <td className={`border border-slate-300 p-2 text-right font-extrabold ${r.profitRateChange > 0 ? "text-emerald-700" : r.profitRateChange < 0 ? "text-red-600" : "text-black"}`}>
+                      {itemSignedPct(r.profitRateChange)}
                     </td>
-                    <td className="border border-slate-300 p-2 text-right">{won(r.prevYear.sales)}</td>
-                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.sales, r.prevYear.sales) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                      {itemSignedNumber(itemMetricDiff(r.current.sales, r.prevYear.sales), true)}
-                    </td>
-                    <td className="border border-slate-300 p-2 text-right">{r.storeCodes.size}</td>
                     <td className="border border-slate-300 p-2">
                       <button
                         onClick={() => setSelectedItemCode(r.itemCode)}
@@ -7314,12 +7440,29 @@ function ItemShipmentAnalysis({
                 ))}
                 {!itemRows.length && (
                   <tr>
-                    <td colSpan={10} className="border border-slate-300 p-8 text-center text-slate-500">
+                    <td colSpan={13} className="border border-slate-300 p-8 text-center text-black">
                       표시할 품목이 없습니다.
                     </td>
                   </tr>
                 )}
               </tbody>
+              <tfoot>
+                <tr className="sticky bottom-0 z-20 bg-yellow-50 font-extrabold text-black shadow-[0_-2px_6px_rgba(0,0,0,0.08)]">
+                  <td colSpan={3} className="border border-slate-400 p-2 text-center">SUBTOTAL</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonth.sales)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonthUnitCost)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonth.profit)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{pct(subtotal.prevRate)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.current.sales)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.currentUnitCost)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.current.profit)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{pct(subtotal.currentRate)}</td>
+                  <td className={`border border-slate-400 p-2 text-right ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
+                    {itemSignedPct(subtotal.rateChange)}
+                  </td>
+                  <td className="border border-slate-400 p-2" />
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
@@ -7329,62 +7472,63 @@ function ItemShipmentAnalysis({
         <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-300 px-4 py-3">
             <div>
-              <div className="text-sm font-bold text-slate-800">
-                {selectedItem.itemName} 거래처별 출고 현황
+              <div className="text-sm font-bold text-black">
+                {selectedItem.itemName} 거래처별 손익 현황
               </div>
-              <div className="mt-1 text-xs text-slate-500">
-                품목코드 {selectedItem.itemCode} / 선택 기간 기준 거래처별 출고 수량과 매출입니다.
+              <div className="mt-1 text-xs text-black">
+                품목코드 {selectedItem.itemCode} / 선택 기간 기준 거래처별 매출·이익입니다.
               </div>
             </div>
             <button
               onClick={() => setSelectedItemCode("")}
-              className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+              className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-semibold text-black hover:bg-slate-200"
             >
               ← 품목 목록
             </button>
           </div>
           <div className="max-h-[68vh] overflow-auto isolate">
-            <table className="w-full min-w-[1300px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
+            <table className="w-full min-w-[1450px] border-separate border-spacing-0 text-center text-[11px] text-black whitespace-nowrap">
               <thead>
                 <tr>
                   <PopupTh>거래처코드</PopupTh>
                   <PopupTh>거래처명</PopupTh>
                   <PopupTh>담당자</PopupTh>
                   <PopupTh>채널</PopupTh>
-                  <PopupTh right>현재수량</PopupTh>
-                  <PopupTh right>현재매출</PopupTh>
-                  <PopupTh right>전월수량</PopupTh>
                   <PopupTh right>전월매출</PopupTh>
-                  <PopupTh right>전월 대비 매출차이</PopupTh>
-                  <PopupTh right>전년수량</PopupTh>
-                  <PopupTh right>전년동월매출</PopupTh>
-                  <PopupTh right>전년동월대비 매출차이</PopupTh>
+                  <PopupTh right>전월이익금액</PopupTh>
+                  <PopupTh right>전월이익률</PopupTh>
+                  <PopupTh right>당월매출</PopupTh>
+                  <PopupTh right>당월이익금액</PopupTh>
+                  <PopupTh right>당월이익률</PopupTh>
+                  <PopupTh right>이익률변동</PopupTh>
                 </tr>
               </thead>
               <tbody>
-                {storeRows.map((r) => (
-                  <tr key={r.storeCode} className="hover:bg-blue-50">
-                    <td className="border border-slate-300 p-2">{r.storeCode}</td>
-                    <td className="border border-slate-300 p-2 font-semibold">{r.storeName}</td>
-                    <td className="border border-slate-300 p-2">{r.manager}</td>
-                    <td className="border border-slate-300 p-2">{r.channel}</td>
-                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">{won(r.current.qty)}</td>
-                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">{won(r.current.sales)}</td>
-                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.qty)}</td>
-                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.sales)}</td>
-                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.sales, r.prevMonth.sales) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                      {itemSignedNumber(itemMetricDiff(r.current.sales, r.prevMonth.sales), true)}
-                    </td>
-                    <td className="border border-slate-300 p-2 text-right">{won(r.prevYear.qty)}</td>
-                    <td className="border border-slate-300 p-2 text-right">{won(r.prevYear.sales)}</td>
-                    <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.sales, r.prevYear.sales) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                      {itemSignedNumber(itemMetricDiff(r.current.sales, r.prevYear.sales), true)}
-                    </td>
-                  </tr>
-                ))}
+                {storeRows.map((r) => {
+                  const prevRate = itemMarginRate(r.prevMonth);
+                  const currentRate = itemMarginRate(r.current);
+                  const change = currentRate - prevRate;
+                  return (
+                    <tr key={r.storeCode} className="hover:bg-blue-50">
+                      <td className="border border-slate-300 p-2">{r.storeCode}</td>
+                      <td className="border border-slate-300 p-2 text-left font-semibold">{r.storeName}</td>
+                      <td className="border border-slate-300 p-2">{r.manager}</td>
+                      <td className="border border-slate-300 p-2">{r.channel}</td>
+                      <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.sales)}</td>
+                      <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.profit)}</td>
+                      <td className="border border-slate-300 p-2 text-right">{pct(prevRate)}</td>
+                      <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.sales)}</td>
+                      <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.profit)}</td>
+                      <td className="border border-slate-300 p-2 text-right font-extrabold">{pct(currentRate)}</td>
+                      <td className={`border border-slate-300 p-2 text-right font-extrabold ${change > 0 ? "text-emerald-700" : change < 0 ? "text-red-600" : "text-black"}`}>
+                        {itemSignedPct(change)}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {!storeRows.length && (
                   <tr>
-                    <td colSpan={12} className="border border-slate-300 p-8 text-center text-slate-500">
+                    <td colSpan={11} className="border border-slate-300 p-8 text-center text-black">
                       표시할 거래처가 없습니다.
                     </td>
                   </tr>
