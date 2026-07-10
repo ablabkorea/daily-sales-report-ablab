@@ -6340,6 +6340,24 @@ function ItemAnalysis({
     ],
   );
 
+  const itemSalesSubtotal = useMemo(
+    () => ({
+      currentSales: itemRows.reduce(
+        (total, row) => total + Number(row.current.sales || 0),
+        0,
+      ),
+      prevMonthSales: itemRows.reduce(
+        (total, row) => total + Number(row.prevMonth.sales || 0),
+        0,
+      ),
+      prevYearSales: itemRows.reduce(
+        (total, row) => total + Number(row.prevYear.sales || 0),
+        0,
+      ),
+    }),
+    [itemRows],
+  );
+
   const sortedBrandRows = useMemo(() => {
     const valueOf = (r: (typeof brandRows)[number]) => {
       if (brandSortConfig.key === "brand") return r.brand;
@@ -6728,7 +6746,7 @@ function ItemAnalysis({
                 {selectedStore.name} 품목별 비교
               </div>
               <div className="mt-1 text-xs text-slate-500">
-                현재/전월/전년 동일기간 기준으로 수량과 매출을 비교합니다.
+                선택한 기간의 당일까지 매출과 전월·전년동월 동일기간 매출을 비교합니다.
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -6741,39 +6759,85 @@ function ItemAnalysis({
             </div>
           </div>
           <div className="max-h-[65vh] overflow-auto isolate">
-            <table className="w-full min-w-[1280px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
+            <table className="w-full min-w-[820px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
               <thead>
                 <tr>
-                  {(
-                    [
-                      ["itemCode", "품목코드", false],
-                      ["itemName", "품목명", false],
-                      ["currentQty", "현재수량", true],
-                      ["prevMonthQty", "전월수량", true],
-                      ["prevYearQty", "전년수량", true],
-                      ["currentSales", "현재매출", true],
-                      ["prevMonthSales", "전월매출", true],
-                      ["prevMonthSalesDiff", "전월 대비 매출차이", true],
-                      ["prevMonthSalesRate", "전월 대비 매출증감%", true],
-                      ["prevYearSales", "전년동월매출", true],
-                      ["prevYearSalesDiff", "전년동월대비 매출차이", true],
-                      ["prevYearSalesRate", "전년동월대비 매출증감%", true],
-                    ] as [ItemRowSortKey, string, boolean][]
-                  ).map(([key, label, right]) => (
-                    <ItemAnalysisSortableTh
-                      key={key}
-                      sortKey={key}
-                      sortConfig={itemSortConfig}
-                      onSort={requestItemSort}
-                      right={right}
-                    >
-                      {label}
-                    </ItemAnalysisSortableTh>
-                  ))}
-                  <PopupTh>상세</PopupTh>
+                  <ItemAnalysisSortableTh
+                    rowSpan={2}
+                    sortKey="itemCode"
+                    sortConfig={itemSortConfig}
+                    onSort={requestItemSort}
+                  >
+                    품목코드
+                  </ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh
+                    rowSpan={2}
+                    sortKey="itemName"
+                    sortConfig={itemSortConfig}
+                    onSort={requestItemSort}
+                  >
+                    품목명
+                  </ItemAnalysisSortableTh>
+                  <PopupTh
+                    colSpan={3}
+                    className="bg-emerald-100 text-center font-extrabold text-slate-900"
+                  >
+                    Time Gone 대비
+                  </PopupTh>
+                  <PopupTh rowSpan={2}>상세</PopupTh>
+                </tr>
+                <tr>
+                  <ItemAnalysisSortableTh
+                    top="top-[37px]"
+                    className="bg-emerald-50"
+                    sortKey="prevYearSales"
+                    sortConfig={itemSortConfig}
+                    onSort={requestItemSort}
+                    right
+                  >
+                    전년동월 매출
+                  </ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh
+                    top="top-[37px]"
+                    className="bg-blue-50"
+                    sortKey="prevMonthSales"
+                    sortConfig={itemSortConfig}
+                    onSort={requestItemSort}
+                    right
+                  >
+                    전월 매출
+                  </ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh
+                    top="top-[37px]"
+                    className="bg-yellow-50"
+                    sortKey="currentSales"
+                    sortConfig={itemSortConfig}
+                    onSort={requestItemSort}
+                    right
+                  >
+                    당일까지 매출
+                  </ItemAnalysisSortableTh>
                 </tr>
               </thead>
               <tbody>
+                <tr className="sticky top-[74px] z-10 bg-amber-50 font-extrabold text-slate-900 shadow-sm">
+                  <td
+                    colSpan={2}
+                    className="border border-slate-300 px-3 py-2 text-center"
+                  >
+                    SUBTOTAL
+                  </td>
+                  <td className="border border-slate-300 px-3 py-2 text-right">
+                    {won(itemSalesSubtotal.prevYearSales)}
+                  </td>
+                  <td className="border border-slate-300 px-3 py-2 text-right">
+                    {won(itemSalesSubtotal.prevMonthSales)}
+                  </td>
+                  <td className="border border-slate-300 px-3 py-2 text-right text-blue-700">
+                    {won(itemSalesSubtotal.currentSales)}
+                  </td>
+                  <td className="border border-slate-300 px-3 py-2">-</td>
+                </tr>
                 {sortedItemRows.map((r) => (
                   <tr
                     key={`${r.itemCode}-${r.itemName}`}
@@ -6785,55 +6849,14 @@ function ItemAnalysis({
                     <td className="border border-slate-300 p-2 font-semibold">
                       {r.itemName}
                     </td>
-                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">
-                      {won(r.current.qty)}
-                    </td>
                     <td className="border border-slate-300 p-2 text-right">
-                      {won(r.prevMonth.qty)}
-                    </td>
-
-                    <td className="border border-slate-300 p-2 text-right">
-                      {won(r.prevYear.qty)}
-                    </td>
-
-                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">
-                      {won(r.current.sales)}
+                      {won(r.prevYear.sales)}
                     </td>
                     <td className="border border-slate-300 p-2 text-right">
                       {won(r.prevMonth.sales)}
                     </td>
-                    <td
-                      className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.sales, r.prevMonth.sales) >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                    >
-                      {itemSignedNumber(
-                        itemMetricDiff(r.current.sales, r.prevMonth.sales),
-                        true,
-                      )}
-                    </td>
-                    <td
-                      className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.sales, r.prevMonth.sales) >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                    >
-                      {itemSignedPct(
-                        itemMetricRate(r.current.sales, r.prevMonth.sales),
-                      )}
-                    </td>
-                    <td className="border border-slate-300 p-2 text-right">
-                      {won(r.prevYear.sales)}
-                    </td>
-                    <td
-                      className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.sales, r.prevYear.sales) >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                    >
-                      {itemSignedNumber(
-                        itemMetricDiff(r.current.sales, r.prevYear.sales),
-                        true,
-                      )}
-                    </td>
-                    <td
-                      className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current.sales, r.prevYear.sales) >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                    >
-                      {itemSignedPct(
-                        itemMetricRate(r.current.sales, r.prevYear.sales),
-                      )}
+                    <td className="border border-slate-300 p-2 text-right font-bold text-blue-700">
+                      {won(r.current.sales)}
                     </td>
                     <td className="border border-slate-300 p-2">
                       <button
@@ -6848,7 +6871,7 @@ function ItemAnalysis({
                 {!sortedItemRows.length && (
                   <tr>
                     <td
-                      colSpan={13}
+                      colSpan={6}
                       className="border border-slate-300 p-8 text-center text-slate-500"
                     >
                       표시할 품목이 없습니다.
