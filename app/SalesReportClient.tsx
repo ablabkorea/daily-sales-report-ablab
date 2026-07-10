@@ -3936,6 +3936,181 @@ function useLocal<T>(key: string, initial: T) {
 }
 
 
+
+function salesChunkKey(baseKey: string, period: PeriodType, month: string) {
+  return `${baseKey}_${period}_${month}`;
+}
+
+function chunkMonthForSale(row: SalesRecord) {
+  if (row.period === "current") return row.refMonth || row.saleDate.slice(0, 7);
+  return row.refMonth || row.saleDate.slice(0, 7);
+}
+
+function salesStorageKey(baseKey: string, row: SalesRecord) {
+  return salesChunkKey(baseKey, row.period, chunkMonthForSale(row));
+}
+
+function dedupeSales(records: SalesRecord[]) {
+  const map = new Map<string, SalesRecord>();
+  records.forEach((row) => map.set(row.id, row));
+  return Array.from(map.values());
+}
+
+function salesKeysForMonth(baseKey: string, month: string) {
+  return [
+    salesChunkKey(baseKey, "current", month),
+    salesChunkKey(baseKey, "current", addMonths(month, 1)),
+    salesChunkKey(baseKey, "prevMonth", month),
+    salesChunkKey(baseKey, "prevYear", month),
+  ];
+}
+
+function groupSalesByStorageKey(baseKey: string, records: SalesRecord[]) {
+  const map = new Map<string, SalesRecord[]>();
+  records.forEach((row) => {
+    const key = salesStorageKey(baseKey, row);
+    map.set(key, [...(map.get(key) || []), row]);
+  });
+  return map;
+}
+
+function shouldShowSalesForMonth(row: SalesRecord, month: string) {
+  if (row.period === "current") {
+    const rowMonth = row.refMonth || row.saleDate.slice(0, 7);
+    return rowMonth === month || rowMonth === addMonths(month, 1);
+  }
+  return row.refMonth === month;
+}
+
+function useChunkedSales(
+  baseKey: string,
+  initial: SalesRecord[],
+  month: string,
+) {
+  const [value, rawSetValue] = useState<SalesRecord[]>(initial);
+  const valueRef = useRef<SalesRecord[]>(initial);
+  const saveTimerRef = useRef<number | null>(null);
+  const isSavingRef = useRef(false);
+  const monthRef = useRef(month);
+  const remoteUpdatedAtRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    monthRef.current = month;
+  }, [month]);
+
+  const loadMonthChunks = async (targetMonth: string) => {
+    const keys = salesKeysForMonth(baseKey, targetMonth);
+    const rows = await Promise.all(keys.map((key) => loadSharedStateRow<SalesRecord[]>(key)));
+    const foundRows = rows.filter(Boolean) as AppStateRow<SalesRecord[]>[];
+    foundRows.forEach((row, index) => {
+      if (row.updated_at) remoteUpdatedAtRef.current[keys[index]] = row.updated_at;
+    });
+    const chunkedSales = foundRows.flatMap((row) => row.data || []);
+
+    if (chunkedSales.length) return dedupeSales(chunkedSales);
+
+    // 최초 전환 시점에만 기존 ablab_sales_v14 통합 데이터를 읽어와 화면을 살립니다.
+    const legacy = await loadSharedState<SalesRecord[]>(baseKey);
+    if (legacy?.length) {
+      return dedupeSales(legacy.filter((row) => shouldShowSalesForMonth(row, targetMonth)));
+    }
+
+    return initial.filter((row) => shouldShowSalesForMonth(row, targetMonth));
+  };
+
+  const persistNow = (nextValue: SalesRecord[]) => {
+    if (typeof window === "undefined") return;
+    const editedAt = Date.now();
+    valueRef.current = nextValue;
+    setLocalMeta(`${baseKey}_chunked`, { editedAt, pending: true });
+
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(async () => {
+      try {
+        isSavingRef.current = true;
+        const grouped = groupSalesByStorageKey(baseKey, nextValue);
+        const targetKeys = salesKeysForMonth(baseKey, monthRef.current);
+        await Promise.all(
+          targetKeys.map(async (key) => {
+            const savedUpdatedAt = await saveSharedState(key, grouped.get(key) || []);
+            if (savedUpdatedAt) remoteUpdatedAtRef.current[key] = savedUpdatedAt;
+          }),
+        );
+        const meta = getLocalMeta(`${baseKey}_chunked`);
+        if (meta.editedAt === editedAt)
+          setLocalMeta(`${baseKey}_chunked`, { editedAt, pending: false });
+      } catch (error) {
+        const meta = getLocalMeta(`${baseKey}_chunked`);
+        if (meta.editedAt === editedAt)
+          setLocalMeta(`${baseKey}_chunked`, { editedAt, pending: true });
+        reportSharedSaveError(error);
+      } finally {
+        isSavingRef.current = false;
+      }
+    }, 180);
+  };
+
+  const setValue: React.Dispatch<React.SetStateAction<SalesRecord[]>> = (next) => {
+    rawSetValue((prev) => {
+      const resolved =
+        typeof next === "function" ? (next as (prev: SalesRecord[]) => SalesRecord[])(prev) : next;
+      const deduped = dedupeSales(resolved);
+      valueRef.current = deduped;
+      persistNow(deduped);
+      return deduped;
+    });
+  };
+
+  const refreshFromSupabase = async (targetMonth = monthRef.current) => {
+    if (isSavingRef.current) return;
+    try {
+      const latest = await loadMonthChunks(targetMonth);
+      valueRef.current = latest;
+      rawSetValue(latest);
+      setLocalMeta(`${baseKey}_chunked`, { editedAt: Date.now(), pending: false });
+    } catch (error) {
+      console.warn("매출 데이터 동기화 실패", error);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    async function hydrateSales() {
+      try {
+        const latest = await loadMonthChunks(month);
+        if (cancelled) return;
+        valueRef.current = latest;
+        rawSetValue(latest);
+        setLocalMeta(`${baseKey}_chunked`, { editedAt: Date.now(), pending: false });
+      } catch (error) {
+        console.warn("매출 데이터 불러오기 실패", error);
+      }
+    }
+    hydrateSales();
+    return () => {
+      cancelled = true;
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    };
+  }, [baseKey, month]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const interval = window.setInterval(() => {
+      refreshFromSupabase().catch((error) =>
+        console.warn("매출 데이터 자동 동기화 실패", error),
+      );
+    }, 15000);
+    const onFocus = () => refreshFromSupabase();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [baseKey]);
+
+  return [value, setValue] as const;
+}
+
 function readFileRows(file: File): Promise<Record<string, unknown>[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -4106,13 +4281,16 @@ function isEstEntryPeriodToday() {
 export default function SalesReportClient() {
   const [active, setActive] = useState("대시보드");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [dashMonth, setDashMonth] = useState(thisMonth());
+  const [dashDate, setDashDate] = useState(today());
   const [stores, setStores] = useLocal<Store[]>(
     "ablab_stores_v15",
     initialStores,
   );
-  const [sales, setSales] = useLocal<SalesRecord[]>(
+  const [sales, setSales] = useChunkedSales(
     "ablab_sales_v14",
     initialSales,
+    dashMonth,
   );
   const [targets, setTargets] = useLocal<TargetRecord[]>(
     "ablab_targets_v14",
@@ -4131,8 +4309,6 @@ export default function SalesReportClient() {
     "ablab_item_costs_v1",
     initialItemCosts,
   );
-  const [dashMonth, setDashMonth] = useState(thisMonth());
-  const [dashDate, setDashDate] = useState(today());
 
   useEffect(() => {
     if (!dashDate.startsWith(dashMonth)) setDashDate(monthEnd(dashMonth));
