@@ -4429,6 +4429,16 @@ export default function SalesReportClient() {
               <HeaderTimeInfo title="총일수" value={tg.totalDays} />
               <HeaderTimeInfo title="진행일수" value={tg.progressedDays} />
               <HeaderTimeInfo title="잔여일수" value={tg.remainingDays} />
+              {active === "매출현황" && (
+                <SalesTargetHeaderKpi
+                  stores={stores}
+                  sales={sales}
+                  targets={targets}
+                  ests={ests}
+                  month={dashMonth}
+                  date={dashDate}
+                />
+              )}
             </div>
           </div>
 
@@ -5330,11 +5340,11 @@ function KpiGroup({
               key={item.title}
               className={`flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 rounded-lg px-1.5 py-0.5 first:pt-0 last:pb-0 ${item.highlightClass || ""}`}
             >
-              <p className="shrink-0 break-keep text-[11px] font-semibold text-slate-500">
+              <p className="shrink-0 break-keep text-[11px] font-semibold text-black">
                 {item.title}
               </p>
               <p
-                className={`min-w-0 max-w-full flex-1 whitespace-normal break-all text-right text-[14px] font-bold leading-tight tracking-tight md:text-[15px] xl:text-[15px] 2xl:text-[16px] ${item.color || "text-slate-900"}`}
+                className={`min-w-0 max-w-full flex-1 whitespace-normal break-all text-right text-[14px] font-bold leading-tight tracking-tight md:text-[15px] xl:text-[15px] 2xl:text-[16px] ${item.color || "text-black"}`}
               >
                 {value}
               </p>
@@ -5375,6 +5385,52 @@ function metricsByStoreType(
     .filter((e) => e.month === month && !storeCodes.has(e.storeCode))
     .reduce((a, b) => a + b.amount, 0);
   return { storeTarget, nonStoreTarget, storeEst, nonStoreEst };
+}
+
+function SalesTargetHeaderKpi({
+  stores,
+  sales,
+  targets,
+  ests,
+  month,
+  date,
+}: {
+  stores: Store[];
+  sales: SalesRecord[];
+  targets: TargetRecord[];
+  ests: EstRecord[];
+  month: string;
+  date: string;
+}) {
+  const { storeTarget, nonStoreTarget } = metricsByStoreType(
+    stores,
+    targets,
+    ests,
+    month,
+  );
+  const targetTotal = storeTarget + nonStoreTarget;
+  const currentSales = sales
+    .filter(
+      (row) =>
+        row.period === "current" &&
+        inRange(row.saleDate, monthStart(month), date),
+    )
+    .reduce((total, row) => total + Number(row.salesAmount || 0), 0);
+  const rate = targetTotal ? (currentSales / targetTotal) * 100 : 0;
+
+  return (
+    <div className="ml-auto min-w-[240px] rounded-xl border border-yellow-300 bg-yellow-100 px-5 py-2.5 text-right shadow-sm">
+      <div className="text-[11px] font-extrabold tracking-wide text-black">
+        TARGET 달성률
+      </div>
+      <div className="mt-0.5 text-[34px] font-black leading-none tracking-tight text-black">
+        {targetTotal ? pct(rate) : "-"}
+      </div>
+      <div className="mt-1 text-[10px] font-bold text-black">
+        {won(currentSales)} / {won(targetTotal)}
+      </div>
+    </div>
+  );
 }
 
 function DashboardTopKpis({
@@ -5476,13 +5532,13 @@ function DashboardTopKpis({
             title: "Target 달성률",
             value: targetTotal ? (currentSales / targetTotal) * 100 : 0,
             format: "percent",
-            color: "text-orange-950",
-            highlightClass: "bg-orange-200/80 ring-1 ring-orange-300/80",
+            color: "text-black",
+            highlightClass: "bg-yellow-200/90 ring-1 ring-yellow-300/90",
           },
         ]}
       />
       <KpiGroup
-        className="bg-purple-50/90 ring-1 ring-purple-200/80"
+        className="bg-sky-50/95 ring-1 ring-sky-200/90"
         items={[
           { title: "매장 EST", value: storeEst, format: "won" },
           { title: "비매장 EST", value: nonStoreEst, format: "won" },
@@ -8160,27 +8216,6 @@ function SalesStatus({
   }));
 
   const salesStatusColSpan = compact ? 12 : isStoreListView ? 13 : 12;
-  const { storeTarget: salesStoreTarget, nonStoreTarget: salesNonStoreTarget } =
-    metricsByStoreType(stores, targets, ests, month);
-  const salesTargetTotal = salesStoreTarget + salesNonStoreTarget;
-  const overallCurrentSales = sales
-    .filter(
-      (row) =>
-        row.period === "current" &&
-        inRange(row.saleDate, monthStart(month), date),
-    )
-    .reduce((total, row) => total + Number(row.salesAmount || 0), 0);
-  const salesTargetRate = salesTargetTotal
-    ? (overallCurrentSales / salesTargetTotal) * 100
-    : 0;
-  const salesTargetTone = !salesTargetTotal
-    ? "border-slate-200 bg-slate-50 text-slate-500"
-    : salesTargetRate >= 100
-      ? "border-emerald-300 bg-emerald-100 text-emerald-800"
-      : salesTargetRate >= 80
-        ? "border-orange-300 bg-orange-100 text-orange-900"
-        : "border-red-200 bg-red-50 text-red-700";
-
   return (
     <>
       <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
@@ -8193,15 +8228,6 @@ function SalesStatus({
             </p>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            <div className={`min-w-[178px] rounded-2xl border px-4 py-2 text-right shadow-sm ${salesTargetTone}`}>
-              <div className="text-[11px] font-extrabold tracking-wide opacity-80">TARGET 달성률</div>
-              <div className="mt-0.5 text-3xl font-black leading-none tracking-tight">
-                {salesTargetTotal ? pct(salesTargetRate) : "-"}
-              </div>
-              <div className="mt-1 text-[10px] font-bold opacity-75">
-                {won(overallCurrentSales)} / {won(salesTargetTotal)}
-              </div>
-            </div>
             {compact && (
               <select
                 value={view}
