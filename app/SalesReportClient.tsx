@@ -3596,6 +3596,31 @@ type AppStateRow<T> = {
   updated_at?: string;
 };
 
+
+const STATIC_SYNC_INTERVAL_MS = 30 * 60 * 1000;
+const SALES_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+const FOCUS_REFRESH_MIN_GAP_MS = 5 * 60 * 1000;
+const MAX_SUPABASE_BACKOFF_MS = 30 * 60 * 1000;
+
+let supabaseBackoffUntil = 0;
+let supabaseFailureCount = 0;
+
+function canCallSupabase() {
+  return Date.now() >= supabaseBackoffUntil;
+}
+
+function registerSupabaseSuccess() {
+  supabaseFailureCount = 0;
+  supabaseBackoffUntil = 0;
+}
+
+function registerSupabaseFailure(status: number) {
+  if (status !== 429 && status !== 500 && status !== 502 && status !== 503 && status !== 504) return;
+  supabaseFailureCount += 1;
+  const delay = Math.min(30_000 * 2 ** Math.min(supabaseFailureCount - 1, 6), MAX_SUPABASE_BACKOFF_MS);
+  supabaseBackoffUntil = Date.now() + delay;
+}
+
 function supabaseConfig() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, "");
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
@@ -3617,6 +3642,7 @@ async function loadSharedStateRow<T>(
 ): Promise<AppStateRow<T> | null> {
   const config = supabaseConfig();
   if (!config) return null;
+  if (!canCallSupabase()) throw new Error("Supabase request paused during backoff");
 
   const response = await fetch(
     `${config.endpoint}?id=eq.${encodeURIComponent(key)}&select=data,updated_at&limit=1`,
@@ -3627,7 +3653,11 @@ async function loadSharedStateRow<T>(
     },
   );
 
-  if (!response.ok) throw new Error(`Supabase load failed: ${response.status}`);
+  if (!response.ok) {
+    registerSupabaseFailure(response.status);
+    throw new Error(`Supabase load failed: ${response.status}`);
+  }
+  registerSupabaseSuccess();
   const rows = (await response.json()) as AppStateRow<T>[];
   return rows[0] ?? null;
 }
@@ -3692,6 +3722,7 @@ function setLocalMeta(
 async function saveSharedState<T>(key: string, value: T) {
   const config = supabaseConfig();
   if (!config) return null;
+  if (!canCallSupabase()) throw new Error("Supabase request paused during backoff");
 
   const updatedAt = new Date().toISOString();
   const response = await fetch(`${config.endpoint}?on_conflict=id&select=updated_at`, {
@@ -3707,7 +3738,11 @@ async function saveSharedState<T>(key: string, value: T) {
     }),
   });
 
-  if (!response.ok) throw new Error(`Supabase save failed: ${response.status}`);
+  if (!response.ok) {
+    registerSupabaseFailure(response.status);
+    throw new Error(`Supabase save failed: ${response.status}`);
+  }
+  registerSupabaseSuccess();
   const rows = (await response.json()) as AppStateRow<T>[];
   return rows[0]?.updated_at || updatedAt;
 }
@@ -3717,10 +3752,10 @@ function reportSharedSaveError(error: unknown) {
   if (typeof window === "undefined") return;
   const now = Date.now();
   const last = Number(window.sessionStorage.getItem("ablab_shared_save_error_at") || 0);
-  if (now - last < 10000) return;
+  if (now - last < 10 * 60 * 1000) return;
   window.sessionStorage.setItem("ablab_shared_save_error_at", String(now));
   window.alert(
-    "공유 저장소(Supabase) 저장에 실패했습니다. Supabase 프로젝트가 일시중지되어 있거나 권한/환경변수 문제가 있을 수 있습니다. Supabase를 Resume 한 뒤 다시 저장해 주세요.",
+    "공유 저장소(Supabase)에 연결할 수 없습니다. 현재 값은 브라우저에 임시 보관되며, 연결이 복구되면 자동으로 다시 저장됩니다.",
   );
 }
 
@@ -3734,6 +3769,7 @@ function useLocal<T>(key: string, initial: T) {
   const lastRemoteUpdatedAtRef = useRef<string | null>(null);
   const isReloadingRemoteRef = useRef(false);
   const alertOpenRef = useRef(false);
+  const lastRemoteCheckAtRef = useRef(0);
 
   useEffect(() => {
     keyRef.current = key;
@@ -3816,6 +3852,7 @@ function useLocal<T>(key: string, initial: T) {
     const meta = getLocalMeta(keyRef.current);
     if (meta.pending) return;
 
+    lastRemoteCheckAtRef.current = Date.now();
     const remoteRow = await loadSharedStateRow<T>(keyRef.current);
     if (!remoteRow?.updated_at) return;
 
@@ -3919,20 +3956,25 @@ function useLocal<T>(key: string, initial: T) {
       );
     };
 
+    const refreshIfStale = () => {
+      if (Date.now() - lastRemoteCheckAtRef.current < FOCUS_REFRESH_MIN_GAP_MS) return;
+      safeCheckRemoteUpdate();
+    };
+
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") safeCheckRemoteUpdate();
+      if (document.visibilityState === "visible") refreshIfStale();
     };
 
     const interval = window.setInterval(() => {
       retryPendingSave();
       safeCheckRemoteUpdate();
-    }, 15000);
-    window.addEventListener("focus", safeCheckRemoteUpdate);
+    }, STATIC_SYNC_INTERVAL_MS);
+    window.addEventListener("focus", refreshIfStale);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.clearInterval(interval);
-      window.removeEventListener("focus", safeCheckRemoteUpdate);
+      window.removeEventListener("focus", refreshIfStale);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [key, loaded]);
@@ -3998,6 +4040,7 @@ function useChunkedSales(
   const isSavingRef = useRef(false);
   const monthRef = useRef(month);
   const remoteUpdatedAtRef = useRef<Record<string, string>>({});
+  const lastSalesRefreshAtRef = useRef(0);
 
   useEffect(() => {
     monthRef.current = month;
@@ -4068,6 +4111,7 @@ function useChunkedSales(
 
   const refreshFromSupabase = async (targetMonth = monthRef.current) => {
     if (isSavingRef.current) return;
+    lastSalesRefreshAtRef.current = Date.now();
     try {
       const latest = await loadMonthChunks(targetMonth);
       valueRef.current = latest;
@@ -4086,6 +4130,7 @@ function useChunkedSales(
         if (cancelled) return;
         valueRef.current = latest;
         rawSetValue(latest);
+        lastSalesRefreshAtRef.current = Date.now();
         setLocalMeta(`${baseKey}_chunked`, { editedAt: Date.now(), pending: false });
       } catch (error) {
         console.warn("매출 데이터 불러오기 실패", error);
@@ -4104,8 +4149,11 @@ function useChunkedSales(
       refreshFromSupabase().catch((error) =>
         console.warn("매출 데이터 자동 동기화 실패", error),
       );
-    }, 15000);
-    const onFocus = () => refreshFromSupabase();
+    }, SALES_SYNC_INTERVAL_MS);
+    const onFocus = () => {
+      if (Date.now() - lastSalesRefreshAtRef.current < FOCUS_REFRESH_MIN_GAP_MS) return;
+      refreshFromSupabase();
+    };
     window.addEventListener("focus", onFocus);
     return () => {
       window.clearInterval(interval);
