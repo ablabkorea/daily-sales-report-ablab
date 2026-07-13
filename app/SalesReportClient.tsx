@@ -68,6 +68,21 @@ type SalesRecord = {
   profitRate: number;
 };
 
+type SalesUploadRequest = {
+  period: PeriodType;
+  refMonth: string;
+  fileName: string;
+  uploadedDates: string[];
+  rows: SalesRecord[];
+};
+
+type SalesStorageActions = {
+  replaceUpload: (request: SalesUploadRequest) => Promise<{ mode: "v3" | "legacy" }>;
+  deleteCurrentDate: (refMonth: string, saleDate: string) => Promise<{ mode: "v3" | "legacy" }>;
+  refresh: () => Promise<void>;
+  storageMode: "checking" | "v3" | "legacy";
+};
+
 type TargetRecord = {
   month: string;
   amount: number;
@@ -4029,49 +4044,213 @@ function shouldShowSalesForMonth(row: SalesRecord, month: string) {
   return row.refMonth === month;
 }
 
+type V3SalesRecordRow = {
+  row_key: string;
+  period: PeriodType;
+  ref_month: string;
+  sale_date: string;
+  store_code: string;
+  store_name: string;
+  channel: string;
+  manager: string;
+  store_type: string;
+  brand: string;
+  item_code: string;
+  item_name: string;
+  quantity: number | string;
+  sales_amount: number | string;
+  cost_amount: number | string;
+  profit_amount: number | string;
+  profit_rate: number | string;
+};
+
+function v3SalesEndpoint(path: string) {
+  const config = supabaseConfig();
+  if (!config) return null;
+  return {
+    url: `${config.endpoint.replace(/\/app_state$/, "")}/${path}`,
+    headers: config.headers,
+  };
+}
+
+function toV3Payload(row: SalesRecord) {
+  return {
+    id: row.id,
+    period: row.period,
+    ref_month: row.refMonth,
+    sale_date: row.saleDate,
+    store_code: row.storeCode,
+    store_name: row.storeName,
+    channel: row.channel,
+    manager: row.manager,
+    store_type: row.storeType,
+    brand: row.brand,
+    item_code: row.itemCode,
+    item_name: row.itemName,
+    quantity: Number(row.quantity || 0),
+    sales_amount: Number(row.salesAmount || 0),
+    cost_amount: Number(row.costAmount || 0),
+    profit_amount: Number(row.profitAmount || 0),
+    profit_rate: Number(row.profitRate || 0),
+  };
+}
+
+function fromV3Row(row: V3SalesRecordRow): SalesRecord {
+  return {
+    id: row.row_key,
+    period: row.period,
+    refMonth: row.ref_month,
+    saleDate: row.sale_date,
+    storeCode: row.store_code,
+    storeName: row.store_name,
+    channel: row.channel,
+    manager: row.manager,
+    storeType: row.store_type,
+    brand: row.brand,
+    itemCode: row.item_code,
+    itemName: row.item_name,
+    quantity: Number(row.quantity || 0),
+    salesAmount: Number(row.sales_amount || 0),
+    costAmount: Number(row.cost_amount || 0),
+    profitAmount: Number(row.profit_amount || 0),
+    profitRate: Number(row.profit_rate || 0),
+  };
+}
+
+async function loadV3SalesForMonth(month: string): Promise<{
+  available: boolean;
+  periodsWithBatch: Set<PeriodType>;
+  records: SalesRecord[];
+}> {
+  const recordsApi = v3SalesEndpoint("sales_records");
+  const batchesApi = v3SalesEndpoint("sales_upload_batches");
+  if (!recordsApi || !batchesApi) {
+    return { available: false, periodsWithBatch: new Set(), records: [] };
+  }
+
+  const batchResponse = await fetch(
+    `${batchesApi.url}?ref_month=eq.${encodeURIComponent(month)}&status=eq.success&select=period`,
+    { method: "GET", headers: batchesApi.headers, cache: "no-store" },
+  );
+  if (batchResponse.status === 404) {
+    return { available: false, periodsWithBatch: new Set(), records: [] };
+  }
+  if (!batchResponse.ok) {
+    const body = await batchResponse.text();
+    if (body.includes("PGRST205") || body.includes("sales_upload_batches")) {
+      return { available: false, periodsWithBatch: new Set(), records: [] };
+    }
+    throw new Error(`Sales V3 batch load failed: ${batchResponse.status}`);
+  }
+  const batchRows = (await batchResponse.json()) as { period: PeriodType }[];
+  const periodsWithBatch = new Set(batchRows.map((row) => row.period));
+
+  const fields = [
+    "row_key", "period", "ref_month", "sale_date", "store_code", "store_name",
+    "channel", "manager", "store_type", "brand", "item_code", "item_name",
+    "quantity", "sales_amount", "cost_amount", "profit_amount", "profit_rate",
+  ].join(",");
+  const recordsResponse = await fetch(
+    `${recordsApi.url}?ref_month=eq.${encodeURIComponent(month)}&active=eq.true&select=${fields}&limit=100000`,
+    { method: "GET", headers: recordsApi.headers, cache: "no-store" },
+  );
+  if (!recordsResponse.ok)
+    throw new Error(`Sales V3 record load failed: ${recordsResponse.status}`);
+  const rows = (await recordsResponse.json()) as V3SalesRecordRow[];
+  return {
+    available: true,
+    periodsWithBatch,
+    records: rows.map(fromV3Row),
+  };
+}
+
+async function replaceV3SalesBatch(request: SalesUploadRequest) {
+  const rpc = v3SalesEndpoint("rpc/replace_sales_batch");
+  if (!rpc) return false;
+  const response = await fetch(rpc.url, {
+    method: "POST",
+    headers: rpc.headers,
+    body: JSON.stringify({
+      p_period: request.period,
+      p_ref_month: request.refMonth,
+      p_file_name: request.fileName,
+      p_uploaded_dates: request.uploadedDates,
+      p_rows: request.rows.map(toV3Payload),
+    }),
+  });
+  if (response.status === 404) return false;
+  if (!response.ok) {
+    const body = await response.text();
+    if (body.includes("PGRST202") || body.includes("replace_sales_batch")) return false;
+    throw new Error(`Sales V3 upload failed: ${response.status} ${body.slice(0, 300)}`);
+  }
+  return true;
+}
+
+async function deleteV3CurrentDate(refMonth: string, saleDate: string) {
+  const rpc = v3SalesEndpoint("rpc/delete_current_sales_date");
+  if (!rpc) return false;
+  const response = await fetch(rpc.url, {
+    method: "POST",
+    headers: rpc.headers,
+    body: JSON.stringify({ p_ref_month: refMonth, p_sale_date: saleDate }),
+  });
+  if (response.status === 404) return false;
+  if (!response.ok) {
+    const body = await response.text();
+    if (body.includes("PGRST202") || body.includes("delete_current_sales_date")) return false;
+    throw new Error(`Sales V3 delete failed: ${response.status} ${body.slice(0, 300)}`);
+  }
+  return true;
+}
+
 function useChunkedSales(
   baseKey: string,
   initial: SalesRecord[],
   month: string,
 ) {
   const [value, rawSetValue] = useState<SalesRecord[]>(initial);
+  const [storageMode, setStorageMode] = useState<"checking" | "v3" | "legacy">("checking");
   const valueRef = useRef<SalesRecord[]>(initial);
   const saveTimerRef = useRef<number | null>(null);
   const isSavingRef = useRef(false);
   const monthRef = useRef(month);
-  const remoteUpdatedAtRef = useRef<Record<string, string>>({});
   const lastSalesRefreshAtRef = useRef(0);
 
   useEffect(() => {
     monthRef.current = month;
   }, [month]);
 
-  const loadMonthChunks = async (targetMonth: string) => {
+  const loadLegacyMonthChunks = async (targetMonth: string) => {
     const keys = salesKeysForMonth(baseKey, targetMonth);
     const rows = await Promise.all(keys.map((key) => loadSharedStateRow<SalesRecord[]>(key)));
-    const foundRows = rows.filter(Boolean) as AppStateRow<SalesRecord[]>[];
-    foundRows.forEach((row, index) => {
-      if (row.updated_at) remoteUpdatedAtRef.current[keys[index]] = row.updated_at;
-    });
-    const chunkedSales = foundRows.flatMap((row) => row.data || []);
-
+    const chunkedSales = rows.filter(Boolean).flatMap((row) => row?.data || []);
     if (chunkedSales.length) return dedupeSales(chunkedSales);
-
-    // 최초 전환 시점에만 기존 ablab_sales_v14 통합 데이터를 읽어와 화면을 살립니다.
     const legacy = await loadSharedState<SalesRecord[]>(baseKey);
-    if (legacy?.length) {
+    if (legacy?.length)
       return dedupeSales(legacy.filter((row) => shouldShowSalesForMonth(row, targetMonth)));
-    }
-
     return initial.filter((row) => shouldShowSalesForMonth(row, targetMonth));
   };
 
-  const persistNow = (nextValue: SalesRecord[]) => {
+  const loadMonthData = async (targetMonth: string) => {
+    const v3 = await loadV3SalesForMonth(targetMonth);
+    if (!v3.available) {
+      setStorageMode("legacy");
+      return loadLegacyMonthChunks(targetMonth);
+    }
+
+    setStorageMode("v3");
+    const legacy = await loadLegacyMonthChunks(targetMonth);
+    const v3Periods = v3.periodsWithBatch;
+    const legacyForUnmigratedPeriods = legacy.filter((row) => !v3Periods.has(row.period));
+    return dedupeSales([...legacyForUnmigratedPeriods, ...v3.records]);
+  };
+
+  const persistLegacyNow = (nextValue: SalesRecord[]) => {
     if (typeof window === "undefined") return;
     const editedAt = Date.now();
     valueRef.current = nextValue;
     setLocalMeta(`${baseKey}_chunked`, { editedAt, pending: true });
-
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(async () => {
       try {
@@ -4079,18 +4258,13 @@ function useChunkedSales(
         const grouped = groupSalesByStorageKey(baseKey, nextValue);
         const targetKeys = salesKeysForMonth(baseKey, monthRef.current);
         await Promise.all(
-          targetKeys.map(async (key) => {
-            const savedUpdatedAt = await saveSharedState(key, grouped.get(key) || []);
-            if (savedUpdatedAt) remoteUpdatedAtRef.current[key] = savedUpdatedAt;
-          }),
+          targetKeys.map((key) => saveSharedState(key, grouped.get(key) || [])),
         );
         const meta = getLocalMeta(`${baseKey}_chunked`);
         if (meta.editedAt === editedAt)
           setLocalMeta(`${baseKey}_chunked`, { editedAt, pending: false });
       } catch (error) {
-        const meta = getLocalMeta(`${baseKey}_chunked`);
-        if (meta.editedAt === editedAt)
-          setLocalMeta(`${baseKey}_chunked`, { editedAt, pending: true });
+        setLocalMeta(`${baseKey}_chunked`, { editedAt, pending: true });
         reportSharedSaveError(error);
       } finally {
         isSavingRef.current = false;
@@ -4100,11 +4274,13 @@ function useChunkedSales(
 
   const setValue: React.Dispatch<React.SetStateAction<SalesRecord[]>> = (next) => {
     rawSetValue((prev) => {
-      const resolved =
-        typeof next === "function" ? (next as (prev: SalesRecord[]) => SalesRecord[])(prev) : next;
+      const resolved = typeof next === "function"
+        ? (next as (prev: SalesRecord[]) => SalesRecord[])(prev)
+        : next;
       const deduped = dedupeSales(resolved);
       valueRef.current = deduped;
-      persistNow(deduped);
+      // 일반 화면 편집은 기존 방식과 호환합니다. 매출 업로드/삭제는 actions의 원자적 RPC를 사용합니다.
+      persistLegacyNow(deduped);
       return deduped;
     });
   };
@@ -4113,7 +4289,7 @@ function useChunkedSales(
     if (isSavingRef.current) return;
     lastSalesRefreshAtRef.current = Date.now();
     try {
-      const latest = await loadMonthChunks(targetMonth);
+      const latest = await loadMonthData(targetMonth);
       valueRef.current = latest;
       rawSetValue(latest);
       setLocalMeta(`${baseKey}_chunked`, { editedAt: Date.now(), pending: false });
@@ -4122,18 +4298,66 @@ function useChunkedSales(
     }
   };
 
+  const replaceUpload: SalesStorageActions["replaceUpload"] = async (request) => {
+    isSavingRef.current = true;
+    try {
+      const currentValue = valueRef.current;
+      const next = request.period === "current"
+        ? currentValue.filter((row) => !(row.period === "current" && request.uploadedDates.includes(row.saleDate)))
+        : currentValue.filter((row) => !(row.period === request.period && row.refMonth === request.refMonth));
+      const merged = dedupeSales([...next, ...request.rows]);
+      const savedToV3 = await replaceV3SalesBatch(request);
+      if (savedToV3) {
+        setStorageMode("v3");
+        valueRef.current = merged;
+        rawSetValue(merged);
+        return { mode: "v3" };
+      }
+      setStorageMode("legacy");
+      valueRef.current = merged;
+      rawSetValue(merged);
+      persistLegacyNow(merged);
+      return { mode: "legacy" };
+    } finally {
+      isSavingRef.current = false;
+    }
+  };
+
+  const deleteCurrentDate: SalesStorageActions["deleteCurrentDate"] = async (refMonth, saleDate) => {
+    isSavingRef.current = true;
+    try {
+      const next = valueRef.current.filter(
+        (row) => !(row.period === "current" && row.refMonth === refMonth && row.saleDate === saleDate),
+      );
+      const deletedInV3 = await deleteV3CurrentDate(refMonth, saleDate);
+      if (deletedInV3) {
+        setStorageMode("v3");
+        valueRef.current = next;
+        rawSetValue(next);
+        return { mode: "v3" };
+      }
+      setStorageMode("legacy");
+      valueRef.current = next;
+      rawSetValue(next);
+      persistLegacyNow(next);
+      return { mode: "legacy" };
+    } finally {
+      isSavingRef.current = false;
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     async function hydrateSales() {
       try {
-        const latest = await loadMonthChunks(month);
+        const latest = await loadMonthData(month);
         if (cancelled) return;
         valueRef.current = latest;
         rawSetValue(latest);
         lastSalesRefreshAtRef.current = Date.now();
-        setLocalMeta(`${baseKey}_chunked`, { editedAt: Date.now(), pending: false });
       } catch (error) {
         console.warn("매출 데이터 불러오기 실패", error);
+        setStorageMode("legacy");
       }
     }
     hydrateSales();
@@ -4146,9 +4370,7 @@ function useChunkedSales(
   useEffect(() => {
     if (typeof window === "undefined") return;
     const interval = window.setInterval(() => {
-      refreshFromSupabase().catch((error) =>
-        console.warn("매출 데이터 자동 동기화 실패", error),
-      );
+      refreshFromSupabase().catch((error) => console.warn("매출 데이터 자동 동기화 실패", error));
     }, SALES_SYNC_INTERVAL_MS);
     const onFocus = () => {
       if (Date.now() - lastSalesRefreshAtRef.current < FOCUS_REFRESH_MIN_GAP_MS) return;
@@ -4161,7 +4383,14 @@ function useChunkedSales(
     };
   }, [baseKey]);
 
-  return [value, setValue] as const;
+  const actions: SalesStorageActions = {
+    replaceUpload,
+    deleteCurrentDate,
+    refresh: () => refreshFromSupabase(),
+    storageMode,
+  };
+
+  return [value, setValue, actions] as const;
 }
 
 function readFileRows(file: File): Promise<Record<string, unknown>[]> {
@@ -4340,7 +4569,7 @@ export default function SalesReportClient() {
     "ablab_stores_v15",
     initialStores,
   );
-  const [sales, setSales] = useChunkedSales(
+  const [sales, setSales, salesActions] = useChunkedSales(
     "ablab_sales_v14",
     initialSales,
     dashMonth,
@@ -4576,6 +4805,7 @@ export default function SalesReportClient() {
             setStores={setStores}
             sales={sales}
             setSales={setSales}
+            salesActions={salesActions}
             targets={targets}
             setTargets={setTargets}
             ests={ests}
@@ -9963,6 +10193,7 @@ function MonthStartManagement({
   setStores,
   sales,
   setSales,
+  salesActions,
   targets,
   setTargets,
   ests,
@@ -9978,6 +10209,7 @@ function MonthStartManagement({
   setStores: (v: Store[]) => void;
   sales: SalesRecord[];
   setSales: React.Dispatch<React.SetStateAction<SalesRecord[]>>;
+  salesActions: SalesStorageActions;
   targets: TargetRecord[];
   setTargets: (v: TargetRecord[]) => void;
   ests: EstRecord[];
@@ -10025,6 +10257,7 @@ function MonthStartManagement({
           setStores={setStores}
           sales={sales}
           setSales={setSales}
+          salesActions={salesActions}
           month={month}
           date={date}
           timeConfigs={timeConfigs}
@@ -11127,6 +11360,7 @@ function UploadPage({
   setStores,
   sales,
   setSales,
+  salesActions,
   month,
   date,
   timeConfigs,
@@ -11136,6 +11370,7 @@ function UploadPage({
   setStores: (v: Store[]) => void;
   sales: SalesRecord[];
   setSales: React.Dispatch<React.SetStateAction<SalesRecord[]>>;
+  salesActions: SalesStorageActions;
   month: string;
   date: string;
   timeConfigs: TimeConfig[];
@@ -11258,21 +11493,22 @@ function UploadPage({
       new Set(parsed.map((r) => r.saleDate).filter(Boolean)),
     );
 
-    // 업로드 직후 금액이 들어갔다가 사라지는 문제를 막기 위해
-    // 화면에 잡혀 있던 오래된 sales 값이 아니라, setSales가 받는 최신 prev 값을 기준으로 병합합니다.
-    setSales((prevSales) => {
-      const nextSales =
-        period === "current"
-          ? prevSales.filter(
-              (s) =>
-                !(s.period === "current" && uploadedDates.includes(s.saleDate)),
-            )
-          : prevSales.filter(
-              (s) => !(s.period === period && s.refMonth === month),
-            );
-
-      return [...nextSales, ...parsed];
-    });
+    try {
+      const result = await salesActions.replaceUpload({
+        period,
+        refMonth: month,
+        fileName: file.name,
+        uploadedDates,
+        rows: parsed,
+      });
+      if (result.mode === "legacy") {
+        console.warn("Sales V3 SQL이 아직 적용되지 않아 기존 저장 방식을 사용했습니다.");
+      }
+    } catch (error) {
+      console.error("매출 업로드 저장 실패", error);
+      alert("매출 저장에 실패했습니다. 기존 데이터는 그대로 유지됩니다. Supabase 상태와 SQL 적용 여부를 확인해 주세요.");
+      return;
+    }
 
     const closedMessage =
       period === "prevYear" && missingStores.length
@@ -11299,19 +11535,26 @@ function UploadPage({
     alert(`${month} TIME GONE 공휴일 ${holidays.length}건을 저장했습니다.`);
   }
 
-  function deleteCurrentDate() {
+  async function deleteCurrentDate() {
     if (!confirm(`${deleteDate} 당월 매출 데이터를 삭제할까요?`)) return;
-    setSales(
-      sales.filter(
-        (s) => !(s.period === "current" && s.saleDate === deleteDate),
-      ),
-    );
+    try {
+      await salesActions.deleteCurrentDate(month, deleteDate);
+      alert(`${deleteDate} 당월 매출 데이터를 삭제 처리했습니다.`);
+    } catch (error) {
+      console.error("매출 삭제 실패", error);
+      alert("삭제에 실패했습니다. 기존 데이터는 유지됩니다.");
+    }
   }
 
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-5 shadow-sm backdrop-blur">
-        <h2 className="mb-3 text-lg font-bold">매출 업로드</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold">매출 업로드</h2>
+          <span className={`rounded-full px-3 py-1 text-xs font-bold ${salesActions.storageMode === "v3" ? "bg-emerald-100 text-emerald-800" : salesActions.storageMode === "checking" ? "bg-slate-100 text-slate-600" : "bg-amber-100 text-amber-800"}`}>
+            {salesActions.storageMode === "v3" ? "안전 저장 V3" : salesActions.storageMode === "checking" ? "저장소 확인 중" : "기존 저장 방식"}
+          </span>
+        </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <UploadBox
             title="당월 매출 업로드"
