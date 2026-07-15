@@ -137,7 +137,7 @@ const CHANNELS: Channel[] = [
   "본사",
 ];
 const MANAGERS: Manager[] = ["SY", "KT", "SW", "NH", "Bomi", "BM", "bomi"];
-const SALES_VIEWS: SalesView[] = ["거래처별", "브랜드별", "담당자별", "채널별"];
+const SALES_VIEWS: SalesView[] = ["거래처별", "브랜드별", "담당자별"];
 const MONTH_TABS: MonthStartTab[] = [
   "거래처/휴면 관리",
   "업로드 관리",
@@ -3728,15 +3728,8 @@ async function saveSharedState<T>(key: string, value: T) {
 }
 
 function reportSharedSaveError(error: unknown) {
+  // 수정·자동저장 과정에서 팝업이 반복되지 않도록 콘솔 기록만 남깁니다.
   console.warn("공유 저장소(Cloudflare D1) 저장 실패", error);
-  if (typeof window === "undefined") return;
-  const now = Date.now();
-  const last = Number(window.sessionStorage.getItem("ablab_shared_save_error_at") || 0);
-  if (now - last < 10 * 60 * 1000) return;
-  window.sessionStorage.setItem("ablab_shared_save_error_at", String(now));
-  window.alert(
-    "공유 저장소(Cloudflare D1)에 연결할 수 없습니다. 현재 값은 브라우저에 임시 보관되며, 연결이 복구되면 자동으로 다시 저장됩니다.",
-  );
 }
 
 function useLocal<T>(key: string, initial: T) {
@@ -3843,17 +3836,10 @@ function useLocal<T>(key: string, initial: T) {
 
     alertOpenRef.current = true;
     try {
-      const shouldRefresh = window.confirm(
-        "다른 사용자가 데이터를 수정했습니다. 최신 데이터로 새로고침할까요?",
-      );
-      if (shouldRefresh) {
-        lastRemoteUpdatedAtRef.current = remoteRow.updated_at;
-        applyValue(remoteRow.data);
-        setLocalMeta(keyRef.current, { editedAt: Date.now(), pending: false });
-      } else {
-        // 같은 알림이 반복해서 뜨지 않도록 현재 원격 버전은 확인 처리만 합니다.
-        lastRemoteUpdatedAtRef.current = remoteRow.updated_at;
-      }
+      // 로컬에 저장 대기 중인 수정이 없을 때만 최신 원격값을 조용히 반영합니다.
+      lastRemoteUpdatedAtRef.current = remoteRow.updated_at;
+      applyValue(remoteRow.data);
+      setLocalMeta(keyRef.current, { editedAt: Date.now(), pending: false });
     } finally {
       alertOpenRef.current = false;
     }
@@ -4564,10 +4550,10 @@ export default function SalesReportClient() {
 
   return (
     <main
-      className="min-h-screen bg-white text-slate-900"
+      className="sales-report-root min-h-screen bg-white text-black"
       style={{ fontFamily: '"Malgun Gothic", "맑은 고딕", sans-serif' }}
     >
-      <header className="sticky top-0 z-40 border-b border-gray-300 bg-white/95 shadow-sm backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-5">
           <div className="flex flex-wrap items-center gap-3">
             <div className="text-lg font-extrabold tracking-tight text-orange-950">
@@ -4615,8 +4601,18 @@ export default function SalesReportClient() {
       </header>
 
       <section className="min-w-0 p-4 lg:p-5">
-        <div className="mb-4 space-y-3 rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
-          <div className="rounded-2xl border border-gray-300/70 bg-slate-50/75 p-3 shadow-sm backdrop-blur">
+        <style jsx global>{`
+          .sales-report-root table th,
+          .sales-report-root table td,
+          .sales-report-root table input,
+          .sales-report-root table select,
+          .sales-report-root .metric-black { color: #000 !important; }
+          .sales-report-root table th,
+          .sales-report-root table td { border-color: #e5e7eb !important; }
+          .sales-report-root thead th { background-clip: padding-box; }
+        `}</style>
+        <div className={active === "매출현황" ? "mb-2 space-y-1" : "mb-4 space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"}>
+          <div className={active === "매출현황" ? "bg-white px-0 py-0" : "rounded-2xl border border-gray-200 bg-slate-50 p-3 shadow-sm"}>
             <div className="flex flex-wrap items-end gap-2">
               <label className="w-[135px] text-[12px] font-semibold text-slate-600">
                 기준년월
@@ -5636,20 +5632,28 @@ function SalesTargetHeaderKpi({
   const rate = targetTotal ? (currentSales / targetTotal) * 100 : 0;
 
   return (
-    <div className="ml-auto min-w-[240px] rounded-xl border border-yellow-300 bg-yellow-100 px-5 py-2.5 text-right shadow-sm">
-      <div className="text-[11px] font-extrabold tracking-wide text-black">
-        TARGET 달성률
-      </div>
-      <div className="mt-0.5 text-[34px] font-black leading-none tracking-tight text-black">
-        {targetTotal ? pct(rate) : "-"}
-      </div>
-      <div className="mt-1 text-[10px] font-bold text-black">
-        {won(currentSales)} / {won(targetTotal)}
+    <div className="ml-auto min-w-[430px] rounded-xl border border-yellow-300 bg-yellow-100 px-4 py-2 shadow-sm">
+      <div className="grid grid-cols-[1.25fr_1fr_1fr_1fr] items-center gap-2 text-black">
+        <div className="rounded-lg bg-yellow-200 px-3 py-2 text-center">
+          <div className="text-[12px] font-extrabold">TARGET 달성률</div>
+          <div className="mt-0.5 text-[30px] font-black leading-none">{targetTotal ? pct(rate) : "-"}</div>
+        </div>
+        <div className="text-center">
+          <div className="text-[11px] font-bold">매장 Target</div>
+          <div className="mt-1 text-[16px] font-black">{won(storeTarget)}</div>
+        </div>
+        <div className="text-center">
+          <div className="text-[11px] font-bold">비매장 Target</div>
+          <div className="mt-1 text-[16px] font-black">{won(nonStoreTarget)}</div>
+        </div>
+        <div className="text-center">
+          <div className="text-[11px] font-bold">총 Target</div>
+          <div className="mt-1 text-[16px] font-black">{won(targetTotal)}</div>
+        </div>
       </div>
     </div>
   );
 }
-
 function DashboardTopKpis({
   stores,
   sales,
@@ -5667,6 +5671,7 @@ function DashboardTopKpis({
   month: string;
   date: string;
 }) {
+  const [costAlertOpen, setCostAlertOpen] = useState(false);
   const current = sales.filter(
     (s) =>
       s.period === "current" && inRange(s.saleDate, monthStart(month), date),
@@ -5731,9 +5736,32 @@ function DashboardTopKpis({
       }).length
     );
   }, 0);
+
+  const currentItemSummary = new Map<string, { itemCode: string; itemName: string; sales: number; cost: number; quantity: number }>();
+  current.forEach((row) => {
+    const key = row.itemCode || row.itemName || "미지정";
+    const prev = currentItemSummary.get(key) || { itemCode: row.itemCode || "-", itemName: row.itemName || "미지정", sales: 0, cost: 0, quantity: 0 };
+    prev.sales += Number(row.salesAmount || 0);
+    prev.cost += Number(row.costAmount || 0);
+    prev.quantity += Number(row.quantity || 0);
+    currentItemSummary.set(key, prev);
+  });
+  const costAlertRows = scheduledCostItems
+    .map((item) => {
+      const summary = currentItemSummary.get(item.itemCode) || { itemCode: item.itemCode, itemName: item.itemName, sales: 0, cost: 0, quantity: 0 };
+      const previousUnitCost = summary.quantity ? summary.cost / summary.quantity : Number(item.currentCost || 0);
+      const sellingUnitPrice = summary.quantity ? summary.sales / summary.quantity : 0;
+      const nextCost = Number(item.nextCost || 0);
+      const currentMarginRate = sellingUnitPrice ? ((sellingUnitPrice - previousUnitCost) / sellingUnitPrice) * 100 : 0;
+      const nextMarginRate = sellingUnitPrice ? ((sellingUnitPrice - nextCost) / sellingUnitPrice) * 100 : 0;
+      return { ...item, previousUnitCost, sellingUnitPrice, currentMarginRate, nextMarginRate, nextCost };
+    })
+    .sort((a, b) => String(a.effectiveDate || "").localeCompare(String(b.effectiveDate || "")));
+
   const activeCostAlertCount = overdueCount + dueTodayCount + dueSoonCount + upcomingCount;
 
   return (
+    <>
     <div className="grid w-full grid-cols-1 gap-2 lg:grid-cols-5">
       <KpiGroup
         items={[
@@ -5813,35 +5841,56 @@ function DashboardTopKpis({
           },
         ]}
       />
-      <KpiGroup
-        items={[
-          {
-            title: "매입가 알림",
-            value: activeCostAlertCount ? `${activeCostAlertCount}건` : "정상",
-            color: overdueCount || dueTodayCount || dueSoonCount
-              ? "text-red-600"
-              : upcomingCount
-                ? "text-amber-600"
-                : "text-emerald-700",
-          },
-          {
-            title: "오늘 적용",
-            value: `${dueTodayCount}건${overdueCount ? ` / 지남 ${overdueCount}건` : ""}`,
-            color: overdueCount || dueTodayCount ? "text-red-600" : "text-slate-500",
-          },
-          {
-            title: "7일 이내",
-            value: `${dueSoonCount}건`,
-            color: dueSoonCount ? "text-orange-600" : "text-slate-500",
-          },
-          {
-            title: "30일 이내",
-            value: `${upcomingCount}건 · 최근변경 ${recentHistoryCount}건`,
-            color: upcomingCount || recentHistoryCount ? "text-amber-600" : "text-slate-500",
-          },
-        ]}
-      />
+      <button
+        type="button"
+        onClick={() => activeCostAlertCount > 0 && setCostAlertOpen(true)}
+        className={`h-full rounded-xl border border-gray-200 bg-white p-2.5 text-left shadow-sm ${activeCostAlertCount > 0 ? "cursor-pointer hover:bg-orange-50 hover:shadow-md" : "cursor-default"}`}
+      >
+        <div className="divide-y divide-gray-200 text-black">
+          <div className="flex min-h-[31px] items-center justify-between px-1.5"><span className="text-[13px] font-semibold">매입가 알림</span><span className="text-[18px] font-black">{activeCostAlertCount ? `${activeCostAlertCount}건` : "정상"}</span></div>
+          <div className="flex min-h-[31px] items-center justify-between px-1.5"><span className="text-[13px] font-semibold">오늘 적용</span><span className="text-[16px] font-bold">{dueTodayCount}건{overdueCount ? ` / 지남 ${overdueCount}건` : ""}</span></div>
+          <div className="flex min-h-[31px] items-center justify-between px-1.5"><span className="text-[13px] font-semibold">7일 이내</span><span className="text-[16px] font-bold">{dueSoonCount}건</span></div>
+          <div className="flex min-h-[31px] items-center justify-between px-1.5"><span className="text-[13px] font-semibold">30일 이내</span><span className="text-[16px] font-bold">{upcomingCount}건 · 최근변경 {recentHistoryCount}건</span></div>
+        </div>
+      </button>
     </div>
+    {costAlertOpen && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4" onMouseDown={() => setCostAlertOpen(false)}>
+        <div className="max-h-[82vh] w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+            <div><h3 className="text-lg font-extrabold text-black">매입가 인상 상세 품목</h3><p className="mt-1 text-xs text-black">당월 매출의 판매가·원가를 기준으로 계산합니다.</p></div>
+            <button type="button" onClick={() => setCostAlertOpen(false)} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-black">닫기</button>
+          </div>
+          <div className="max-h-[68vh] overflow-auto bg-white">
+            <table className="w-full min-w-[1050px] border-separate border-spacing-0 text-center text-[12px] text-black">
+              <thead><tr>
+                <th className="sticky top-0 z-20 border border-gray-200 bg-white px-3 py-2">품목코드</th>
+                <th className="sticky top-0 z-20 border border-gray-200 bg-white px-3 py-2">품목명</th>
+                <th className="sticky top-0 z-20 border border-gray-200 bg-blue-100 px-3 py-2">전 매입가</th>
+                <th className="sticky top-0 z-20 border border-gray-200 bg-blue-100 px-3 py-2">현재 판매가</th>
+                <th className="sticky top-0 z-20 border border-gray-200 bg-orange-100 px-3 py-2">현재 판매가 대비 이익률</th>
+                <th className="sticky top-0 z-20 border border-gray-200 bg-yellow-100 px-3 py-2">인상 후 매입가</th>
+                <th className="sticky top-0 z-20 border border-gray-200 bg-orange-100 px-3 py-2">인상 후 판매가 이익률</th>
+                <th className="sticky top-0 z-20 border border-gray-200 bg-white px-3 py-2">적용 예정일</th>
+              </tr></thead>
+              <tbody>{costAlertRows.map((row) => (
+                <tr key={row.itemCode}>
+                  <td className="border border-gray-200 px-3 py-2">{row.itemCode}</td>
+                  <td className="border border-gray-200 px-3 py-2 text-left font-semibold">{row.itemName}</td>
+                  <td className="border border-gray-200 px-3 py-2 text-right font-bold">{won(row.previousUnitCost)}</td>
+                  <td className="border border-gray-200 px-3 py-2 text-right font-bold">{won(row.sellingUnitPrice)}</td>
+                  <td className="border border-gray-200 px-3 py-2 text-right font-bold">{pct(row.currentMarginRate)}</td>
+                  <td className="border border-gray-200 px-3 py-2 text-right font-bold">{won(row.nextCost)}</td>
+                  <td className="border border-gray-200 px-3 py-2 text-right font-bold">{pct(row.nextMarginRate)}</td>
+                  <td className="border border-gray-200 px-3 py-2">{row.effectiveDate || "-"}</td>
+                </tr>
+              ))}{!costAlertRows.length && <tr><td colSpan={8} className="border border-gray-200 p-8">표시할 매입가 알림이 없습니다.</td></tr>}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -5964,9 +6013,6 @@ function Dashboard({
         <div>
           <div className="text-base font-extrabold text-slate-900">
             담당자별 매출 요약
-          </div>
-          <div className="mt-1 text-xs font-medium text-slate-500">
-            담당자 SY / KT / SW / NH 기준 매출, EST, 이익 요약
           </div>
         </div>
         <button
@@ -8112,6 +8158,7 @@ function SalesStatus({
   );
 
   const isStoreListView = view === "거래처별" || view === "담당자별";
+  const showChannelColumn = view === "거래처별" || view === "브랜드별";
 
   const rowKey = (r: SalesRecord) => {
     const resolved = resolveRecord(r);
@@ -8281,9 +8328,15 @@ function SalesStatus({
         ? resolveRecord(firstRecord).status
         : stMap.get(key)?.status;
       const isEndedStore = isStoreListView && storeStatus === "거래종료";
+      const resolvedStores = allRecords.map(resolveRecord);
+      const uniqueStoreCount = new Set(resolvedStores.map((store) => store.code || store.name).filter(Boolean)).size;
+      const channelValues = Array.from(new Set(resolvedStores.map((store) => store.storeType === "매장" ? "매장" : "비매장")));
+      const channel = channelValues.length === 1 ? channelValues[0] : channelValues.length > 1 ? "혼합" : (firstRecord ? (resolveRecord(firstRecord).storeType === "매장" ? "매장" : "비매장") : "-");
+      const baseLabel = rowLabel(key, allRecords);
       return {
         key,
-        label: rowLabel(key, allRecords),
+        label: view === "브랜드별" ? `${baseLabel} (${uniqueStoreCount})` : baseLabel,
+        channel,
         prevYearSales,
         prevMonthSales,
         currentSales,
@@ -8602,6 +8655,7 @@ function SalesStatus({
 
   const salesStatusExcelRows = sortedRows.map((r) => ({
     구분: r.label,
+    채널: r.channel,
     전년동월: r.prevYearSales,
     "전년 Time gone": pct(r.prevYearTimeGoneGap),
     전년대비: pct(r.prevYearRate),
@@ -8617,7 +8671,7 @@ function SalesStatus({
     이익률: pct(r.profitRate),
   }));
 
-  const salesStatusColSpan = compact ? 12 : isStoreListView ? 13 : 12;
+  const salesStatusColSpan = 1 + (showChannelColumn ? 1 : 0) + (!compact && isStoreListView ? 1 : 0) + 10;
   return (
     <>
       <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
@@ -8816,12 +8870,14 @@ function SalesStatus({
                 >
                   {isStoreListView ? "거래처" : view.replace("별", "")}
                 </ThCompactSortable>
+                {showChannelColumn && <ThCompact rowSpan={2} tone="gray" w="w-[7%]">채널</ThCompact>}
                 {!compact && isStoreListView && (
                   <ThCompact rowSpan={2} tone="gray" w="w-[7%]">마지막발주일</ThCompact>
                 )}
                 <ThCompact colSpan={2} tone="mint">전년동월</ThCompact>
                 <ThCompact colSpan={2} tone="blue">전월</ThCompact>
-                <ThCompact colSpan={7} tone="yellow">당월</ThCompact>
+                <ThCompact colSpan={4} tone="yellow">당월</ThCompact>
+                <ThCompact colSpan={2} tone="orange">이익</ThCompact>
               </tr>
               <tr>
                 <ThCompactSortable right tone="mint" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>매출</ThCompactSortable>
@@ -8830,11 +8886,10 @@ function SalesStatus({
                 <ThCompactSortable right tone="blue" top="top-[31px]" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>Time gone</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>전체 매출</ThCompactSortable>
-                <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>Time gone</ThCompactSortable>
-                <ThCompactSortable right tone="yellow" top="top-[31px]" w={compact ? "w-[5%]" : ""} sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
-                <ThCompactSortable right tone="yellow" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
-                <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
-                <ThCompactSortable right tone="yellow" top="top-[31px]" w="w-[5%]" sortKey="profitRate" sortConfig={sortConfig} onSort={requestSort}>이익률</ThCompactSortable>
+                <ThCompactSortable right tone="purple" top="top-[31px]" w={compact ? "w-[5%]" : ""} sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
+                <ThCompactSortable right tone="purple" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
+                <ThCompactSortable right tone="orange" top="top-[31px]" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
+                <ThCompactSortable right tone="orange" top="top-[31px]" w="w-[5%]" sortKey="profitRate" sortConfig={sortConfig} onSort={requestSort}>이익률</ThCompactSortable>
               </tr>
             </thead>
             <tbody>
@@ -8857,6 +8912,7 @@ function SalesStatus({
                     <Fragment key={r.key}>
                       <tr>
                         <TdCompact bold>{r.label}</TdCompact>
+                        {showChannelColumn && <TdCompact bold>{r.channel}</TdCompact>}
                         {!compact && isStoreListView && (
                           <TdCompact>
                             <div className="text-center font-semibold text-slate-900 whitespace-nowrap">
@@ -8893,9 +8949,6 @@ function SalesStatus({
                           value={r.fullMonthSales}
                           onClick={() => openDrill(r, "currentFullMonth")}
                         />
-                        <TdCompact right amount>
-                          {pct(r.timeGoneGap)}
-                        </TdCompact>
                         <TdCompact right amount>
                           {won(r.est)}
                         </TdCompact>
@@ -9025,7 +9078,7 @@ function ThCompactSortable({
   onSort: (key: SalesStatusSortKey) => void;
   right?: boolean;
   w?: string;
-  tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green";
+  tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green" | "orange";
   rowSpan?: number;
   top?: string;
 }) {
@@ -9929,25 +9982,27 @@ function ThCompact({
   children: React.ReactNode;
   right?: boolean;
   w?: string;
-  tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green";
+  tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green" | "orange";
   rowSpan?: number;
   colSpan?: number;
   top?: string;
 }) {
   const toneClass =
     tone === "mint"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      ? "border-emerald-200 bg-emerald-100 text-black"
       : tone === "blue"
-        ? "border-blue-200 bg-blue-50 text-blue-800"
+        ? "border-blue-200 bg-blue-100 text-black"
         : tone === "yellow"
-          ? "border-amber-200 bg-amber-50 text-amber-800"
+          ? "border-amber-200 bg-yellow-100 text-black"
           : tone === "gray"
-            ? "border-slate-300 bg-slate-100 text-slate-800"
+            ? "border-slate-300 bg-slate-100 text-black"
             : tone === "purple"
-              ? "border-violet-200 bg-violet-50 text-violet-800"
+              ? "border-violet-200 bg-violet-100 text-black"
               : tone === "green"
-                ? "border-green-200 bg-green-50 text-green-800"
-                : "border-slate-200 bg-slate-100 text-slate-800";
+                ? "border-green-200 bg-green-50 text-black"
+                : tone === "orange"
+                  ? "border-orange-200 bg-orange-100 text-black"
+                  : "border-slate-200 bg-slate-100 text-black";
 
   return (
     <th
@@ -11736,22 +11791,24 @@ function Th({
 }: {
   children: React.ReactNode;
   right?: boolean;
-  tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green";
+  tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green" | "orange";
 }) {
   const toneClass =
     tone === "mint"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      ? "border-emerald-200 bg-emerald-100 text-black"
       : tone === "blue"
-        ? "border-blue-200 bg-blue-50 text-blue-800"
+        ? "border-blue-200 bg-blue-100 text-black"
         : tone === "yellow"
-          ? "border-amber-200 bg-amber-50 text-amber-800"
+          ? "border-amber-200 bg-yellow-100 text-black"
           : tone === "gray"
-            ? "border-slate-300 bg-slate-100 text-slate-800"
+            ? "border-slate-300 bg-slate-100 text-black"
             : tone === "purple"
-              ? "border-violet-200 bg-violet-50 text-violet-800"
+              ? "border-violet-200 bg-violet-100 text-black"
               : tone === "green"
-                ? "border-green-200 bg-green-50 text-green-800"
-                : "border-slate-200 bg-slate-100 text-slate-800";
+                ? "border-green-200 bg-green-50 text-black"
+                : tone === "orange"
+                  ? "border-orange-200 bg-orange-100 text-black"
+                  : "border-slate-200 bg-slate-100 text-black";
 
   return (
     <th
