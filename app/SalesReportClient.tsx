@@ -4550,10 +4550,10 @@ export default function SalesReportClient() {
 
   return (
     <main
-      className="sales-report-root min-h-screen bg-white text-black"
+      className="sales-report-root flex h-screen min-h-0 flex-col overflow-hidden bg-white text-black"
       style={{ fontFamily: '"Malgun Gothic", "맑은 고딕", sans-serif' }}
     >
-      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white shadow-sm">
+      <header className="relative z-40 shrink-0 border-b border-gray-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-5">
           <div className="flex flex-wrap items-center gap-3">
             <div className="text-lg font-extrabold tracking-tight text-orange-950">
@@ -4600,7 +4600,7 @@ export default function SalesReportClient() {
         </div>
       </header>
 
-      <section className="min-w-0 p-4 lg:p-5">
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-3 lg:p-4">
         <style jsx global>{`
           .sales-report-root table th,
           .sales-report-root table td,
@@ -4609,10 +4609,28 @@ export default function SalesReportClient() {
           .sales-report-root .metric-black { color: #000 !important; }
           .sales-report-root table th,
           .sales-report-root table td { border-color: #e5e7eb !important; }
-          .sales-report-root thead th { background-clip: padding-box; }
+          .sales-report-root thead th { background-clip: padding-box; box-shadow: 0 1px 0 rgba(15,23,42,.10); }
+          html, body { height: 100%; overflow: hidden; }
+          .sales-report-root .page-workspace { display:flex; min-height:0; flex:1; flex-direction:column; gap:.5rem; overflow:hidden; }
+          .sales-report-root .page-filter-card { flex:0 0 auto; border:0 !important; box-shadow:none !important; padding:.25rem 0 !important; border-radius:0 !important; background:#fff !important; }
+          .sales-report-root .page-table-card { display:flex; min-height:0; flex:1; flex-direction:column; overflow:hidden; }
+          .sales-report-root .page-table-scroll { min-height:0 !important; max-height:none !important; flex:1; overflow:auto !important; isolation:isolate; background:#fff; }
+          .sales-report-root .page-table-scroll thead th { opacity:1 !important; background-color:var(--tw-bg-opacity,1); }
+          .sales-report-root table { font-size:13px; }
+          .sales-report-root table th { text-align:center !important; white-space:nowrap !important; }
+          .sales-report-root table td { white-space:nowrap !important; }
+          .sales-report-root .amount-emphasis { color:#000 !important; font-size:14px !important; font-weight:800 !important; }
+
+          .sales-report-root .amount-summary-grid button, .sales-report-root .amount-summary-grid div { color:#000 !important; }
+          .sales-report-root .amount-summary-grid button { font-size:14px !important; font-weight:800 !important; }
+          .sales-report-root .page-workspace > .page-filter-card + .page-table-card { min-height:0; flex:1; }
+          @media (min-width:1280px){
+            .sales-report-root .top-filter-inline { position:absolute; right:1rem; top:.25rem; z-index:45; max-width:58vw; }
+            .sales-report-root .top-filter-inline + * { margin-top:.25rem; }
+          }
         `}</style>
-        <div className={active === "매출현황" ? "mb-2 space-y-1" : "mb-4 space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"}>
-          <div className={active === "매출현황" ? "bg-white px-0 py-0" : "rounded-2xl border border-gray-200 bg-slate-50 p-3 shadow-sm"}>
+        <div className={["매출현황", "거래처별 상세", "품목분석", "매입가 정보"].includes(active) ? "relative mb-1 shrink-0" : "mb-3 shrink-0 space-y-2 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm"}>
+          <div className={["매출현황", "거래처별 상세", "품목분석", "매입가 정보"].includes(active) ? "bg-white px-0 py-0" : "rounded-2xl border border-gray-200 bg-slate-50 p-3 shadow-sm"}>
             <div className="flex flex-wrap items-end gap-2">
               <label className="w-[135px] text-[12px] font-semibold text-slate-600">
                 기준년월
@@ -4667,6 +4685,7 @@ export default function SalesReportClient() {
           )}
         </div>
 
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {active === "EST 입력" && (
           <EstQuickEntry
             stores={stores}
@@ -4748,6 +4767,7 @@ export default function SalesReportClient() {
             setCodeMappings={setCodeMappings}
           />
         )}
+        </div>
       </section>
     </main>
   );
@@ -4938,8 +4958,8 @@ function EstQuickEntry({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+    <div className="page-workspace">
+      <div className="page-filter-card top-filter-inline">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -5294,8 +5314,8 @@ function ItemCostStatus({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+    <div className="page-workspace">
+      <div className="page-filter-card top-filter-inline">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-base font-extrabold text-slate-900">매입가 정보</div>
@@ -5319,8 +5339,8 @@ function ItemCostStatus({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-        <div className="max-h-[70vh] overflow-auto isolate">
+      <div className="page-table-card overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+        <div className="page-table-scroll">
           <table className="w-full min-w-[1350px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
@@ -6851,11 +6871,11 @@ function ItemAnalysis({
       </div>
 
       {!selectedStoreCode && mode === "브랜드별" && !selectedBrand && (
-        <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+        <div className="page-table-card overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
           <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">
             브랜드별 요약
           </div>
-          <div className="max-h-[65vh] overflow-auto isolate">
+          <div className="page-table-scroll">
             <table className="w-full min-w-[900px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
               <thead>
                 <tr>
@@ -6877,8 +6897,10 @@ function ItemAnalysis({
               <tbody>
                 {sortedBrandRows.map((r) => (
                   <tr key={r.brand} className="hover:bg-blue-50">
-                    <td className="border border-slate-300 p-2 font-semibold">
-                      {r.brand}
+                    <td className="border border-slate-300 p-2 text-center font-semibold">
+                      <button type="button" onClick={() => { setSelectedBrand(r.brand); setSelectedStoreCode(""); }} className="font-extrabold text-black underline-offset-2 hover:underline">
+                        {r.brand} ({r.stores.length})
+                      </button>
                     </td>
                     <td className="border border-slate-300 p-2 text-right">{won(r.prevYear)}</td>
                     <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevYear) >= 0 ? "text-emerald-600" : "text-red-600"}`}>{itemSignedPct(itemMetricRate(r.current, r.prevYear))}</td>
@@ -6915,7 +6937,7 @@ function ItemAnalysis({
       )}
 
       {!selectedStoreCode && (mode === "매장별" || selectedBrand) && (
-        <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+        <div className="page-table-card overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-300 px-4 py-3">
             <div className="text-sm font-bold text-slate-800">
               {selectedBrand ? `${selectedBrand} 거래처 목록` : "거래처별 요약"}
@@ -6929,7 +6951,7 @@ function ItemAnalysis({
               </button>
             )}
           </div>
-          <div className="max-h-[65vh] overflow-auto isolate">
+          <div className="page-table-scroll">
             <table className="w-full min-w-[900px] border-separate border-spacing-0 text-center text-[12px] text-slate-900 whitespace-nowrap">
               {mode === "매장별" && !selectedBrand ? (
                 <>
@@ -7033,7 +7055,7 @@ function ItemAnalysis({
       )}
 
       {selectedStoreCode && !selectedItemCode && selectedStore && (
-        <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+        <div className="page-table-card overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-300 px-4 py-3">
             <div>
               <div className="text-sm font-bold text-slate-800">
@@ -7052,7 +7074,7 @@ function ItemAnalysis({
               </button>
             </div>
           </div>
-          <div className="max-h-[65vh] overflow-auto isolate">
+          <div className="page-table-scroll">
             <table className="w-full min-w-[820px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
               <thead>
                 <tr>
@@ -7245,7 +7267,7 @@ function ItemAnalysis({
                 </div>
               </div>
             </div>
-            <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+            <div className="page-table-card overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
               <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">
                 상세 발주 원본
               </div>
@@ -7593,8 +7615,8 @@ function ItemShipmentAnalysis({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+    <div className="page-workspace">
+      <div className="page-filter-card top-filter-inline">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-base font-bold text-black">품목분석</div>
@@ -7646,14 +7668,14 @@ function ItemShipmentAnalysis({
       </div>
 
       {!selectedItemCode && (
-        <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+        <div className="page-table-card overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-300 px-4 py-3">
             <div className="text-sm font-bold text-black">품목별 손익 요약</div>
             <div className="text-xs font-semibold text-black">
               필터 결과 {itemRows.length.toLocaleString("ko-KR")}개 품목
             </div>
           </div>
-          <div className="max-h-[68vh] overflow-auto isolate">
+          <div className="page-table-scroll">
             <table className="w-full min-w-[1650px] border-separate border-spacing-0 text-center text-[11px] text-black whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-100">
@@ -7768,7 +7790,7 @@ function ItemShipmentAnalysis({
       )}
 
       {selectedItemCode && selectedItem && (
-        <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+        <div className="page-table-card overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-300 px-4 py-3">
             <div>
               <div className="text-sm font-bold text-black">
@@ -7785,7 +7807,7 @@ function ItemShipmentAnalysis({
               ← 품목 목록
             </button>
           </div>
-          <div className="max-h-[68vh] overflow-auto isolate">
+          <div className="page-table-scroll">
             <table className="w-full min-w-[1450px] border-separate border-spacing-0 text-center text-[11px] text-black whitespace-nowrap">
               <thead>
                 <tr>
@@ -8673,8 +8695,8 @@ function SalesStatus({
 
   const salesStatusColSpan = 1 + (showChannelColumn ? 1 : 0) + (!compact && isStoreListView ? 1 : 0) + 10;
   return (
-    <>
-      <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+    <div className="page-workspace">
+      <div className="page-filter-card">
         <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-900">매출현황</h2>
@@ -8821,7 +8843,7 @@ function SalesStatus({
               </div>
             </div>
 
-            <div className="mb-3 grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <div className="amount-summary-grid mb-2 grid grid-cols-2 gap-2 lg:grid-cols-5">
               <FilterAmountCard
                 title="전년동월 매출"
                 value={filteredPrevYearSales}
@@ -8855,7 +8877,7 @@ function SalesStatus({
           </>
         )}
 
-        <div className="relative max-h-[62vh] overflow-auto bg-white">
+        <div className="page-table-scroll relative bg-white">
           <table
             className={`w-full ${compact ? "min-w-[1360px]" : "min-w-[1180px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[11px] leading-tight`}
           >
@@ -8876,7 +8898,8 @@ function SalesStatus({
                 )}
                 <ThCompact colSpan={2} tone="mint">전년동월</ThCompact>
                 <ThCompact colSpan={2} tone="blue">전월</ThCompact>
-                <ThCompact colSpan={4} tone="yellow">당월</ThCompact>
+                <ThCompact colSpan={2} tone="yellow">당월</ThCompact>
+                <ThCompact colSpan={2} tone="purple">EST</ThCompact>
                 <ThCompact colSpan={2} tone="orange">이익</ThCompact>
               </tr>
               <tr>
@@ -9057,7 +9080,7 @@ function SalesStatus({
           onClose={() => setInactiveOpen(false)}
         />
       )}
-    </>
+    </div>
   );
 }
 
