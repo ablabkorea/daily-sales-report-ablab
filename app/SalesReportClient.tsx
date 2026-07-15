@@ -3636,45 +3636,25 @@ function registerSupabaseFailure(status: number) {
   supabaseBackoffUntil = Date.now() + delay;
 }
 
-function supabaseConfig() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, "");
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
-
-  if (!url || !key) return null;
-
+function sharedApiConfig() {
   return {
-    endpoint: `${url}/rest/v1/app_state`,
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
+    endpoint: "/api/d1/settings",
+    headers: { "Content-Type": "application/json" },
   };
 }
 
 async function loadSharedStateRow<T>(
   key: string,
 ): Promise<AppStateRow<T> | null> {
-  const config = supabaseConfig();
-  if (!config) return null;
-  if (!canCallSupabase()) throw new Error("Supabase request paused during backoff");
-
+  const config = sharedApiConfig();
   const response = await fetch(
-    `${config.endpoint}?id=eq.${encodeURIComponent(key)}&select=data,updated_at&limit=1`,
-    {
-      method: "GET",
-      headers: config.headers,
-      cache: "no-store",
-    },
+    `${config.endpoint}/${encodeURIComponent(key)}`,
+    { method: "GET", headers: config.headers, cache: "no-store" },
   );
 
-  if (!response.ok) {
-    registerSupabaseFailure(response.status);
-    throw new Error(`Supabase load failed: ${response.status}`);
-  }
-  registerSupabaseSuccess();
-  const rows = (await response.json()) as AppStateRow<T>[];
-  return rows[0] ?? null;
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`D1 load failed: ${response.status}`);
+  return (await response.json()) as AppStateRow<T>;
 }
 
 async function loadSharedState<T>(key: string): Promise<T | null> {
@@ -3694,7 +3674,7 @@ function safeSetLocalStorage(key: string, value: string) {
     return true;
   } catch (error) {
     console.warn(
-      "브라우저 저장소 용량이 부족해 localStorage 저장을 건너뜁니다. Supabase 저장은 계속 시도합니다.",
+      "브라우저 저장소 용량이 부족해 localStorage 저장을 건너뜁니다. Cloudflare D1 저장은 계속 시도합니다.",
       error,
     );
     return false;
@@ -3735,42 +3715,27 @@ function setLocalMeta(
 }
 
 async function saveSharedState<T>(key: string, value: T) {
-  const config = supabaseConfig();
-  if (!config) return null;
-  if (!canCallSupabase()) throw new Error("Supabase request paused during backoff");
-
-  const updatedAt = new Date().toISOString();
-  const response = await fetch(`${config.endpoint}?on_conflict=id&select=updated_at`, {
-    method: "POST",
-    headers: {
-      ...config.headers,
-      Prefer: "resolution=merge-duplicates,return=representation",
-    },
-    body: JSON.stringify({
-      id: key,
-      data: value,
-      updated_at: updatedAt,
-    }),
+  const config = sharedApiConfig();
+  const response = await fetch(`${config.endpoint}/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    headers: config.headers,
+    body: JSON.stringify({ data: value }),
   });
 
-  if (!response.ok) {
-    registerSupabaseFailure(response.status);
-    throw new Error(`Supabase save failed: ${response.status}`);
-  }
-  registerSupabaseSuccess();
-  const rows = (await response.json()) as AppStateRow<T>[];
-  return rows[0]?.updated_at || updatedAt;
+  if (!response.ok) throw new Error(`D1 save failed: ${response.status}`);
+  const row = (await response.json()) as AppStateRow<T>;
+  return row.updated_at || new Date().toISOString();
 }
 
 function reportSharedSaveError(error: unknown) {
-  console.warn("공유 저장소(Supabase) 저장 실패", error);
+  console.warn("공유 저장소(Cloudflare D1) 저장 실패", error);
   if (typeof window === "undefined") return;
   const now = Date.now();
   const last = Number(window.sessionStorage.getItem("ablab_shared_save_error_at") || 0);
   if (now - last < 10 * 60 * 1000) return;
   window.sessionStorage.setItem("ablab_shared_save_error_at", String(now));
   window.alert(
-    "공유 저장소(Supabase)에 연결할 수 없습니다. 현재 값은 브라우저에 임시 보관되며, 연결이 복구되면 자동으로 다시 저장됩니다.",
+    "공유 저장소(Cloudflare D1)에 연결할 수 없습니다. 현재 값은 브라우저에 임시 보관되며, 연결이 복구되면 자동으로 다시 저장됩니다.",
   );
 }
 
@@ -3799,8 +3764,7 @@ function useLocal<T>(key: string, initial: T) {
   };
 
   const refreshFromSupabase = async (options?: { allowDuringPending?: boolean }) => {
-    const config = supabaseConfig();
-    if (!config || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
 
     const meta = getLocalMeta(keyRef.current);
     if (meta.pending && !options?.allowDuringPending) return;
@@ -3860,8 +3824,7 @@ function useLocal<T>(key: string, initial: T) {
   };
 
   const checkRemoteUpdate = async () => {
-    const config = supabaseConfig();
-    if (!config || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
     if (alertOpenRef.current || isSavingRef.current || isReloadingRemoteRef.current) return;
 
     const meta = getLocalMeta(keyRef.current);
@@ -3901,7 +3864,7 @@ function useLocal<T>(key: string, initial: T) {
 
     async function hydrate() {
       try {
-        // Supabase를 원본으로 사용합니다. 로컬 캐시가 있어도 원격 최신값을 먼저 불러옵니다.
+        // Cloudflare D1을 원본으로 사용합니다. 로컬 캐시가 있어도 원격 최신값을 먼저 불러옵니다.
         const remoteRow = await loadSharedStateRow<T>(key);
         if (!cancelled && remoteRow?.data !== null && remoteRow?.data !== undefined) {
           keyRef.current = key;
@@ -3911,7 +3874,7 @@ function useLocal<T>(key: string, initial: T) {
           return;
         }
 
-        // Supabase에 아직 데이터가 없을 때만 로컬 캐시를 임시로 사용합니다.
+        // Cloudflare D1에 아직 데이터가 없을 때만 로컬 캐시를 임시로 사용합니다.
         const localSaved = safeGetLocalStorage(key);
         if (localSaved && !cancelled) {
           const parsed = JSON.parse(localSaved) as T;
@@ -4064,12 +4027,10 @@ type V3SalesRecordRow = {
   profit_rate: number | string;
 };
 
-function v3SalesEndpoint(path: string) {
-  const config = supabaseConfig();
-  if (!config) return null;
+function d1SalesEndpoint(path: string) {
   return {
-    url: `${config.endpoint.replace(/\/app_state$/, "")}/${path}`,
-    headers: config.headers,
+    url: `/api/d1/${path.replace(/^\/+/, "")}`,
+    headers: { "Content-Type": "application/json" },
   };
 }
 
@@ -4122,84 +4083,57 @@ async function loadV3SalesForMonth(month: string): Promise<{
   periodsWithBatch: Set<PeriodType>;
   records: SalesRecord[];
 }> {
-  const recordsApi = v3SalesEndpoint("sales_records");
-  const batchesApi = v3SalesEndpoint("sales_upload_batches");
-  if (!recordsApi || !batchesApi) {
+  const api = d1SalesEndpoint("sales");
+  const response = await fetch(
+    `${api.url}?baseMonth=${encodeURIComponent(month)}`,
+    { method: "GET", headers: api.headers, cache: "no-store" },
+  );
+  if (response.status === 404) {
     return { available: false, periodsWithBatch: new Set(), records: [] };
   }
-
-  const batchResponse = await fetch(
-    `${batchesApi.url}?ref_month=eq.${encodeURIComponent(month)}&status=eq.success&select=period`,
-    { method: "GET", headers: batchesApi.headers, cache: "no-store" },
-  );
-  if (batchResponse.status === 404) {
-    return { available: false, periodsWithBatch: new Set(), records: [] };
-  }
-  if (!batchResponse.ok) {
-    const body = await batchResponse.text();
-    if (body.includes("PGRST205") || body.includes("sales_upload_batches")) {
-      return { available: false, periodsWithBatch: new Set(), records: [] };
-    }
-    throw new Error(`Sales V3 batch load failed: ${batchResponse.status}`);
-  }
-  const batchRows = (await batchResponse.json()) as { period: PeriodType }[];
-  const periodsWithBatch = new Set(batchRows.map((row) => row.period));
-
-  const fields = [
-    "row_key", "period", "ref_month", "sale_date", "store_code", "store_name",
-    "channel", "manager", "store_type", "brand", "item_code", "item_name",
-    "quantity", "sales_amount", "cost_amount", "profit_amount", "profit_rate",
-  ].join(",");
-  const recordsResponse = await fetch(
-    `${recordsApi.url}?ref_month=eq.${encodeURIComponent(month)}&active=eq.true&select=${fields}&limit=100000`,
-    { method: "GET", headers: recordsApi.headers, cache: "no-store" },
-  );
-  if (!recordsResponse.ok)
-    throw new Error(`Sales V3 record load failed: ${recordsResponse.status}`);
-  const rows = (await recordsResponse.json()) as V3SalesRecordRow[];
+  if (!response.ok) throw new Error(`D1 sales load failed: ${response.status}`);
+  const payload = (await response.json()) as {
+    available?: boolean;
+    records?: V3SalesRecordRow[];
+    batches?: { period: PeriodType }[];
+  };
   return {
-    available: true,
-    periodsWithBatch,
-    records: rows.map(fromV3Row),
+    available: payload.available !== false,
+    periodsWithBatch: new Set((payload.batches || []).map((row) => row.period)),
+    records: (payload.records || []).map(fromV3Row),
   };
 }
 
 async function replaceV3SalesBatch(request: SalesUploadRequest) {
-  const rpc = v3SalesEndpoint("rpc/replace_sales_batch");
-  if (!rpc) return false;
-  const response = await fetch(rpc.url, {
+  const api = d1SalesEndpoint("sales/replace");
+  const response = await fetch(api.url, {
     method: "POST",
-    headers: rpc.headers,
+    headers: api.headers,
     body: JSON.stringify({
-      p_period: request.period,
-      p_ref_month: request.refMonth,
-      p_file_name: request.fileName,
-      p_uploaded_dates: request.uploadedDates,
-      p_rows: request.rows.map(toV3Payload),
+      period: request.period,
+      refMonth: request.refMonth,
+      fileName: request.fileName,
+      uploadedDates: request.uploadedDates,
+      rows: request.rows,
     }),
   });
-  if (response.status === 404) return false;
   if (!response.ok) {
     const body = await response.text();
-    if (body.includes("PGRST202") || body.includes("replace_sales_batch")) return false;
-    throw new Error(`Sales V3 upload failed: ${response.status} ${body.slice(0, 300)}`);
+    throw new Error(`D1 sales upload failed: ${response.status} ${body.slice(0, 300)}`);
   }
   return true;
 }
 
 async function deleteV3CurrentDate(refMonth: string, saleDate: string) {
-  const rpc = v3SalesEndpoint("rpc/delete_current_sales_date");
-  if (!rpc) return false;
-  const response = await fetch(rpc.url, {
+  const api = d1SalesEndpoint("sales/delete-date");
+  const response = await fetch(api.url, {
     method: "POST",
-    headers: rpc.headers,
-    body: JSON.stringify({ p_ref_month: refMonth, p_sale_date: saleDate }),
+    headers: api.headers,
+    body: JSON.stringify({ refMonth, saleDate }),
   });
-  if (response.status === 404) return false;
   if (!response.ok) {
     const body = await response.text();
-    if (body.includes("PGRST202") || body.includes("delete_current_sales_date")) return false;
-    throw new Error(`Sales V3 delete failed: ${response.status} ${body.slice(0, 300)}`);
+    throw new Error(`D1 sales delete failed: ${response.status} ${body.slice(0, 300)}`);
   }
   return true;
 }
