@@ -4674,6 +4674,18 @@ export default function SalesReportClient() {
             background: inherit;
             pointer-events: none;
           }
+
+          /* 매출현황 2단 헤더: 상단/하단 사이 경계가 한 그룹처럼 자연스럽게 이어지도록 처리 */
+          .sales-report-root .sales-status-table thead tr:first-child th:not([rowspan]) {
+            border-bottom-color: transparent !important;
+            box-shadow: none !important;
+          }
+          .sales-report-root .sales-status-table thead tr:first-child th:not([rowspan])::after {
+            display: none !important;
+          }
+          .sales-report-root .sales-status-table thead tr:nth-child(2) th {
+            border-top-color: transparent !important;
+          }
         `}</style>
         <div className={active === "매출현황" ? "mb-2 space-y-1" : "mb-4 space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"}>
           <div className={active === "매출현황" ? "bg-white px-0 py-0" : "rounded-2xl border border-gray-200 bg-slate-50 p-3 shadow-sm"}>
@@ -8921,7 +8933,7 @@ function SalesStatus({
 
         <div className="relative max-h-[62vh] overflow-auto bg-white">
           <table
-            className={`w-full ${compact ? "min-w-[1360px]" : "min-w-[1180px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[11px] leading-tight`}
+            className={`sales-status-table w-full ${compact ? "min-w-[1360px]" : "min-w-[1180px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[11px] leading-tight`}
           >
             <thead>
               <tr className="bg-slate-100">
@@ -8940,7 +8952,8 @@ function SalesStatus({
                 )}
                 <ThCompact colSpan={2} tone="mint">전년동월</ThCompact>
                 <ThCompact colSpan={2} tone="blue">전월</ThCompact>
-                <ThCompact colSpan={4} tone="yellow">당월</ThCompact>
+                <ThCompact colSpan={2} tone="yellow">당월</ThCompact>
+                <ThCompact colSpan={2} tone="purple">EST</ThCompact>
                 <ThCompact colSpan={2} tone="orange">이익</ThCompact>
               </tr>
               <tr>
