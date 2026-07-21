@@ -4723,33 +4723,61 @@ export default function SalesReportClient() {
             text-align: center !important;
             justify-content: center !important;
           }
-          /* 거래처별 상세 > 브랜드별 요약: 15px 고정, 줄바꿈 금지 */
-          .sales-report-root .brand-summary-table th,
-          .sales-report-root .brand-summary-table td,
-          .sales-report-root .brand-summary-table button {
-            font-size: 15px !important;
-            line-height: 1.25 !important;
-            white-space: nowrap !important;
-            word-break: keep-all !important;
+          /* 품목분석 손익요약: 1단 헤더 + 2단 헤더 + SUBTOTAL을 피벗 헤더처럼 한 묶음으로 고정 */
+          .sales-report-root .item-profit-table thead tr:first-child th {
+            height: 37px;
+            min-height: 37px;
+            border-bottom-width: 0 !important;
+            box-shadow: none !important;
           }
-          .sales-report-root .brand-summary-table th,
-          .sales-report-root .brand-summary-table td {
-            padding-top: 10px !important;
-            padding-bottom: 10px !important;
+          .sales-report-root .item-profit-table thead tr:first-child th::after {
+            display: none !important;
           }
-
-          /* 품목분석: SUBTOTAL을 2단 헤더 바로 아래의 세 번째 고정 헤더로 유지 */
-          .sales-report-root .item-profit-subtotal > th,
-          .sales-report-root .item-profit-subtotal > td {
-            position: sticky !important;
-            top: 82px !important;
-            z-index: 75 !important;
+          .sales-report-root .item-profit-table thead tr:nth-child(2) th {
+            top: 37px !important;
+            height: 37px;
+            min-height: 37px;
+            border-top-width: 0 !important;
+            border-bottom-width: 0 !important;
+            box-shadow: none !important;
+          }
+          .sales-report-root .item-profit-table thead tr:nth-child(2) th::after {
+            display: none !important;
+          }
+          .sales-report-root .item-profit-table .item-profit-subtotal > th {
+            position: sticky;
+            top: 74px !important;
+            z-index: 55;
+            height: 32px;
+            min-height: 32px;
             background: #fefce8 !important;
             background-clip: border-box !important;
             opacity: 1 !important;
             text-align: center !important;
-            white-space: nowrap !important;
-            box-shadow: inset 0 -1px 0 #94a3b8, 0 3px 5px rgba(15, 23, 42, 0.14) !important;
+            border-top-width: 0 !important;
+            box-shadow: inset 0 -1px 0 #94a3b8, 0 2px 4px rgba(15, 23, 42, 0.12) !important;
+          }
+          .sales-report-root .item-profit-table .item-profit-subtotal > th::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: -1;
+            background: inherit;
+            pointer-events: none;
+          }
+          .sales-report-root .item-profit-table .item-profit-subtotal > th::after {
+            content: "";
+            position: absolute;
+            left: -1px;
+            right: -1px;
+            bottom: -1px;
+            height: 2px;
+            background: #94a3b8;
+            pointer-events: none;
+          }
+          .sales-report-root .item-profit-table th,
+          .sales-report-root .item-profit-table td {
+            font-size: 12px;
           }
         `}</style>
         <div
@@ -7029,7 +7057,7 @@ function ItemAnalysis({
             브랜드별 요약
           </div>
           <div className="max-h-[65vh] overflow-auto isolate">
-            <table className="brand-summary-table w-full min-w-[1250px] connected-two-tier border-separate border-spacing-0 text-center whitespace-nowrap">
+            <table className="w-full min-w-[1100px] connected-two-tier border-separate border-spacing-0 text-center text-[15px] leading-none whitespace-nowrap">
               <thead>
                 <tr>
                   <ItemAnalysisSortableTh rowSpan={2} sortKey="brand" sortConfig={brandSortConfig} onSort={requestBrandSort}>브랜드</ItemAnalysisSortableTh>
@@ -7833,13 +7861,13 @@ function ItemShipmentAnalysis({
             </div>
           </div>
           <div className="max-h-[68vh] overflow-auto isolate">
-            <table className="w-full min-w-[1650px] border-separate border-spacing-0 text-center text-[11px] text-black whitespace-nowrap">
+            <table className="item-profit-table w-full min-w-[1580px] connected-two-tier border-separate border-spacing-0 text-center text-[12px] text-black whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-100">
                   <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-3 py-2 font-bold">품목코드</th>
-                  <th rowSpan={2} className="sticky top-0 z-30 w-[220px] max-w-[220px] whitespace-nowrap border border-slate-300 bg-slate-100 px-3 py-2 font-bold">품목명</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 w-[300px] min-w-[300px] max-w-[300px] whitespace-nowrap border border-slate-300 bg-slate-100 px-3 py-2 text-[13px] font-bold">품목명</th>
                   <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-2 py-2 font-bold">
-                    <div className="flex min-w-[130px] flex-col items-center gap-1">
+                    <div className="flex min-w-[100px] flex-col items-center gap-1">
                       <span>카테고리</span>
                       <select
                         value={categoryFilter}
@@ -7847,7 +7875,7 @@ function ItemShipmentAnalysis({
                           setCategoryFilter(e.target.value);
                           setSelectedItemCode("");
                         }}
-                        className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-black"
+                        className="h-7 w-full rounded border border-slate-300 bg-white px-1.5 text-[12px] font-semibold text-black"
                       >
                         {categoryOptions.map((category) => (
                           <option key={category} value={category}>{category}</option>
@@ -7855,10 +7883,10 @@ function ItemShipmentAnalysis({
                       </select>
                     </div>
                   </th>
-                  <th colSpan={4} className="sticky top-0 z-30 border border-blue-200 bg-blue-100 px-3 py-2 text-sm font-extrabold text-black">전월</th>
-                  <th colSpan={4} className="sticky top-0 z-30 border border-orange-200 bg-orange-100 px-3 py-2 text-sm font-extrabold text-black">당월</th>
-                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-yellow-50 px-3 py-2 font-bold">이익률변동</th>
-                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-emerald-50 px-3 py-2 font-bold">사용 거래처 수</th>
+                  <th colSpan={4} className="sticky top-0 z-30 border border-blue-200 bg-blue-100 px-3 py-2 text-[15px] font-extrabold text-black">전월</th>
+                  <th colSpan={4} className="sticky top-0 z-30 border border-orange-200 bg-orange-100 px-3 py-2 text-[15px] font-extrabold text-black">당월</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 w-[82px] min-w-[82px] max-w-[82px] border border-slate-300 bg-yellow-50 px-1.5 py-2 font-bold">이익률변동</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 w-[78px] min-w-[78px] max-w-[78px] border border-slate-300 bg-emerald-50 px-1.5 py-2 font-bold">사용 거래처 수</th>
                   <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-3 py-2 font-bold">상세</th>
                 </tr>
                 <tr>
@@ -7870,7 +7898,7 @@ function ItemShipmentAnalysis({
                   <th className="sticky top-[37px] z-20 border border-orange-200 bg-orange-50 px-3 py-2 font-bold">매입단가</th>
                   <th className="sticky top-[37px] z-20 border border-orange-200 bg-orange-50 px-3 py-2 font-bold">이익금액</th>
                   <th className="sticky top-[37px] z-20 border border-orange-200 bg-orange-50 px-2 py-1 font-bold">
-                    <div className="flex min-w-[110px] flex-col items-center gap-1">
+                    <div className="flex min-w-[88px] flex-col items-center gap-1">
                       <span>이익률</span>
                       <select
                         value={profitRateFilter}
@@ -7878,7 +7906,7 @@ function ItemShipmentAnalysis({
                           setProfitRateFilter(e.target.value);
                           setSelectedItemCode("");
                         }}
-                        className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-black"
+                        className="h-7 w-full rounded border border-slate-300 bg-white px-1.5 text-[12px] font-semibold text-black"
                       >
                         {["전체", "30% 미만", "30~40%", "40% 이상", "상승", "하락"].map((value) => (
                           <option key={value} value={value}>{value}</option>
@@ -7888,40 +7916,40 @@ function ItemShipmentAnalysis({
                   </th>
                 </tr>
                 <tr className="item-profit-subtotal bg-yellow-50 font-extrabold text-black">
-                  <th colSpan={3} className="border border-slate-400 p-2 text-center">SUBTOTAL</th>
-                  <th className="border border-slate-400 p-2 text-right text-[14px] font-extrabold">{won(subtotal.prevMonth.sales)}</th>
-                  <th className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonthUnitCost)}</th>
-                  <th className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonth.profit)}</th>
-                  <th className="border border-slate-400 p-2 text-right">{pct(subtotal.prevRate)}</th>
-                  <th className="border border-slate-400 p-2 text-right text-[14px] font-extrabold">{won(subtotal.current.sales)}</th>
-                  <th className="border border-slate-400 p-2 text-right">{won(subtotal.currentUnitCost)}</th>
-                  <th className="border border-slate-400 p-2 text-right">{won(subtotal.current.profit)}</th>
-                  <th className="border border-slate-400 p-2 text-right">{pct(subtotal.currentRate)}</th>
-                  <th className={`border border-slate-400 p-2 text-right ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
+                  <th colSpan={3} className="border border-slate-400 px-2 py-1.5 text-center text-[13px]">SUBTOTAL</th>
+                  <th className="border border-slate-400 px-2 py-1.5 text-right text-[15px] font-black">{won(subtotal.prevMonth.sales)}</th>
+                  <th className="border border-slate-400 px-2 py-1.5 text-right">{won(subtotal.prevMonthUnitCost)}</th>
+                  <th className="border border-slate-400 px-2 py-1.5 text-right">{won(subtotal.prevMonth.profit)}</th>
+                  <th className="w-[76px] min-w-[76px] max-w-[76px] border border-slate-400 px-1.5 py-1.5 text-right">{pct(subtotal.prevRate)}</th>
+                  <th className="border border-slate-400 px-2 py-1.5 text-right text-[15px] font-black">{won(subtotal.current.sales)}</th>
+                  <th className="border border-slate-400 px-2 py-1.5 text-right">{won(subtotal.currentUnitCost)}</th>
+                  <th className="border border-slate-400 px-2 py-1.5 text-right">{won(subtotal.current.profit)}</th>
+                  <th className="w-[88px] min-w-[88px] max-w-[88px] border border-slate-400 px-1.5 py-1.5 text-right">{pct(subtotal.currentRate)}</th>
+                  <th className={`border border-slate-400 px-1.5 py-1.5 text-right ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
                     {itemSignedPct(subtotal.rateChange)}
                   </th>
-                  <th className="border border-slate-400 p-2 text-center">{subtotal.storeCount.toLocaleString("ko-KR")}</th>
-                  <th className="border border-slate-400 p-2" />
+                  <th className="border border-slate-400 px-1.5 py-1.5 text-center">{subtotal.storeCount.toLocaleString("ko-KR")}</th>
+                  <th className="border border-slate-400 px-1.5 py-1.5" />
                 </tr>
               </thead>
               <tbody>
                 {itemRows.map((r) => (
                   <tr key={`${r.itemCode}-${r.itemName}`} className="hover:bg-blue-50">
                     <td className="border border-slate-300 p-2">{r.itemCode}</td>
-                    <td className="w-[220px] max-w-[220px] overflow-hidden text-ellipsis whitespace-nowrap border border-slate-300 p-2 text-left font-semibold" title={r.itemName}>{r.itemName}</td>
-                    <td className="border border-slate-300 p-2 font-semibold">{r.category}</td>
-                    <td className="border border-slate-300 p-2 text-right text-[14px] font-bold">{won(r.prevMonth.sales)}</td>
+                    <td className="w-[300px] min-w-[300px] max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap border border-slate-300 p-2 text-left text-[13px] font-semibold" title={r.itemName}>{r.itemName}</td>
+                    <td className="w-[100px] min-w-[100px] max-w-[100px] border border-slate-300 px-1.5 py-2 font-semibold">{r.category}</td>
+                    <td className="border border-slate-300 p-2 text-right text-[15px] font-bold">{won(r.prevMonth.sales)}</td>
                     <td className="border border-slate-300 p-2 text-right">{won(r.prevMonthUnitCost)}</td>
                     <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.profit)}</td>
-                    <td className="border border-slate-300 p-2 text-right font-bold">{pct(r.prevMonthProfitRate)}</td>
-                    <td className="border border-slate-300 p-2 text-right text-[14px] font-extrabold">{won(r.current.sales)}</td>
+                    <td className="w-[76px] min-w-[76px] max-w-[76px] border border-slate-300 px-1.5 py-2 text-right text-[13px] font-bold">{pct(r.prevMonthProfitRate)}</td>
+                    <td className="border border-slate-300 p-2 text-right text-[15px] font-extrabold">{won(r.current.sales)}</td>
                     <td className="border border-slate-300 p-2 text-right">{won(r.currentUnitCost)}</td>
                     <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.profit)}</td>
-                    <td className="border border-slate-300 p-2 text-right font-extrabold">{pct(r.currentProfitRate)}</td>
-                    <td className={`border border-slate-300 p-2 text-right font-extrabold ${r.profitRateChange > 0 ? "text-emerald-700" : r.profitRateChange < 0 ? "text-red-600" : "text-black"}`}>
+                    <td className="w-[88px] min-w-[88px] max-w-[88px] border border-slate-300 px-1.5 py-2 text-right text-[13px] font-extrabold">{pct(r.currentProfitRate)}</td>
+                    <td className={`w-[82px] min-w-[82px] max-w-[82px] border border-slate-300 px-1.5 py-2 text-right text-[13px] font-extrabold ${r.profitRateChange > 0 ? "text-emerald-700" : r.profitRateChange < 0 ? "text-red-600" : "text-black"}`}>
                       {itemSignedPct(r.profitRateChange)}
                     </td>
-                    <td className="border border-slate-300 p-2 text-center font-extrabold">{r.storeCodes.size.toLocaleString("ko-KR")}</td>
+                    <td className="w-[78px] min-w-[78px] max-w-[78px] border border-slate-300 px-1.5 py-2 text-center text-[13px] font-extrabold">{r.storeCodes.size.toLocaleString("ko-KR")}</td>
                     <td className="border border-slate-300 p-2">
                       <button
                         onClick={() => setSelectedItemCode(r.itemCode)}
