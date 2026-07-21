@@ -4723,15 +4723,24 @@ export default function SalesReportClient() {
             text-align: center !important;
             justify-content: center !important;
           }
-          /* 품목분석 손익요약: 2단 헤더 + SUBTOTAL을 하나의 피벗 헤더처럼 고정 */
+          /* 품목분석 손익요약: 1단·2단 헤더와 SUBTOTAL 전체를 한 묶음으로 고정 */
           .sales-report-root .item-profit-pivot {
             table-layout: fixed;
             font-size: 12px;
           }
+          .sales-report-root .item-profit-pivot thead {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 90 !important;
+            background: #fff;
+          }
+          .sales-report-root .item-profit-pivot thead tr {
+            position: static !important;
+          }
+          .sales-report-root .item-profit-pivot thead th {
+            position: static !important;
+          }
           .sales-report-root .item-profit-pivot thead tr:nth-child(1) th {
-            position: sticky;
-            top: 0;
-            z-index: 83;
             height: 34px;
             min-height: 34px;
             padding-top: 4px !important;
@@ -4746,9 +4755,6 @@ export default function SalesReportClient() {
             border-bottom-width: 1px !important;
           }
           .sales-report-root .item-profit-pivot thead tr:nth-child(2) th {
-            position: sticky;
-            top: 34px;
-            z-index: 82;
             height: 44px;
             min-height: 44px;
             padding-top: 3px !important;
@@ -4757,9 +4763,6 @@ export default function SalesReportClient() {
             box-shadow: none !important;
           }
           .sales-report-root .item-profit-pivot thead tr:nth-child(3) th {
-            position: sticky;
-            top: 78px;
-            z-index: 81;
             height: 34px;
             min-height: 34px;
             background: #fefce8 !important;
