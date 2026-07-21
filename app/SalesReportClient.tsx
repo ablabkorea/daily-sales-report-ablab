@@ -4674,17 +4674,28 @@ export default function SalesReportClient() {
             background: inherit;
             pointer-events: none;
           }
-
-          /* 매출현황 2단 헤더: 상단/하단 사이 경계가 한 그룹처럼 자연스럽게 이어지도록 처리 */
-          .sales-report-root .sales-status-table thead tr:first-child th:not([rowspan]) {
-            border-bottom-color: transparent !important;
+          /* 매출현황 2단 헤더: 상단·하단 사이의 선, 그림자, 틈을 완전히 제거 */
+          .sales-report-root .sales-status-table thead tr:first-child th {
+            height: 31px;
+            min-height: 31px;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            border-bottom-width: 0 !important;
             box-shadow: none !important;
           }
-          .sales-report-root .sales-status-table thead tr:first-child th:not([rowspan])::after {
+          .sales-report-root .sales-status-table thead tr:first-child th::after {
             display: none !important;
           }
           .sales-report-root .sales-status-table thead tr:nth-child(2) th {
-            border-top-color: transparent !important;
+            top: 31px !important;
+            border-top-width: 0 !important;
+            box-shadow: inset 0 -1px 0 #d1d5db, 0 2px 3px rgba(15, 23, 42, 0.08) !important;
+          }
+          .sales-report-root .sales-status-table thead tr:nth-child(2) th::before {
+            top: -1px;
+          }
+          .sales-report-root .sales-status-table thead tr:nth-child(2) th::after {
+            bottom: -1px;
           }
         `}</style>
         <div className={active === "매출현황" ? "mb-2 space-y-1" : "mb-4 space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"}>
