@@ -4723,27 +4723,45 @@ export default function SalesReportClient() {
             text-align: center !important;
             justify-content: center !important;
           }
+          /* 거래처별 상세 > 브랜드별 요약: 15px 고정, 줄바꿈 금지 */
+          .sales-report-root .brand-summary-table th,
+          .sales-report-root .brand-summary-table td,
+          .sales-report-root .brand-summary-table button {
+            font-size: 15px !important;
+            line-height: 1.25 !important;
+            white-space: nowrap !important;
+            word-break: keep-all !important;
+          }
+          .sales-report-root .brand-summary-table th,
+          .sales-report-root .brand-summary-table td {
+            padding-top: 10px !important;
+            padding-bottom: 10px !important;
+          }
+
+          /* 품목분석: SUBTOTAL을 2단 헤더 바로 아래의 세 번째 고정 헤더로 유지 */
+          .sales-report-root .item-profit-subtotal > th,
           .sales-report-root .item-profit-subtotal > td {
-            position: sticky;
-            top: 74px;
-            z-index: 45;
+            position: sticky !important;
+            top: 82px !important;
+            z-index: 75 !important;
             background: #fefce8 !important;
             background-clip: border-box !important;
             opacity: 1 !important;
             text-align: center !important;
-            box-shadow: inset 0 -1px 0 #94a3b8, 0 2px 4px rgba(15, 23, 42, 0.1);
+            white-space: nowrap !important;
+            box-shadow: inset 0 -1px 0 #94a3b8, 0 3px 5px rgba(15, 23, 42, 0.14) !important;
           }
         `}</style>
         <div
           className={
-            ["매출현황", "거래처별 상세", "품목분석"].includes(active)
+            ["매출현황", "거래처별 상세", "품목분석", "매입가 정보"].includes(active)
               ? "mb-2 space-y-1"
               : "mb-4 space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
           }
         >
           <div
             className={
-              ["매출현황", "거래처별 상세", "품목분석"].includes(active)
+              ["매출현황", "거래처별 상세", "품목분석", "매입가 정보"].includes(active)
                 ? "bg-white px-0 py-0"
                 : "rounded-2xl border border-gray-200 bg-slate-50 p-3 shadow-sm"
             }
@@ -7011,7 +7029,7 @@ function ItemAnalysis({
             브랜드별 요약
           </div>
           <div className="max-h-[65vh] overflow-auto isolate">
-            <table className="w-full min-w-[900px] connected-two-tier border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
+            <table className="brand-summary-table w-full min-w-[1250px] connected-two-tier border-separate border-spacing-0 text-center whitespace-nowrap">
               <thead>
                 <tr>
                   <ItemAnalysisSortableTh rowSpan={2} sortKey="brand" sortConfig={brandSortConfig} onSort={requestBrandSort}>브랜드</ItemAnalysisSortableTh>
@@ -7819,7 +7837,7 @@ function ItemShipmentAnalysis({
               <thead>
                 <tr className="bg-slate-100">
                   <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-3 py-2 font-bold">품목코드</th>
-                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-3 py-2 font-bold">품목명</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 w-[220px] max-w-[220px] whitespace-nowrap border border-slate-300 bg-slate-100 px-3 py-2 font-bold">품목명</th>
                   <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-2 py-2 font-bold">
                     <div className="flex min-w-[130px] flex-col items-center gap-1">
                       <span>카테고리</span>
@@ -7869,34 +7887,34 @@ function ItemShipmentAnalysis({
                     </div>
                   </th>
                 </tr>
+                <tr className="item-profit-subtotal bg-yellow-50 font-extrabold text-black">
+                  <th colSpan={3} className="border border-slate-400 p-2 text-center">SUBTOTAL</th>
+                  <th className="border border-slate-400 p-2 text-right text-[14px] font-extrabold">{won(subtotal.prevMonth.sales)}</th>
+                  <th className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonthUnitCost)}</th>
+                  <th className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonth.profit)}</th>
+                  <th className="border border-slate-400 p-2 text-right">{pct(subtotal.prevRate)}</th>
+                  <th className="border border-slate-400 p-2 text-right text-[14px] font-extrabold">{won(subtotal.current.sales)}</th>
+                  <th className="border border-slate-400 p-2 text-right">{won(subtotal.currentUnitCost)}</th>
+                  <th className="border border-slate-400 p-2 text-right">{won(subtotal.current.profit)}</th>
+                  <th className="border border-slate-400 p-2 text-right">{pct(subtotal.currentRate)}</th>
+                  <th className={`border border-slate-400 p-2 text-right ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
+                    {itemSignedPct(subtotal.rateChange)}
+                  </th>
+                  <th className="border border-slate-400 p-2 text-center">{subtotal.storeCount.toLocaleString("ko-KR")}</th>
+                  <th className="border border-slate-400 p-2" />
+                </tr>
               </thead>
               <tbody>
-                <tr className="sticky top-[74px] z-20 bg-yellow-50 font-extrabold text-black shadow-sm">
-                  <td colSpan={3} className="border border-slate-400 p-2 text-center">SUBTOTAL</td>
-                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonth.sales)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonthUnitCost)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonth.profit)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{pct(subtotal.prevRate)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.current.sales)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.currentUnitCost)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.current.profit)}</td>
-                  <td className="border border-slate-400 p-2 text-right">{pct(subtotal.currentRate)}</td>
-                  <td className={`border border-slate-400 p-2 text-right ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
-                    {itemSignedPct(subtotal.rateChange)}
-                  </td>
-                  <td className="border border-slate-400 p-2 text-center">{subtotal.storeCount.toLocaleString("ko-KR")}</td>
-                  <td className="border border-slate-400 p-2" />
-                </tr>
                 {itemRows.map((r) => (
                   <tr key={`${r.itemCode}-${r.itemName}`} className="hover:bg-blue-50">
                     <td className="border border-slate-300 p-2">{r.itemCode}</td>
-                    <td className="border border-slate-300 p-2 text-left font-semibold">{r.itemName}</td>
+                    <td className="w-[220px] max-w-[220px] overflow-hidden text-ellipsis whitespace-nowrap border border-slate-300 p-2 text-left font-semibold" title={r.itemName}>{r.itemName}</td>
                     <td className="border border-slate-300 p-2 font-semibold">{r.category}</td>
-                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.sales)}</td>
+                    <td className="border border-slate-300 p-2 text-right text-[14px] font-bold">{won(r.prevMonth.sales)}</td>
                     <td className="border border-slate-300 p-2 text-right">{won(r.prevMonthUnitCost)}</td>
                     <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.profit)}</td>
                     <td className="border border-slate-300 p-2 text-right font-bold">{pct(r.prevMonthProfitRate)}</td>
-                    <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.sales)}</td>
+                    <td className="border border-slate-300 p-2 text-right text-[14px] font-extrabold">{won(r.current.sales)}</td>
                     <td className="border border-slate-300 p-2 text-right">{won(r.currentUnitCost)}</td>
                     <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.profit)}</td>
                     <td className="border border-slate-300 p-2 text-right font-extrabold">{pct(r.currentProfitRate)}</td>
@@ -7974,10 +7992,10 @@ function ItemShipmentAnalysis({
                       <td className="border border-slate-300 p-2 text-left font-semibold">{r.storeName}</td>
                       <td className="border border-slate-300 p-2">{r.manager}</td>
                       <td className="border border-slate-300 p-2">{r.channel}</td>
-                      <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.sales)}</td>
+                      <td className="border border-slate-300 p-2 text-right text-[14px] font-bold">{won(r.prevMonth.sales)}</td>
                       <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.profit)}</td>
                       <td className="border border-slate-300 p-2 text-right">{pct(prevRate)}</td>
-                      <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.sales)}</td>
+                      <td className="border border-slate-300 p-2 text-right text-[14px] font-extrabold">{won(r.current.sales)}</td>
                       <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.profit)}</td>
                       <td className="border border-slate-300 p-2 text-right font-extrabold">{pct(currentRate)}</td>
                       <td className={`border border-slate-300 p-2 text-right font-extrabold ${change > 0 ? "text-emerald-700" : change < 0 ? "text-red-600" : "text-black"}`}>
