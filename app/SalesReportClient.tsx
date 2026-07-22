@@ -8,7 +8,7 @@ type Manager = string;
 type StoreType = string;
 type PeriodType = "current" | "prevMonth" | "prevYear";
 type SalesView = "거래처별" | "브랜드별" | "담당자별" | "채널별";
-type MonthStartTab = "거래처 리스트 관리" | "업로드 관리" | "이익금액 검증표";
+type MonthStartTab = "거래처 리스트" | "기준정보" | "업로드 관리" | "이익금액 검증표";
 type DrillPeriod = "prevYear" | "prevMonth" | "current" | "currentFullMonth";
 type SalesStatusSortKey =
   | "label"
@@ -147,7 +147,8 @@ const CHANNELS: Channel[] = [
 const MANAGERS: Manager[] = ["SY", "KT", "SW", "NH", "Bomi", "BM", "bomi"];
 const SALES_VIEWS: SalesView[] = ["거래처별", "브랜드별", "담당자별"];
 const MONTH_TABS: MonthStartTab[] = [
-  "거래처 리스트 관리",
+  "거래처 리스트",
+  "기준정보",
   "업로드 관리",
   "이익금액 검증표",
 ];
@@ -10531,17 +10532,21 @@ function MonthStartManagement({
   itemMasters: ItemMasterRecord[];
   setItemMasters: (v: ItemMasterRecord[]) => void;
 }) {
-  const [tab, setTab] = useState<MonthStartTab>("거래처 리스트 관리");
+  const [tab, setTab] = useState<MonthStartTab>("거래처 리스트");
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
-        <div className="flex flex-wrap gap-2">
+    <div className="space-y-3">
+      <div className="border-b border-slate-300 bg-white px-2">
+        <div className="flex min-w-max gap-1 overflow-x-auto">
           {MONTH_TABS.map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === t ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+              className={`border-b-2 px-4 py-2.5 text-sm font-bold transition ${
+                tab === t
+                  ? "border-blue-600 text-blue-700"
+                  : "border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900"
+              }`}
             >
               {t}
             </button>
@@ -10549,8 +10554,19 @@ function MonthStartManagement({
         </div>
       </div>
 
-      {tab === "거래처 리스트 관리" && (
+      {tab === "거래처 리스트" && (
         <StoreListManagement
+          section="list"
+          stores={stores}
+          setStores={setStores}
+          sales={sales}
+          month={month}
+          codeMappings={codeMappings}
+        />
+      )}
+      {tab === "기준정보" && (
+        <StoreListManagement
+          section="reference"
           stores={stores}
           setStores={setStores}
           sales={sales}
@@ -10580,14 +10596,15 @@ function MonthStartManagement({
   );
 }
 
-
 function StoreListManagement({
+  section,
   stores,
   setStores,
   sales,
   month,
   codeMappings,
 }: {
+  section: "list" | "reference";
   stores: Store[];
   setStores: (v: Store[]) => void;
   sales: SalesRecord[];
@@ -10597,11 +10614,30 @@ function StoreListManagement({
   type ListTab = "기존거래처 리스트" | "전년동월 리스트" | "총 거래처 리스트" | "기타 관리";
   const [listTab, setListTab] = useState<ListTab>("기존거래처 리스트");
   const [search, setSearch] = useState("");
-  const [otherTab, setOtherTab] = useState<"담당자 관리" | "브랜드 관리">("담당자 관리");
+  const [otherTab, setOtherTab] = useState<"담당자 관리" | "브랜드 관리" | "채널 관리">("담당자 관리");
+  const [channelTab, setChannelTab] = useState<"채널 1" | "채널 2">("채널 1");
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
   const [bulkManager, setBulkManager] = useState("");
   const [bulkBrand, setBulkBrand] = useState("");
+  const [bulkChannel1, setBulkChannel1] = useState("");
+  const [bulkChannel2, setBulkChannel2] = useState<"" | "매장" | "비매장">("");
+  const [newManager, setNewManager] = useState("");
+  const [newChannel1, setNewChannel1] = useState("");
+  const [savedManagers, setSavedManagers] = useLocal<string[]>(
+    "month-start-manager-options-v1",
+    ["SY", "KT", "SW", "NH", "BOMI", "BM"],
+  );
+  const [savedChannel1Options, setSavedChannel1Options] = useLocal<string[]>(
+    "month-start-channel1-options-v1",
+    ["도매", "체인", "권역배송", "온라인", "식자재마트"],
+  );
   const normalizedSearch = search.trim().toLowerCase();
+
+  useEffect(() => {
+    setListTab(section === "list" ? "기존거래처 리스트" : "기타 관리");
+    setSearch("");
+    setSelectedCodes(new Set());
+  }, [section]);
 
   type SalesStoreSummary = {
     code: string;
@@ -10833,8 +10869,21 @@ function StoreListManagement({
       .includes(normalizedSearch),
   );
   const visibleOtherRows = visibleTotalRows;
+  const normalizeManager = (value: string) => value.trim().toUpperCase();
   const managerOptions = Array.from(
-    new Set([...MANAGERS, ...totalRows.map((row) => row.manager)].filter(Boolean)),
+    new Set(
+      [...savedManagers, ...MANAGERS, ...totalRows.map((row) => row.manager)]
+        .map(normalizeManager)
+        .filter(Boolean),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "ko-KR"));
+  const channel1Options = Array.from(
+    new Map(
+      [...savedChannel1Options, ...totalRows.map((row) => row.channel)]
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .map((value) => [value.toLowerCase(), value] as const),
+    ).values(),
   ).sort((a, b) => a.localeCompare(b, "ko-KR"));
   const brandOptions = Array.from(
     new Set(totalRows.map((row) => displayBrand(row.brand)).filter(Boolean)),
@@ -10864,20 +10913,56 @@ function StoreListManagement({
     });
   }
 
-  function applyBulkChange(field: "manager" | "brand") {
-    const value = field === "manager" ? bulkManager.trim() : bulkBrand.trim();
+  function applyBulkChange(field: "manager" | "brand" | "channel" | "storeType") {
+    const rawValue = field === "manager"
+      ? bulkManager
+      : field === "brand"
+        ? bulkBrand
+        : field === "channel"
+          ? bulkChannel1
+          : bulkChannel2;
+    const value = field === "manager" ? normalizeManager(rawValue) : rawValue.trim();
     if (!selectedCodes.size) return alert("수정할 거래처를 먼저 선택해주세요.");
-    if (!value) return alert(field === "manager" ? "변경할 담당자를 선택해주세요." : "변경할 브랜드를 입력하거나 선택해주세요.");
-    const label = field === "manager" ? "담당자" : "브랜드";
+    if (!value) return alert("변경할 값을 선택하거나 입력해주세요.");
+    const label = field === "manager" ? "담당자" : field === "brand" ? "브랜드" : field === "channel" ? "채널 1" : "채널 2";
     if (!window.confirm(`선택한 ${selectedCodes.size.toLocaleString("ko-KR")}개 거래처의 ${label}를 '${value}'(으)로 일괄 변경할까요?`)) return;
-    const nextStores = totalRows.map((row) =>
-      selectedCodes.has(row.code)
-        ? { ...row, [field]: value }
-        : row,
-    );
+    const nextStores = totalRows.map((row) => selectedCodes.has(row.code) ? { ...row, [field]: value } : row);
     setStores(nextStores);
+    if (field === "manager" && !savedManagers.some((item) => normalizeManager(item) === value)) {
+      setSavedManagers([...savedManagers, value]);
+    }
+    if (field === "channel" && !savedChannel1Options.some((item) => item.toLowerCase() === value.toLowerCase())) {
+      setSavedChannel1Options([...savedChannel1Options, value]);
+    }
     setSelectedCodes(new Set());
     alert(`${label}를 ${value}(으)로 일괄 변경했습니다.`);
+  }
+
+  function addManager() {
+    const value = normalizeManager(newManager);
+    if (!value) return alert("추가할 담당자명을 입력해주세요.");
+    if (managerOptions.some((item) => normalizeManager(item) === value)) {
+      setBulkManager(value);
+      setNewManager("");
+      return alert("같은 철자의 담당자가 이미 있어 기존 담당자로 선택했습니다.");
+    }
+    setSavedManagers([...savedManagers, value]);
+    setBulkManager(value);
+    setNewManager("");
+  }
+
+  function addChannel1Option() {
+    const value = newChannel1.trim();
+    if (!value) return alert("추가할 업종명을 입력해주세요.");
+    const existing = channel1Options.find((item) => item.toLowerCase() === value.toLowerCase());
+    if (existing) {
+      setBulkChannel1(existing);
+      setNewChannel1("");
+      return alert("같은 업종이 이미 있어 기존 업종으로 선택했습니다.");
+    }
+    setSavedChannel1Options([...savedChannel1Options, value]);
+    setBulkChannel1(value);
+    setNewChannel1("");
   }
 
   function saveTotalList() {
@@ -10899,143 +10984,101 @@ function StoreListManagement({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-extrabold text-slate-900">거래처 리스트 관리</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              전월·당월을 기존거래처 리스트로 만들고 전년동월과 비교한 뒤, 총 거래처 리스트를 최종 저장합니다.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={listTab === "기타 관리" ? "사업자번호/거래처명/담당자/브랜드 검색" : "사업자번호/거래처명/상태 검색"}
-              className="h-9 w-[280px] rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-blue-500"
-            />
-            {listTab === "총 거래처 리스트" && (
+    <div className="grid gap-3 lg:grid-cols-[150px_minmax(0,1fr)]">
+      <aside className="h-fit rounded-xl border border-slate-300 bg-white p-2 shadow-sm">
+        <div className="px-2 pb-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">
+          {section === "list" ? "거래처 리스트" : "기준정보"}
+        </div>
+        <div className="space-y-1">
+          {(section === "list"
+            ? (["기존거래처 리스트", "전년동월 리스트", "총 거래처 리스트"] as const)
+            : (["담당자 관리", "브랜드 관리", "채널 관리"] as const)
+          ).map((menu) => {
+            const active = section === "list" ? listTab === menu : otherTab === menu;
+            return (
               <button
+                key={menu}
                 type="button"
-                onClick={saveTotalList}
-                className="h-9 rounded-lg bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700"
-              >
-                총 리스트 저장
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {(["기존거래처 리스트", "전년동월 리스트", "총 거래처 리스트", "기타 관리"] as ListTab[]).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setListTab(tab)}
-              className={`rounded-xl px-4 py-2 text-xs font-bold ${
-                listTab === tab
-                  ? "bg-orange-500 text-white shadow"
-                  : "bg-orange-50 text-orange-900 hover:bg-orange-100"
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {listTab === "기타 관리" && (
-        <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-2">
-              {(["담당자 관리", "브랜드 관리"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => {
-                    setOtherTab(tab);
+                onClick={() => {
+                  if (section === "list") setListTab(menu as ListTab);
+                  else {
+                    setListTab("기타 관리");
+                    setOtherTab(menu as typeof otherTab);
                     setSelectedCodes(new Set());
-                  }}
-                  className={`rounded-lg px-4 py-2 text-xs font-bold ${
-                    otherTab === tab
-                      ? "bg-slate-800 text-white"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-            <div className="text-xs font-semibold text-slate-600">
-              선택 {selectedCodes.size.toLocaleString("ko-KR")}건 / 검색결과 {visibleOtherRows.length.toLocaleString("ko-KR")}건
-            </div>
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-3">
-            <button
-              type="button"
-              onClick={toggleVisibleSelection}
-              className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100"
-            >
-              {allVisibleSelected ? "검색결과 선택 해제" : "검색결과 전체 선택"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedCodes(new Set())}
-              className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100"
-            >
-              선택 초기화
-            </button>
-
-            {otherTab === "담당자 관리" ? (
-              <>
-                <select
-                  value={bulkManager}
-                  onChange={(event) => setBulkManager(event.target.value)}
-                  className="h-9 min-w-[180px] rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold outline-none focus:border-blue-500"
-                >
-                  <option value="">변경 담당자 선택</option>
-                  {managerOptions.map((manager) => (
-                    <option key={manager} value={manager}>{manager}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => applyBulkChange("manager")}
-                  className="h-9 rounded-lg bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700"
-                >
-                  선택항목 담당자 일괄 수정
-                </button>
-              </>
-            ) : (
-              <>
-                <input
-                  list="store-brand-options"
-                  value={bulkBrand}
-                  onChange={(event) => setBulkBrand(event.target.value)}
-                  placeholder="변경 브랜드 입력 또는 선택"
-                  className="h-9 min-w-[240px] rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold outline-none focus:border-blue-500"
-                />
-                <datalist id="store-brand-options">
-                  {brandOptions.map((brand) => (
-                    <option key={brand} value={brand} />
-                  ))}
-                </datalist>
-                <button
-                  type="button"
-                  onClick={() => applyBulkChange("brand")}
-                  className="h-9 rounded-lg bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700"
-                >
-                  선택항목 브랜드 일괄 수정
-                </button>
-              </>
-            )}
-          </div>
-          <p className="mt-2 text-[11px] text-slate-500">
-            총 거래처 리스트를 기준으로 검색·선택하며, 일괄 수정한 값은 매출현황과 거래처별 상세의 담당자·브랜드 기준에 반영됩니다.
-          </p>
+                  }
+                }}
+                className={`w-full rounded-lg border-l-4 px-3 py-2 text-left text-xs font-bold transition ${active ? "border-blue-600 bg-blue-50 text-blue-800" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+              >
+                {menu.replace(" 리스트", "").replace(" 관리", "")}
+              </button>
+            );
+          })}
         </div>
-      )}
+      </aside>
+
+      <main className="min-w-0 space-y-3">
+        <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-extrabold text-slate-900">{section === "list" ? listTab : otherTab}</h2>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                {section === "list" ? "전월·당월·전년동월 거래처를 비교하고 최종 거래처 기준을 관리합니다." : "총 거래처 리스트를 기준으로 선택 항목을 일괄 수정합니다."}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={section === "reference" ? "거래처명/담당자/브랜드/채널 검색" : "사업자번호/거래처명/상태 검색"} className="h-8 w-[270px] rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-blue-500" />
+              {section === "list" && listTab === "총 거래처 리스트" && (
+                <button type="button" onClick={saveTotalList} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700">총 리스트 저장</button>
+              )}
+            </div>
+          </div>
+
+          {section === "reference" && (
+            <>
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 p-2">
+                <span className="mr-1 text-[11px] font-semibold text-slate-600">선택 {selectedCodes.size.toLocaleString("ko-KR")}건 / 검색결과 {visibleOtherRows.length.toLocaleString("ko-KR")}건</span>
+                <button type="button" onClick={toggleVisibleSelection} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100">{allVisibleSelected ? "검색결과 선택 해제" : "검색결과 전체 선택"}</button>
+                <button type="button" onClick={() => setSelectedCodes(new Set())} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100">선택 초기화</button>
+                {otherTab === "담당자 관리" && (
+                  <>
+                    <select value={bulkManager} onChange={(event) => setBulkManager(event.target.value)} className="h-8 min-w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold"><option value="">변경 담당자 선택</option>{managerOptions.map((manager) => <option key={manager} value={manager}>{manager}</option>)}</select>
+                    <button type="button" onClick={() => applyBulkChange("manager")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">담당자 일괄 수정</button>
+                    <span className="mx-1 h-5 w-px bg-slate-300" />
+                    <input value={newManager} onChange={(event) => setNewManager(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addManager(); }} placeholder="신규 담당자" className="h-8 w-[130px] rounded-lg border border-slate-300 bg-white px-2 text-xs" />
+                    <button type="button" onClick={addManager} className="h-8 rounded-lg border border-blue-300 bg-blue-50 px-3 text-xs font-bold text-blue-700">담당자 추가</button>
+                  </>
+                )}
+                {otherTab === "브랜드 관리" && (
+                  <>
+                    <input list="store-brand-options" value={bulkBrand} onChange={(event) => setBulkBrand(event.target.value)} placeholder="변경 브랜드 입력 또는 선택" className="h-8 min-w-[220px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold" />
+                    <datalist id="store-brand-options">{brandOptions.map((brand) => <option key={brand} value={brand} />)}</datalist>
+                    <button type="button" onClick={() => applyBulkChange("brand")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">브랜드 일괄 수정</button>
+                  </>
+                )}
+                {otherTab === "채널 관리" && (
+                  <>
+                    <div className="flex rounded-lg border border-slate-300 bg-white p-0.5">{(["채널 1", "채널 2"] as const).map((item) => <button key={item} type="button" onClick={() => setChannelTab(item)} className={`rounded-md px-3 py-1.5 text-xs font-bold ${channelTab === item ? "bg-slate-800 text-white" : "text-slate-600"}`}>{item}</button>)}</div>
+                    {channelTab === "채널 1" ? (
+                      <>
+                        <select value={bulkChannel1} onChange={(event) => setBulkChannel1(event.target.value)} className="h-8 min-w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold"><option value="">업종 선택</option>{channel1Options.map((channel) => <option key={channel} value={channel}>{channel}</option>)}</select>
+                        <button type="button" onClick={() => applyBulkChange("channel")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">채널 1 일괄 수정</button>
+                        <span className="mx-1 h-5 w-px bg-slate-300" />
+                        <input value={newChannel1} onChange={(event) => setNewChannel1(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addChannel1Option(); }} placeholder="신규 업종" className="h-8 w-[130px] rounded-lg border border-slate-300 bg-white px-2 text-xs" />
+                        <button type="button" onClick={addChannel1Option} className="h-8 rounded-lg border border-blue-300 bg-blue-50 px-3 text-xs font-bold text-blue-700">업종 추가</button>
+                      </>
+                    ) : (
+                      <>
+                        <select value={bulkChannel2} onChange={(event) => setBulkChannel2(event.target.value as "" | "매장" | "비매장")} className="h-8 min-w-[140px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold"><option value="">채널 2 선택</option><option value="매장">매장</option><option value="비매장">비매장</option></select>
+                        <button type="button" onClick={() => applyBulkChange("storeType")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">채널 2 일괄 수정</button>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+              <p className="mt-1.5 text-[11px] text-slate-500">담당자명은 대소문자를 구분하지 않고 같은 철자는 하나로 통합해 대문자로 표시합니다.</p>
+            </>
+          )}
+        </div>
 
       <div className="min-h-0 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="max-h-[65vh] overflow-auto">
@@ -11111,7 +11154,7 @@ function StoreListManagement({
                   <tr key={row.code} className="hover:bg-orange-50/50">
                     <td className="border border-slate-300 px-3 py-2">{row.code}</td>
                     <td className="border border-slate-300 px-3 py-2 text-left font-semibold">{row.name}</td>
-                    <td className="border border-slate-300 px-3 py-2 font-bold">{row.manager || "미지정"}</td>
+                    <td className="border border-slate-300 px-3 py-2 font-bold">{row.manager ? normalizeManager(row.manager) : "미지정"}</td>
                     <td className="border border-slate-300 px-3 py-2">{row.channel}</td>
                     <td className="border border-slate-300 px-3 py-2">{row.storeType}</td>
                     <td className="border border-slate-300 px-3 py-2 text-left">{row.brand}</td>
@@ -11122,7 +11165,7 @@ function StoreListManagement({
             </table>
           )}
 
-          {listTab === "기타 관리" && (
+          {section === "reference" && listTab === "기타 관리" && (
             <table className="w-full min-w-[1150px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-100">
@@ -11165,7 +11208,7 @@ function StoreListManagement({
                       </td>
                       <td className="border border-slate-300 px-3 py-2">{row.code}</td>
                       <td className="border border-slate-300 px-3 py-2 text-left font-semibold">{row.name}</td>
-                      <td className="border border-slate-300 px-3 py-2 font-bold">{row.manager || "미지정"}</td>
+                      <td className="border border-slate-300 px-3 py-2 font-bold">{row.manager ? normalizeManager(row.manager) : "미지정"}</td>
                       <td className="border border-slate-300 px-3 py-2 text-left">{row.brand || "미지정"}</td>
                       <td className="border border-slate-300 px-3 py-2">{row.channel}</td>
                       <td className="border border-slate-300 px-3 py-2">{row.storeType}</td>
@@ -11189,6 +11232,7 @@ function StoreListManagement({
           )}
         </div>
       </div>
+      </main>
     </div>
   );
 }
