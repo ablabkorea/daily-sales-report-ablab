@@ -7376,7 +7376,7 @@ function ItemAnalysis({
                   </ItemAnalysisSortableTh>
                   <PopupTh
                     colSpan={3}
-                    className="bg-emerald-100 text-center font-extrabold text-slate-900"
+                    className="bg-white text-center font-extrabold text-black"
                   >
                     Time Gone 대비
                   </PopupTh>
@@ -7385,7 +7385,7 @@ function ItemAnalysis({
                 <tr>
                   <ItemAnalysisSortableTh
                     top="top-[37px]"
-                    className="bg-emerald-50"
+                    className="bg-[#F7FCEB] text-black"
                     sortKey="prevYearSales"
                     sortConfig={itemSortConfig}
                     onSort={requestItemSort}
@@ -7395,7 +7395,7 @@ function ItemAnalysis({
                   </ItemAnalysisSortableTh>
                   <ItemAnalysisSortableTh
                     top="top-[37px]"
-                    className="bg-blue-50"
+                    className="bg-[#F3FAFD] text-black"
                     sortKey="prevMonthSales"
                     sortConfig={itemSortConfig}
                     onSort={requestItemSort}
@@ -7405,7 +7405,7 @@ function ItemAnalysis({
                   </ItemAnalysisSortableTh>
                   <ItemAnalysisSortableTh
                     top="top-[37px]"
-                    className="bg-yellow-50"
+                    className="bg-[#FFF7FA] text-black"
                     sortKey="currentSales"
                     sortConfig={itemSortConfig}
                     onSort={requestItemSort}
@@ -7457,7 +7457,7 @@ function ItemAnalysis({
                     <td className="border border-slate-300 p-2">
                       <button
                         onClick={() => setSelectedItemCode(r.itemCode)}
-                        className="rounded-lg bg-slate-800 px-3 py-1 text-xs font-semibold text-white"
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-black transition hover:border-blue-300 hover:bg-blue-50"
                       >
                         상세
                       </button>
