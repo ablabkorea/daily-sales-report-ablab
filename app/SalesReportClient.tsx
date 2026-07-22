@@ -4727,7 +4727,13 @@ export default function SalesReportClient() {
           .sales-report-root .item-profit-fixed-header,
           .sales-report-root .item-profit-fixed-body {
             table-layout: fixed;
+            border-collapse: collapse;
+            border-spacing: 0;
             font-size: 12px;
+          }
+          .sales-report-root .item-profit-fixed-header-wrap {
+            padding-right: 17px;
+            background: #fff;
           }
           .sales-report-root .item-profit-fixed-header {
             position: relative;
@@ -4774,7 +4780,19 @@ export default function SalesReportClient() {
             position: static !important;
           }
           .sales-report-root .item-profit-fixed-body td {
+            height: 40px;
+            padding: 8px;
             font-size: 12px;
+            vertical-align: middle;
+          }
+          .sales-report-root .item-profit-fixed-header th,
+          .sales-report-root .item-profit-fixed-body td {
+            box-sizing: border-box;
+          }
+          .sales-report-root .item-profit-fixed-body .item-name-cell {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
 
         `}</style>
@@ -7861,7 +7879,8 @@ function ItemShipmentAnalysis({
           <div className="overflow-x-auto isolate">
             <div className="min-w-[1650px]">
               {/* 헤더와 SUBTOTAL은 스크롤 영역 밖에 두어 완전히 고정합니다. */}
-              <table className="item-profit-fixed-header w-full table-fixed border-separate border-spacing-0 text-center text-black whitespace-nowrap">
+              <div className="item-profit-fixed-header-wrap">
+              <table className="item-profit-fixed-header w-full table-fixed text-center text-black whitespace-nowrap">
               <colgroup>
                 <col style={{ width: "120px" }} />
                 <col style={{ width: "300px" }} />
@@ -7949,10 +7968,11 @@ function ItemShipmentAnalysis({
                 </tr>
               </thead>
               </table>
+              </div>
 
               {/* 품목 데이터 행만 세로로 스크롤됩니다. */}
-              <div className="max-h-[68vh] overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
-                <table className="item-profit-fixed-body w-full table-fixed border-separate border-spacing-0 text-center text-black whitespace-nowrap">
+              <div className="max-h-[68vh] overflow-y-scroll overflow-x-hidden">
+                <table className="item-profit-fixed-body w-full table-fixed text-center text-black whitespace-nowrap">
               <colgroup>
                 <col style={{ width: "120px" }} />
                 <col style={{ width: "300px" }} />
