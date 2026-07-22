@@ -5246,10 +5246,10 @@ function EstQuickEntry({
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">채널</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-emerald-50 px-3 py-2 font-bold text-emerald-800">전년동월 매출</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-800">전월 매출</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-purple-50 px-3 py-2 font-bold text-purple-800">전월 EST</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-50 px-3 py-2 font-bold text-yellow-900">전월 EST 달성률</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">{month} EST 입력</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-cyan-50 px-3 py-2 font-bold text-cyan-800">전월 EST 대비 차이</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">전월 EST</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">전월 EST 달성률</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">{month} EST 입력</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">전월 EST 대비 차이</th>
               </tr>
             </thead>
             <tbody>
@@ -6674,7 +6674,7 @@ function ItemAnalysisSortableTh<K extends string>({
         title="정렬"
       >
         <span>{children}</span>
-        <span className="text-[10px] text-slate-500">
+        <span className="text-[11px] text-black">
           {sortArrow(sortConfig.key === sortKey, sortConfig.direction)}
         </span>
       </button>
@@ -7217,7 +7217,7 @@ function ItemAnalysis({
                     <tr>
                       <PopupTh top="top-[37px]" className="bg-emerald-50 text-center font-bold text-slate-900">전년동월</PopupTh>
                       <PopupTh top="top-[37px]" className="bg-blue-50 text-center font-bold text-slate-900">전월</PopupTh>
-                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-yellow-50 text-slate-900" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당일까지 매출</ItemAnalysisSortableTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-pink-100 text-black" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당일까지 매출</ItemAnalysisSortableTh>
                     </tr>
                   </thead>
                   <tbody>
@@ -7547,7 +7547,7 @@ function ItemAnalysis({
                             title="정렬"
                           >
                             <span>{label}</span>
-                            <span className="text-[10px] text-slate-500">
+                            <span className="text-[11px] text-black">
                               {sortArrow(
                                 detailSortConfig.key === key,
                                 detailSortConfig.direction,
@@ -8003,11 +8003,11 @@ function ItemShipmentAnalysis({
                 <tr>
                   <th className="border border-blue-200 bg-blue-50 px-2 py-2 font-bold">매출</th>
                   <th className="border border-blue-200 bg-blue-50 px-2 py-2 font-bold">매입단가</th>
-                  <th className="border border-blue-200 bg-blue-50 px-2 py-2 font-bold">이익금액</th>
+                  <th className="border border-blue-200 bg-orange-100 px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
                   <th className="border border-blue-200 bg-blue-50 px-1 py-2 font-bold">이익률</th>
                   <th className="border border-orange-200 bg-orange-50 px-2 py-2 font-bold">매출</th>
                   <th className="border border-orange-200 bg-orange-50 px-2 py-2 font-bold">매입단가</th>
-                  <th className="border border-orange-200 bg-orange-50 px-2 py-2 font-bold">이익금액</th>
+                  <th className="border border-orange-200 bg-orange-100 px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
                   <th className="border border-orange-200 bg-orange-50 px-1 py-1 font-bold">
                     <div className="flex w-full flex-col items-center gap-1">
                       <span>이익률</span>
@@ -9178,19 +9178,19 @@ function SalesStatus({
               <FilterAmountCard
                 title="당일까지의 매출"
                 value={filteredCurrentSales}
-                tone="yellow"
+                tone="pink"
                 onClick={() => openTotalDrill("current")}
               />
               <FilterAmountCard
                 title="당월 발주 총 금액"
                 value={filteredFullMonthSales}
-                tone="yellow"
+                tone="pink"
                 onClick={() => openTotalDrill("currentFullMonth")}
               />
               <FilterAmountCard
                 title="이익 금액"
                 value={filteredProfitAmount}
-                tone="green"
+                tone="orange"
               />
             </div>
           </>
@@ -9201,7 +9201,7 @@ function SalesStatus({
             className={`sales-status-table w-full ${compact ? "min-w-[1360px]" : "min-w-[1180px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[11px] leading-tight`}
           >
             <thead>
-              <tr className="bg-slate-100">
+              <tr className="bg-white">
                 <ThCompactSortable
                   rowSpan={2}
                   w={isStoreListView ? (compact ? "w-[26%]" : "w-[19%]") : "w-[11%]"}
@@ -9217,8 +9217,8 @@ function SalesStatus({
                 )}
                 <ThCompact colSpan={2} tone="mint">전년동월</ThCompact>
                 <ThCompact colSpan={2} tone="blue">전월</ThCompact>
-                <ThCompact colSpan={2} tone="yellow">당월</ThCompact>
-                <ThCompact colSpan={2} tone="purple">EST</ThCompact>
+                <ThCompact colSpan={2} tone="pink">당월</ThCompact>
+                <ThCompact colSpan={2} tone="yellow">EST</ThCompact>
                 <ThCompact colSpan={2} tone="orange">이익</ThCompact>
               </tr>
               <tr>
@@ -9226,10 +9226,10 @@ function SalesStatus({
                 <ThCompactSortable right tone="mint" top="top-[31px]" sortKey="prevYearTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>Time gone</ThCompactSortable>
                 <ThCompactSortable right tone="blue" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>매출</ThCompactSortable>
                 <ThCompactSortable right tone="blue" top="top-[31px]" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>Time gone</ThCompactSortable>
-                <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
-                <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>전체 매출</ThCompactSortable>
-                <ThCompactSortable right tone="purple" top="top-[31px]" w={compact ? "w-[5%]" : ""} sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
-                <ThCompactSortable right tone="purple" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
+                <ThCompactSortable right tone="pink" top="top-[31px]" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
+                <ThCompactSortable right tone="pink" top="top-[31px]" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>전체 매출</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" w={compact ? "w-[5%]" : ""} sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
                 <ThCompactSortable right tone="orange" top="top-[31px]" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
                 <ThCompactSortable right tone="orange" top="top-[31px]" w="w-[5%]" sortKey="profitRate" sortConfig={sortConfig} onSort={requestSort}>이익률</ThCompactSortable>
               </tr>
@@ -9420,7 +9420,7 @@ function ThCompactSortable({
   onSort: (key: SalesStatusSortKey) => void;
   right?: boolean;
   w?: string;
-  tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green" | "orange";
+  tone?: "default" | "mint" | "blue" | "pink" | "yellow" | "gray" | "purple" | "green" | "orange";
   rowSpan?: number;
   top?: string;
 }) {
@@ -9432,7 +9432,7 @@ function ThCompactSortable({
         className="flex w-full items-center justify-center gap-1 text-center"
       >
         <span>{children}</span>
-        <span className="text-[10px] text-slate-500">
+        <span className="text-[11px] text-black">
           {sortArrow(sortConfig.key === sortKey, sortConfig.direction)}
         </span>
       </button>
@@ -10285,17 +10285,21 @@ function FilterAmountCard({
 }: {
   title: string;
   value: number | string;
-  tone: "mint" | "blue" | "yellow" | "green";
+  tone: "mint" | "blue" | "pink" | "yellow" | "green" | "orange";
   onClick?: () => void;
 }) {
   const toneClass =
     tone === "mint"
-      ? "border-emerald-200 bg-emerald-50"
+      ? "border-lime-300 bg-lime-100"
       : tone === "blue"
-        ? "border-blue-200 bg-blue-50"
-        : tone === "yellow"
-          ? "border-amber-200 bg-amber-50"
-          : "border-green-200 bg-green-50";
+        ? "border-sky-300 bg-sky-100"
+        : tone === "pink"
+          ? "border-pink-300 bg-pink-100"
+          : tone === "yellow"
+            ? "border-yellow-300 bg-yellow-100"
+            : tone === "orange"
+              ? "border-orange-300 bg-orange-100"
+              : "border-white bg-white";
 
   return (
     <button
@@ -10304,8 +10308,8 @@ function FilterAmountCard({
       disabled={!onClick}
       className={`rounded-xl border px-3 py-2 text-left shadow-sm ${toneClass} ${onClick ? "cursor-pointer hover:shadow-md" : "cursor-default"}`}
     >
-      <p className="text-[11px] font-semibold text-slate-500">{title}</p>
-      <p className="mt-1 break-all text-right text-base font-bold text-slate-900">
+      <p className="text-[13px] font-bold text-black">{title}</p>
+      <p className="mt-1 break-all text-right text-[18px] font-bold text-black">
         {typeof value === "number" ? won(value) : value}
       </p>
     </button>
@@ -10324,33 +10328,29 @@ function ThCompact({
   children: React.ReactNode;
   right?: boolean;
   w?: string;
-  tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green" | "orange";
+  tone?: "default" | "mint" | "blue" | "pink" | "yellow" | "gray" | "purple" | "green" | "orange";
   rowSpan?: number;
   colSpan?: number;
   top?: string;
 }) {
   const toneClass =
     tone === "mint"
-      ? "border-emerald-200 bg-emerald-100 text-black"
+      ? "border-lime-300 bg-lime-100 text-black"
       : tone === "blue"
-        ? "border-blue-200 bg-blue-100 text-black"
-        : tone === "yellow"
-          ? "border-amber-200 bg-yellow-100 text-black"
-          : tone === "gray"
-            ? "border-slate-300 bg-slate-100 text-black"
-            : tone === "purple"
-              ? "border-violet-200 bg-violet-100 text-black"
-              : tone === "green"
-                ? "border-green-200 bg-green-50 text-black"
-                : tone === "orange"
-                  ? "border-orange-200 bg-orange-100 text-black"
-                  : "border-slate-200 bg-slate-100 text-black";
+        ? "border-sky-300 bg-sky-100 text-black"
+        : tone === "pink"
+          ? "border-pink-300 bg-pink-100 text-black"
+          : tone === "yellow"
+            ? "border-yellow-300 bg-yellow-100 text-black"
+            : tone === "orange"
+              ? "border-orange-300 bg-orange-100 text-black"
+              : "border-slate-300 bg-white text-black";
 
   return (
     <th
       rowSpan={rowSpan}
       colSpan={colSpan}
-      className={`sticky ${top} z-50 border px-0.5 py-1.5 align-middle text-center text-[12px] font-bold leading-tight whitespace-nowrap break-keep shadow-sm bg-clip-padding ${toneClass} ${w}`}
+      className={`sticky ${top} z-50 border px-0.5 py-1.5 align-middle text-center text-[14px] font-bold leading-tight whitespace-nowrap break-keep shadow-sm bg-clip-padding ${toneClass} ${w}`}
     >
       {children}
     </th>
@@ -12893,24 +12893,20 @@ function Th({
 }: {
   children: React.ReactNode;
   right?: boolean;
-  tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green" | "orange";
+  tone?: "default" | "mint" | "blue" | "pink" | "yellow" | "gray" | "purple" | "green" | "orange";
 }) {
   const toneClass =
     tone === "mint"
-      ? "border-emerald-200 bg-emerald-100 text-black"
+      ? "border-lime-300 bg-lime-100 text-black"
       : tone === "blue"
-        ? "border-blue-200 bg-blue-100 text-black"
-        : tone === "yellow"
-          ? "border-amber-200 bg-yellow-100 text-black"
-          : tone === "gray"
-            ? "border-slate-300 bg-slate-100 text-black"
-            : tone === "purple"
-              ? "border-violet-200 bg-violet-100 text-black"
-              : tone === "green"
-                ? "border-green-200 bg-green-50 text-black"
-                : tone === "orange"
-                  ? "border-orange-200 bg-orange-100 text-black"
-                  : "border-slate-200 bg-slate-100 text-black";
+        ? "border-sky-300 bg-sky-100 text-black"
+        : tone === "pink"
+          ? "border-pink-300 bg-pink-100 text-black"
+          : tone === "yellow"
+            ? "border-yellow-300 bg-yellow-100 text-black"
+            : tone === "orange"
+              ? "border-orange-300 bg-orange-100 text-black"
+              : "border-slate-300 bg-white text-black";
 
   return (
     <th
