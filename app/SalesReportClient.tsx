@@ -3509,8 +3509,7 @@ function dayWeight(date: string, holidays: string[]) {
   const { y, m, d } = parseYmd(date);
   const day = new Date(y, m - 1, d).getDay();
   const isHoliday = holidays.includes(date);
-  if (day === 0) return 0;
-  if (day === 6) return 0.5;
+  if (day === 0 || day === 6) return 0.5;
   if (isHoliday) return 0.5;
   return 1;
 }
@@ -6146,12 +6145,21 @@ function Dashboard({
   void timeGone;
   void codeMappings;
 
-  const managers = ["SY", "KT", "SW", "NH"];
   const stMap = storeMap(stores);
-  const managerOfSale = (row: SalesRecord) =>
-    stMap.get(row.storeCode)?.manager || row.manager || "미지정";
-  const managerOfEst = (row: EstRecord) =>
-    stMap.get(row.storeCode)?.manager || "미지정";
+  const normalizeDashboardManager = (value: unknown) =>
+    norm(value).trim().toUpperCase();
+  const managerOfSale = (row: SalesRecord) => {
+    const store = stMap.get(row.storeCode);
+    return store
+      ? normalizeDashboardManager(store.manager) || "미지정"
+      : "미지정";
+  };
+  const managerOfEst = (row: EstRecord) => {
+    const store = stMap.get(row.storeCode);
+    return store
+      ? normalizeDashboardManager(store.manager) || "미지정"
+      : "미지정";
+  };
 
   const current = sales.filter(
     (s) =>
@@ -6168,6 +6176,22 @@ function Dashboard({
   const prevYear = sales.filter(
     (s) => s.period === "prevYear" && s.refMonth === month,
   );
+
+  const managers = Array.from(
+    new Set(
+      stores
+        .map((store) => normalizeDashboardManager(store.manager))
+        .filter(Boolean),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "ko"));
+  const hasUnassigned =
+    [...currentFullMonth, ...prevMonth, ...prevYear].some(
+      (row) => managerOfSale(row) === "미지정",
+    ) ||
+    ests.some(
+      (row) => row.month === month && managerOfEst(row) === "미지정",
+    );
+  if (hasUnassigned) managers.push("미지정");
 
   const rows = managers.map((manager) => {
     const currentRows = current.filter((s) => managerOfSale(s) === manager);
@@ -12662,7 +12686,7 @@ function UploadPage({
       <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-5 shadow-sm backdrop-blur">
         <h2 className="mb-3 text-lg font-bold">TIME GONE 공휴일 설정</h2>
         <p className="mb-3 text-sm text-slate-500">
-          월~금 일반일 1일, 월~금 공휴일 0.5일, 토요일 0.5일, 일요일 0일
+          월~금 일반일 1일, 공휴일 0.5일, 토요일 0.5일, 일요일 0.5일
           기준입니다.
         </p>
         <textarea
