@@ -8,7 +8,7 @@ type Manager = string;
 type StoreType = string;
 type PeriodType = "current" | "prevMonth" | "prevYear";
 type SalesView = "거래처별" | "브랜드별" | "담당자별" | "채널별";
-type MonthStartTab = "거래처/휴면 관리" | "업로드 관리";
+type MonthStartTab = "거래처 리스트 관리" | "업로드 관리";
 type DrillPeriod = "prevYear" | "prevMonth" | "current" | "currentFullMonth";
 type SalesStatusSortKey =
   | "label"
@@ -107,6 +107,14 @@ type ItemCostHistory = {
   memo?: string;
 };
 
+type ItemMasterRecord = {
+  itemCode: string;
+  itemName: string;
+  category: string;
+  active?: boolean;
+  memo?: string;
+};
+
 type ItemCostRecord = {
   itemCode: string;
   itemName: string;
@@ -139,7 +147,7 @@ const CHANNELS: Channel[] = [
 const MANAGERS: Manager[] = ["SY", "KT", "SW", "NH", "Bomi", "BM", "bomi"];
 const SALES_VIEWS: SalesView[] = ["거래처별", "브랜드별", "담당자별"];
 const MONTH_TABS: MonthStartTab[] = [
-  "거래처/휴면 관리",
+  "거래처 리스트 관리",
   "업로드 관리",
 ];
 
@@ -4511,6 +4519,10 @@ export default function SalesReportClient() {
     "ablab_item_costs_v1",
     initialItemCosts,
   );
+  const [itemMasters, setItemMasters] = useLocal<ItemMasterRecord[]>(
+    "ablab_item_masters_v1",
+    [],
+  );
 
   useEffect(() => {
     if (!dashDate.startsWith(dashMonth)) setDashDate(monthEnd(dashMonth));
@@ -4929,6 +4941,7 @@ export default function SalesReportClient() {
           <ItemShipmentAnalysis
             stores={stores}
             sales={sales}
+            itemMasters={itemMasters}
             month={dashMonth}
             date={dashDate}
           />
@@ -4958,6 +4971,8 @@ export default function SalesReportClient() {
             setTimeConfigs={setTimeConfigs}
             codeMappings={codeMappings}
             setCodeMappings={setCodeMappings}
+            itemMasters={itemMasters}
+            setItemMasters={setItemMasters}
           />
         )}
       </section>
@@ -7583,11 +7598,13 @@ function itemCategoryFromName(itemName: string) {
 function ItemShipmentAnalysis({
   stores,
   sales,
+  itemMasters,
   month,
   date,
 }: {
   stores: Store[];
   sales: SalesRecord[];
+  itemMasters: ItemMasterRecord[];
   month: string;
   date: string;
 }) {
@@ -7619,6 +7636,10 @@ function ItemShipmentAnalysis({
     () => new Map(stores.map((s) => [s.code, s])),
     [stores],
   );
+  const itemMasterByCode = useMemo(
+    () => new Map(itemMasters.map((item) => [item.itemCode, item])),
+    [itemMasters],
+  );
 
   const itemRows = useMemo(() => {
     const map = new Map<
@@ -7639,7 +7660,7 @@ function ItemShipmentAnalysis({
         map.set(key, {
           itemCode: row.itemCode || "-",
           itemName: row.itemName || "미지정",
-          category: itemCategoryFromName(row.itemName),
+          category: itemMasterByCode.get(row.itemCode)?.category || itemCategoryFromName(row.itemName),
           current: emptyItemMetric(),
           prevMonth: emptyItemMetric(),
           storeCodes: new Set<string>(),
@@ -7724,13 +7745,27 @@ function ItemShipmentAnalysis({
     prevEnd,
     categoryFilter,
     profitRateFilter,
+    itemMasterByCode,
   ]);
 
   const categoryOptions = useMemo(() => {
     const categories = new Set<string>();
-    sales.forEach((row) => categories.add(itemCategoryFromName(row.itemName)));
-    return ["전체", ...Array.from(categories).sort((a, b) => a.localeCompare(b, "ko-KR"))];
-  }, [sales]);
+    itemMasters.forEach((item) => {
+      if (item.category) categories.add(item.category);
+    });
+    sales.forEach((row) =>
+      categories.add(
+        itemMasterByCode.get(row.itemCode)?.category ||
+          itemCategoryFromName(row.itemName),
+      ),
+    );
+    return [
+      "전체",
+      ...Array.from(categories).sort((a, b) =>
+        a.localeCompare(b, "ko-KR"),
+      ),
+    ];
+  }, [sales, itemMasters, itemMasterByCode]);
 
   const subtotal = useMemo(() => {
     const prevMonth = itemRows.reduce(
@@ -10474,6 +10509,8 @@ function MonthStartManagement({
   setTimeConfigs,
   codeMappings,
   setCodeMappings,
+  itemMasters,
+  setItemMasters,
 }: {
   stores: Store[];
   setStores: (v: Store[]) => void;
@@ -10490,8 +10527,10 @@ function MonthStartManagement({
   setTimeConfigs: (v: TimeConfig[]) => void;
   codeMappings: StoreCodeMapping[];
   setCodeMappings: (v: StoreCodeMapping[]) => void;
+  itemMasters: ItemMasterRecord[];
+  setItemMasters: (v: ItemMasterRecord[]) => void;
 }) {
-  const [tab, setTab] = useState<MonthStartTab>("거래처/휴면 관리");
+  const [tab, setTab] = useState<MonthStartTab>("거래처 리스트 관리");
 
   return (
     <div className="space-y-4">
@@ -10509,17 +10548,14 @@ function MonthStartManagement({
         </div>
       </div>
 
-      {tab === "거래처/휴면 관리" && (
-        <div className="space-y-4">
-          <MappingPage
-            stores={stores}
-            setStores={setStores}
-            sales={sales}
-            month={month}
-            codeMappings={codeMappings}
-            setCodeMappings={setCodeMappings}
-          />
-        </div>
+      {tab === "거래처 리스트 관리" && (
+        <StoreListManagement
+          stores={stores}
+          setStores={setStores}
+          sales={sales}
+          month={month}
+          codeMappings={codeMappings}
+        />
       )}
       {tab === "업로드 관리" && (
         <UploadPage
@@ -10532,8 +10568,413 @@ function MonthStartManagement({
           date={date}
           timeConfigs={timeConfigs}
           setTimeConfigs={setTimeConfigs}
+          itemMasters={itemMasters}
+          setItemMasters={setItemMasters}
         />
       )}
+    </div>
+  );
+}
+
+
+function StoreListManagement({
+  stores,
+  setStores,
+  sales,
+  month,
+  codeMappings,
+}: {
+  stores: Store[];
+  setStores: (v: Store[]) => void;
+  sales: SalesRecord[];
+  month: string;
+  codeMappings: StoreCodeMapping[];
+}) {
+  type ListTab = "기존거래처 리스트" | "전년동월 리스트" | "총 거래처 리스트";
+  const [listTab, setListTab] = useState<ListTab>("기존거래처 리스트");
+  const [search, setSearch] = useState("");
+  const normalizedSearch = search.trim().toLowerCase();
+
+  type SalesStoreSummary = {
+    code: string;
+    name: string;
+    channel: string;
+    manager: string;
+    storeType: string;
+    brand: string;
+    amount: number;
+  };
+
+  const summarize = (rows: SalesRecord[]) => {
+    const map = new Map<string, SalesStoreSummary>();
+    rows.forEach((row) => {
+      const key = `${norm(row.storeCode)}|${normalizeStoreNameKey(row.storeName)}`;
+      const saved = stores.find((store) => store.code === row.storeCode);
+      const previous = map.get(key) || {
+        code: row.storeCode || "-",
+        name: row.storeName || row.storeCode || "미지정",
+        channel: saved?.channel || row.channel || "미지정",
+        manager: saved?.manager || row.manager || "",
+        storeType: saved?.storeType || row.storeType || "비매장",
+        brand: displayBrand(saved?.brand || row.brand),
+        amount: 0,
+      };
+      previous.amount += Number(row.salesAmount || 0);
+      map.set(key, previous);
+    });
+    return Array.from(map.values());
+  };
+
+  const currentRows = useMemo(
+    () =>
+      summarize(
+        sales.filter(
+          (row) =>
+            row.period === "current" &&
+            inRange(row.saleDate, monthStart(month), monthEnd(month)),
+        ),
+      ),
+    [sales, stores, month],
+  );
+
+  const prevMonthRows = useMemo(
+    () =>
+      summarize(
+        sales.filter(
+          (row) => row.period === "prevMonth" && row.refMonth === month,
+        ),
+      ),
+    [sales, stores, month],
+  );
+
+  const prevYearRows = useMemo(
+    () =>
+      summarize(
+        sales.filter(
+          (row) => row.period === "prevYear" && row.refMonth === month,
+        ),
+      ),
+    [sales, stores, month],
+  );
+
+  const existingRows = useMemo(() => {
+    const currentByCode = new Map(currentRows.map((row) => [norm(row.code), row]));
+    const currentByName = new Map(
+      currentRows.map((row) => [normalizeStoreNameKey(row.name), row]),
+    );
+    const prevByCode = new Map(prevMonthRows.map((row) => [norm(row.code), row]));
+    const prevByName = new Map(
+      prevMonthRows.map((row) => [normalizeStoreNameKey(row.name), row]),
+    );
+    const keys = new Set<string>();
+    currentRows.forEach((row) => keys.add(`C|${row.code}|${row.name}`));
+    prevMonthRows.forEach((row) => keys.add(`P|${row.code}|${row.name}`));
+
+    const result = new Map<string, SalesStoreSummary & {
+      currentAmount: number;
+      prevAmount: number;
+      statusLabel: string;
+      note: string;
+    }>();
+
+    [...currentRows, ...prevMonthRows].forEach((source) => {
+      const currentBySameCode = currentByCode.get(norm(source.code));
+      const currentBySameName = currentByName.get(normalizeStoreNameKey(source.name));
+      const prevBySameCode = prevByCode.get(norm(source.code));
+      const prevBySameName = prevByName.get(normalizeStoreNameKey(source.name));
+      const current = currentBySameCode || currentBySameName;
+      const prev = prevBySameCode || prevBySameName;
+      const canonical = current || prev || source;
+      const key = current?.code || prev?.code || source.code || source.name;
+
+      let statusLabel = "동일";
+      let note = "당월과 전월의 사업자번호와 거래처명이 같습니다.";
+      if (current && !prev) {
+        statusLabel = "당월 신규";
+        note = "당월에만 존재하는 거래처입니다.";
+      } else if (!current && prev) {
+        statusLabel = "당월 미거래";
+        note = "전월에는 있었지만 당월 매출에는 없습니다.";
+      } else if (current && prev) {
+        if (norm(current.code) !== norm(prev.code)) {
+          statusLabel = "사업자번호 변경";
+          note = `전월 ${prev.code} → 당월 ${current.code}`;
+        } else if (
+          normalizeStoreNameKey(current.name) !== normalizeStoreNameKey(prev.name)
+        ) {
+          statusLabel = "거래처명 변경";
+          note = `전월 ${prev.name} → 당월 ${current.name}`;
+        }
+      }
+
+      result.set(key, {
+        ...canonical,
+        currentAmount: current?.amount || 0,
+        prevAmount: prev?.amount || 0,
+        statusLabel,
+        note,
+      });
+    });
+
+    return Array.from(result.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, "ko-KR", { numeric: true }),
+    );
+  }, [currentRows, prevMonthRows]);
+
+  const prevYearCompareRows = useMemo(() => {
+    const existingByCode = new Map(existingRows.map((row) => [norm(row.code), row]));
+    const existingByName = new Map(
+      existingRows.map((row) => [normalizeStoreNameKey(row.name), row]),
+    );
+
+    return prevYearRows
+      .map((row) => {
+        const byCode = existingByCode.get(norm(row.code));
+        const byName = existingByName.get(normalizeStoreNameKey(row.name));
+        const manual = codeMappings.find(
+          (mapping) =>
+            norm(mapping.oldCode) === norm(row.code) &&
+            (!mapping.oldName ||
+              normalizeStoreNameKey(mapping.oldName) ===
+                normalizeStoreNameKey(row.name)),
+        );
+        let statusLabel = "기존 리스트에 없음";
+        let note = "기존거래처 리스트에 없는 전년동월 거래처입니다.";
+        let matchedCode = "";
+        let matchedName = "";
+
+        if (manual) {
+          statusLabel = "수동 매핑";
+          note = "저장된 거래처 코드 매핑이 적용됩니다.";
+          matchedCode = manual.currentCode;
+          matchedName = manual.currentName;
+        } else if (byCode && byName) {
+          statusLabel = "일치";
+          note = "사업자번호와 거래처명이 모두 같습니다.";
+          matchedCode = byCode.code;
+          matchedName = byCode.name;
+        } else if (byName && !byCode) {
+          statusLabel = "사업자번호 다름";
+          note = `동일 거래처명 기준: ${row.code} ↔ ${byName.code}`;
+          matchedCode = byName.code;
+          matchedName = byName.name;
+        } else if (byCode && !byName) {
+          statusLabel = "거래처명 다름";
+          note = `동일 사업자번호 기준: ${row.name} ↔ ${byCode.name}`;
+          matchedCode = byCode.code;
+          matchedName = byCode.name;
+        }
+
+        return { ...row, statusLabel, note, matchedCode, matchedName };
+      })
+      .sort((a, b) =>
+        a.statusLabel.localeCompare(b.statusLabel, "ko-KR") ||
+        a.name.localeCompare(b.name, "ko-KR", { numeric: true }),
+      );
+  }, [prevYearRows, existingRows, codeMappings]);
+
+  const totalRows = useMemo(() => {
+    const map = new Map<string, Store>();
+    existingRows.forEach((row) => {
+      const saved = stores.find((store) => store.code === row.code);
+      map.set(row.code, {
+        code: row.code,
+        name: row.name,
+        channel: saved?.channel || row.channel || "미지정",
+        manager: saved?.manager || row.manager || "",
+        storeType: saved?.storeType || row.storeType || "비매장",
+        brand: displayBrand(saved?.brand || row.brand),
+        status: "거래중",
+      });
+    });
+
+    prevYearCompareRows.forEach((row) => {
+      const targetCode = row.matchedCode || row.code;
+      const targetName = row.matchedName || row.name;
+      if (map.has(targetCode)) return;
+      const saved = stores.find((store) => store.code === targetCode);
+      map.set(targetCode, {
+        code: targetCode,
+        name: targetName,
+        channel: saved?.channel || row.channel || "미지정",
+        manager: saved?.manager || row.manager || "",
+        storeType: saved?.storeType || row.storeType || "비매장",
+        brand: displayBrand(saved?.brand || row.brand),
+        status: "거래종료",
+      });
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, "ko-KR", { numeric: true }),
+    );
+  }, [existingRows, prevYearCompareRows, stores]);
+
+  const visibleExistingRows = existingRows.filter((row) =>
+    `${row.code} ${row.name} ${row.statusLabel} ${row.note}`
+      .toLowerCase()
+      .includes(normalizedSearch),
+  );
+  const visiblePrevYearRows = prevYearCompareRows.filter((row) =>
+    `${row.code} ${row.name} ${row.statusLabel} ${row.note}`
+      .toLowerCase()
+      .includes(normalizedSearch),
+  );
+  const visibleTotalRows = totalRows.filter((row) =>
+    `${row.code} ${row.name} ${row.channel} ${row.manager} ${row.brand}`
+      .toLowerCase()
+      .includes(normalizedSearch),
+  );
+
+  function saveTotalList() {
+    if (!window.confirm(
+      `총 거래처 리스트 ${totalRows.length.toLocaleString("ko-KR")}건을 최종 거래처 기준으로 저장할까요?\n저장 후 매출현황과 거래처별 상세가 이 리스트를 기준으로 표시됩니다.`,
+    )) return;
+    setStores(totalRows);
+    alert(`총 거래처 리스트 ${totalRows.length.toLocaleString("ko-KR")}건을 저장했습니다.`);
+  }
+
+  const badgeClass = (label: string) => {
+    if (["동일", "일치", "수동 매핑"].includes(label))
+      return "bg-emerald-100 text-emerald-800";
+    if (["당월 신규", "기존 리스트에 없음"].includes(label))
+      return "bg-blue-100 text-blue-800";
+    if (["당월 미거래"].includes(label))
+      return "bg-slate-200 text-slate-700";
+    return "bg-amber-100 text-amber-900";
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-extrabold text-slate-900">거래처 리스트 관리</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              전월·당월을 기존거래처 리스트로 만들고 전년동월과 비교한 뒤, 총 거래처 리스트를 최종 저장합니다.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="사업자번호/거래처명/상태 검색"
+              className="h-9 w-[280px] rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-blue-500"
+            />
+            {listTab === "총 거래처 리스트" && (
+              <button
+                type="button"
+                onClick={saveTotalList}
+                className="h-9 rounded-lg bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700"
+              >
+                총 리스트 저장
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(["기존거래처 리스트", "전년동월 리스트", "총 거래처 리스트"] as ListTab[]).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setListTab(tab)}
+              className={`rounded-xl px-4 py-2 text-xs font-bold ${
+                listTab === tab
+                  ? "bg-orange-500 text-white shadow"
+                  : "bg-orange-50 text-orange-900 hover:bg-orange-100"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="min-h-0 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+        <div className="max-h-[65vh] overflow-auto">
+          {listTab === "기존거래처 리스트" && (
+            <table className="w-full min-w-[1250px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">사업자번호</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">거래처명</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2">전월 매출</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2">당월 매출</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">비교 결과</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">확인 내용</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleExistingRows.map((row) => (
+                  <tr key={`${row.code}|${row.name}`} className="hover:bg-orange-50/50">
+                    <td className="border border-slate-300 px-3 py-2">{row.code}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-left font-semibold">{row.name}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.prevAmount)}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.currentAmount)}</td>
+                    <td className="border border-slate-300 px-3 py-2"><span className={`rounded-full px-3 py-1 font-bold ${badgeClass(row.statusLabel)}`}>{row.statusLabel}</span></td>
+                    <td className="border border-slate-300 px-3 py-2 text-left text-slate-600">{row.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {listTab === "전년동월 리스트" && (
+            <table className="w-full min-w-[1350px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">전년 사업자번호</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">전년 거래처명</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-emerald-50 px-3 py-2">전년동월 매출</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">비교 결과</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">기존 리스트 연결</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">확인 내용</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visiblePrevYearRows.map((row) => (
+                  <tr key={`${row.code}|${row.name}`} className="hover:bg-orange-50/50">
+                    <td className="border border-slate-300 px-3 py-2">{row.code}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-left font-semibold">{row.name}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.amount)}</td>
+                    <td className="border border-slate-300 px-3 py-2"><span className={`rounded-full px-3 py-1 font-bold ${badgeClass(row.statusLabel)}`}>{row.statusLabel}</span></td>
+                    <td className="border border-slate-300 px-3 py-2 text-left">{row.matchedCode ? `${row.matchedCode} / ${row.matchedName}` : "-"}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-left text-slate-600">{row.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {listTab === "총 거래처 리스트" && (
+            <table className="w-full min-w-[1400px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">사업자번호</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">거래처명</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">담당자</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">채널</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">매장/비매장</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">브랜드</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleTotalRows.map((row) => (
+                  <tr key={row.code} className="hover:bg-orange-50/50">
+                    <td className="border border-slate-300 px-3 py-2">{row.code}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-left font-semibold">{row.name}</td>
+                    <td className="border border-slate-300 px-3 py-2 font-bold">{row.manager || "미지정"}</td>
+                    <td className="border border-slate-300 px-3 py-2">{row.channel}</td>
+                    <td className="border border-slate-300 px-3 py-2">{row.storeType}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-left">{row.brand}</td>
+                    <td className="border border-slate-300 px-3 py-2"><span className={`rounded-full px-3 py-1 font-bold ${row.status === "거래중" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>{row.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -11346,7 +11787,7 @@ function TargetByTypePage({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
         <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
           <p className="text-sm font-semibold text-slate-600">매장 Target</p>
           <input
@@ -11635,6 +12076,8 @@ function UploadPage({
   date,
   timeConfigs,
   setTimeConfigs,
+  itemMasters,
+  setItemMasters,
 }: {
   stores: Store[];
   setStores: (v: Store[]) => void;
@@ -11645,6 +12088,8 @@ function UploadPage({
   date: string;
   timeConfigs: TimeConfig[];
   setTimeConfigs: (v: TimeConfig[]) => void;
+  itemMasters: ItemMasterRecord[];
+  setItemMasters: (v: ItemMasterRecord[]) => void;
 }) {
   const [holidayText, setHolidayText] = useState("");
   const [deleteDate, setDeleteDate] = useState(today());
@@ -11732,9 +12177,8 @@ function UploadPage({
       );
 
     const missingStores =
-      period === "prevYear"
-        ? buildAutoClosedStoresFromPrevYear(parsed, stores)
-        : parsed
+      period === "current"
+        ? parsed
             .filter((r) => !storeMap(stores).has(r.storeCode))
             .map((r) => ({
               code: r.storeCode,
@@ -11744,7 +12188,8 @@ function UploadPage({
               storeType: "매장" as StoreType,
               brand: displayBrand(r.brand),
               status: "거래중" as const,
-            }));
+            }))
+        : [];
 
     if (missingStores.length) {
       const map = new Map(stores.map((s) => [s.code, s]));
@@ -11776,17 +12221,56 @@ function UploadPage({
       }
     } catch (error) {
       console.error("매출 업로드 저장 실패", error);
-      alert("매출 저장에 실패했습니다. 기존 데이터는 그대로 유지됩니다. Supabase 상태와 SQL 적용 여부를 확인해 주세요.");
+      alert("매출 저장에 실패했습니다. 기존 데이터는 그대로 유지됩니다. Cloudflare D1 연결 상태를 확인해 주세요.");
       return;
     }
 
-    const closedMessage =
-      period === "prevYear" && missingStores.length
-        ? `\n당월 기준에 없는 전년동월 거래처 ${missingStores.length}건은 거래종료로 자동 생성했습니다.`
-        : "";
+    const closedMessage = "";
     alert(
       `${period === "current" ? "당월" : period === "prevMonth" ? "전월" : "전년동월"} 매출 ${parsed.length}건을 반영했습니다.\n반영 날짜: ${uploadedDates.join(", ")}${closedMessage}`,
     );
+  }
+
+  async function uploadItems(file: File | null) {
+    if (!file) return;
+    const rows = await readFileRows(file);
+    const parsed = rows
+      .map((row) => ({
+        itemCode: norm(
+          row["품목코드"] ?? row["품목 코드"] ?? row["상품코드"],
+        ),
+        itemName: norm(
+          row["품목명"] ?? row["품목명[규격]"] ?? row["상품명"],
+        ),
+        category: norm(
+          row["카테고리"] ?? row["품목그룹"] ?? row["분류"],
+        ),
+        active:
+          !["중단", "미사용", "N", "FALSE", "0"].includes(
+            norm(row["사용여부"] ?? row["사용 여부"]).toUpperCase(),
+          ),
+        memo: norm(row["메모"] ?? row["비고"]),
+      }))
+      .filter((row) => row.itemCode && row.category);
+
+    if (!parsed.length) {
+      alert(
+        "품목코드와 카테고리가 있는 행을 찾지 못했습니다. 파일 헤더를 확인해 주세요.",
+      );
+      return;
+    }
+
+    const map = new Map(itemMasters.map((item) => [item.itemCode, item]));
+    parsed.forEach((item) => {
+      const previous = map.get(item.itemCode);
+      map.set(item.itemCode, {
+        ...previous,
+        ...item,
+        itemName: item.itemName || previous?.itemName || item.itemCode,
+      });
+    });
+    setItemMasters(Array.from(map.values()));
+    alert(`품목 카테고리 ${parsed.length}건을 반영했습니다.`);
   }
 
   function saveHolidays() {
@@ -11840,6 +12324,11 @@ function UploadPage({
             title="전년동월 매출 업로드"
             description="매출비교와 매출현황의 전년동월 매출 기준으로 사용합니다. 같은 기준월 자료는 새 파일로 교체됩니다."
             onUpload={(file) => uploadSales(file, "prevYear")}
+          />
+          <UploadBox
+            title="품목 정보 업로드"
+            description="품목코드와 카테고리를 업로드하면 품목분석의 카테고리에 반영됩니다. 기존 품목은 갱신하고 파일에 없는 품목은 유지합니다."
+            onUpload={uploadItems}
           />
         </div>
       </div>
