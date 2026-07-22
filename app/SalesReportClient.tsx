@@ -4729,18 +4729,21 @@ export default function SalesReportClient() {
             font-size: 12px;
           }
           .sales-report-root .item-profit-pivot thead {
-            position: sticky !important;
-            top: 0 !important;
+            position: relative !important;
             z-index: 90 !important;
             background: #fff;
           }
           .sales-report-root .item-profit-pivot thead tr {
-            position: static !important;
+            position: relative !important;
           }
           .sales-report-root .item-profit-pivot thead th {
-            position: static !important;
+            position: sticky !important;
+            background-clip: border-box !important;
+            opacity: 1 !important;
           }
           .sales-report-root .item-profit-pivot thead tr:nth-child(1) th {
+            top: 0 !important;
+            z-index: 82 !important;
             height: 34px;
             min-height: 34px;
             padding-top: 4px !important;
@@ -4749,12 +4752,16 @@ export default function SalesReportClient() {
             box-shadow: none !important;
           }
           .sales-report-root .item-profit-pivot thead tr:nth-child(1) th[rowspan="2"] {
+            top: 0 !important;
+            z-index: 84 !important;
             height: 78px;
             min-height: 78px;
             vertical-align: middle;
             border-bottom-width: 1px !important;
           }
           .sales-report-root .item-profit-pivot thead tr:nth-child(2) th {
+            top: 34px !important;
+            z-index: 83 !important;
             height: 44px;
             min-height: 44px;
             padding-top: 3px !important;
@@ -4763,6 +4770,8 @@ export default function SalesReportClient() {
             box-shadow: none !important;
           }
           .sales-report-root .item-profit-pivot thead tr:nth-child(3) th {
+            top: 78px !important;
+            z-index: 85 !important;
             height: 34px;
             min-height: 34px;
             background: #fefce8 !important;
