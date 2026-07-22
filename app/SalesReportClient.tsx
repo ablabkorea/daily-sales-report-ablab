@@ -4624,68 +4624,32 @@ export default function SalesReportClient() {
           .sales-report-root table th,
           .sales-report-root table td { border-color: #e5e7eb !important; }
 
-          /* 대시보드·매출현황·거래처별 상세·품목분석 표 헤더 공통 디자인
-             파스텔 배경과 같은 계열의 선명한 테두리를 사용해 상단 KPI 카드와 통일합니다. */
+          /* 임원·전사 공유용 표 헤더: 색은 분류만 돕고 숫자보다 먼저 보이지 않도록 절제합니다. */
           .sales-report-root[data-active="대시보드"] table thead th,
           .sales-report-root[data-active="매출현황"] table thead th,
           .sales-report-root[data-active="거래처별 상세"] table thead th,
           .sales-report-root[data-active="품목분석"] table thead th {
             border-width: 1px !important;
             border-style: solid !important;
-            border-color: #bfdbfe !important;
-            border-radius: 7px;
+            border-color: #e5e7eb !important;
+            border-radius: 0 !important;
             color: #111827 !important;
-            background-clip: padding-box !important;
+            font-weight: 700;
+            background-clip: border-box !important;
+            box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.18) !important;
           }
-          .sales-report-root[data-active="대시보드"] table thead th.bg-lime-100,
-          .sales-report-root[data-active="매출현황"] table thead th.bg-lime-100,
-          .sales-report-root[data-active="거래처별 상세"] table thead th.bg-lime-100,
-          .sales-report-root[data-active="품목분석"] table thead th.bg-lime-100,
-          .sales-report-root[data-active="대시보드"] table thead th[class*="bg-[#EAF7D7]"],
-          .sales-report-root[data-active="매출현황"] table thead th[class*="bg-[#EAF7D7]"],
-          .sales-report-root[data-active="거래처별 상세"] table thead th[class*="bg-[#EAF7D7]"],
-          .sales-report-root[data-active="품목분석"] table thead th[class*="bg-[#EAF7D7]"] {
-            border-color: #a3e635 !important;
-          }
-          .sales-report-root[data-active="대시보드"] table thead th.bg-sky-100,
-          .sales-report-root[data-active="매출현황"] table thead th.bg-sky-100,
-          .sales-report-root[data-active="거래처별 상세"] table thead th.bg-sky-100,
-          .sales-report-root[data-active="품목분석"] table thead th.bg-sky-100,
-          .sales-report-root[data-active="대시보드"] table thead th[class*="bg-[#DFF3FC]"],
-          .sales-report-root[data-active="매출현황"] table thead th[class*="bg-[#DFF3FC]"],
-          .sales-report-root[data-active="거래처별 상세"] table thead th[class*="bg-[#DFF3FC]"],
-          .sales-report-root[data-active="품목분석"] table thead th[class*="bg-[#DFF3FC]"] {
-            border-color: #38bdf8 !important;
-          }
-          .sales-report-root[data-active="대시보드"] table thead th.bg-pink-100,
-          .sales-report-root[data-active="매출현황"] table thead th.bg-pink-100,
-          .sales-report-root[data-active="거래처별 상세"] table thead th.bg-pink-100,
-          .sales-report-root[data-active="품목분석"] table thead th.bg-pink-100,
-          .sales-report-root[data-active="대시보드"] table thead th[class*="bg-[#FCE4EF]"],
-          .sales-report-root[data-active="매출현황"] table thead th[class*="bg-[#FCE4EF]"],
-          .sales-report-root[data-active="거래처별 상세"] table thead th[class*="bg-[#FCE4EF]"],
-          .sales-report-root[data-active="품목분석"] table thead th[class*="bg-[#FCE4EF]"] {
-            border-color: #f472b6 !important;
-          }
-          .sales-report-root[data-active="대시보드"] table thead th.bg-yellow-100,
-          .sales-report-root[data-active="매출현황"] table thead th.bg-yellow-100,
-          .sales-report-root[data-active="거래처별 상세"] table thead th.bg-yellow-100,
-          .sales-report-root[data-active="품목분석"] table thead th.bg-yellow-100,
-          .sales-report-root[data-active="대시보드"] table thead th[class*="bg-[#FFF4CC]"],
-          .sales-report-root[data-active="매출현황"] table thead th[class*="bg-[#FFF4CC]"],
-          .sales-report-root[data-active="거래처별 상세"] table thead th[class*="bg-[#FFF4CC]"],
-          .sales-report-root[data-active="품목분석"] table thead th[class*="bg-[#FFF4CC]"] {
-            border-color: #facc15 !important;
-          }
-          .sales-report-root[data-active="대시보드"] table thead th.bg-orange-100,
-          .sales-report-root[data-active="매출현황"] table thead th.bg-orange-100,
-          .sales-report-root[data-active="거래처별 상세"] table thead th.bg-orange-100,
-          .sales-report-root[data-active="품목분석"] table thead th.bg-orange-100,
-          .sales-report-root[data-active="대시보드"] table thead th[class*="bg-[#FCE7D6]"],
-          .sales-report-root[data-active="매출현황"] table thead th[class*="bg-[#FCE7D6]"],
-          .sales-report-root[data-active="거래처별 상세"] table thead th[class*="bg-[#FCE7D6]"],
-          .sales-report-root[data-active="품목분석"] table thead th[class*="bg-[#FCE7D6]"] {
-            border-color: #fb923c !important;
+
+          /* 표 섹션 제목은 색 대신 간격과 타이포그래피로 위계를 만듭니다. */
+          .sales-report-root[data-active="대시보드"] h2,
+          .sales-report-root[data-active="대시보드"] h3,
+          .sales-report-root[data-active="매출현황"] h2,
+          .sales-report-root[data-active="매출현황"] h3,
+          .sales-report-root[data-active="거래처별 상세"] h2,
+          .sales-report-root[data-active="거래처별 상세"] h3,
+          .sales-report-root[data-active="품목분석"] h2,
+          .sales-report-root[data-active="품목분석"] h3 {
+            color: #111827;
+            letter-spacing: -0.01em;
           }
 
           /* 모든 카테고리 공통: 표 내부 스크롤 시 고정 헤더 뒤로 본문이 비치지 않도록 처리 */
@@ -4712,7 +4676,7 @@ export default function SalesReportClient() {
             opacity: 1 !important;
             background-clip: border-box !important;
             isolation: isolate;
-            box-shadow: inset 0 -1px 0 #d1d5db, 0 2px 3px rgba(15, 23, 42, 0.08);
+            box-shadow: inset 0 -1px 0 #e5e7eb, 0 1px 2px rgba(15, 23, 42, 0.04);
           }
           .sales-report-root table thead th::before {
             content: "";
@@ -4730,7 +4694,7 @@ export default function SalesReportClient() {
             bottom: -1px;
             height: 2px;
             z-index: 2;
-            background: #d1d5db;
+            background: #e5e7eb;
             pointer-events: none;
           }
           .sales-report-root table tbody {
@@ -4741,7 +4705,7 @@ export default function SalesReportClient() {
           .sales-report-root table tr.sticky > td {
             opacity: 1 !important;
             background-clip: border-box !important;
-            box-shadow: inset 0 -1px 0 #d1d5db, 0 2px 3px rgba(15, 23, 42, 0.08);
+            box-shadow: inset 0 -1px 0 #e5e7eb, 0 1px 2px rgba(15, 23, 42, 0.04);
           }
           .sales-report-root table tr.sticky > th::before,
           .sales-report-root table tr.sticky > td::before {
@@ -4852,7 +4816,7 @@ export default function SalesReportClient() {
             top: auto !important;
             z-index: 2 !important;
             background: #fff8dc !important;
-            border: 1px solid #facc15 !important;
+            border: 1px solid #e5e7eb !important;
             border-radius: 7px;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
           }
@@ -5309,8 +5273,8 @@ function EstQuickEntry({
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처명</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">담당자</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">채널</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-[#EAF7D7] px-3 py-2 font-bold text-black">전년동월 매출</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-[#DFF3FC] px-3 py-2 font-bold text-black">전월 매출</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">전년동월 매출</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">전월 매출</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">전월 EST</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">전월 EST 달성률</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">{month} EST 입력</th>
@@ -5619,7 +5583,7 @@ function ItemCostStatus({
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목코드</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목명</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-[#DFF3FC] px-3 py-2 font-bold text-black">현재 매입가</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">현재 매입가</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">다음 매입가</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">적용 예정일</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">상태</th>
@@ -6350,34 +6314,34 @@ function Dashboard({
               <th className="sticky top-0 z-10 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">
                 담당자
               </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#EAF7D7] px-3 py-2 font-bold text-black">
+              <th className="sticky top-0 z-10 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">
                 전년동월
               </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#EAF7D7] px-3 py-2 font-bold text-black">
+              <th className="sticky top-0 z-10 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">
                 전년대비
               </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#DFF3FC] px-3 py-2 font-bold text-black">
+              <th className="sticky top-0 z-10 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">
                 전월
               </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#DFF3FC] px-3 py-2 font-bold text-black">
+              <th className="sticky top-0 z-10 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">
                 전월대비
               </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FCE4EF] px-3 py-2 font-bold text-black">
+              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF7FA] px-3 py-2 font-bold text-black">
                 당일까지 매출
               </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FCE4EF] px-3 py-2 font-bold text-black">
+              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF7FA] px-3 py-2 font-bold text-black">
                 당월 전체 매출
               </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF4CC] px-3 py-2 font-bold text-black">
+              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFFDF2] px-3 py-2 font-bold text-black">
                 EST
               </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF4CC] px-3 py-2 font-bold text-black">
+              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFFDF2] px-3 py-2 font-bold text-black">
                 EST 달성률
               </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FCE7D6] px-3 py-2 font-bold text-black">
+              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF9F3] px-3 py-2 font-bold text-black">
                 이익금액
               </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FCE7D6] px-3 py-2 font-bold text-black">
+              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF9F3] px-3 py-2 font-bold text-black">
                 이익률
               </th>
             </tr>
@@ -7198,18 +7162,18 @@ function ItemAnalysis({
               <thead>
                 <tr>
                   <ItemAnalysisSortableTh rowSpan={2} sortKey="brand" sortConfig={brandSortConfig} onSort={requestBrandSort}>브랜드</ItemAnalysisSortableTh>
-                  <PopupTh colSpan={2} className="bg-[#EAF7D7] text-center text-black">전년동월</PopupTh>
-                  <PopupTh colSpan={2} className="bg-[#DFF3FC] text-center text-black">전월</PopupTh>
-                  <PopupTh colSpan={1} className="bg-[#FCE4EF] text-center text-black">당월</PopupTh>
+                  <PopupTh colSpan={2} className="bg-[#F7FCEB] text-center text-black">전년동월</PopupTh>
+                  <PopupTh colSpan={2} className="bg-[#F3FAFD] text-center text-black">전월</PopupTh>
+                  <PopupTh colSpan={1} className="bg-[#FFF7FA] text-center text-black">당월</PopupTh>
                   <ItemAnalysisSortableTh rowSpan={2} sortKey="storeCount" sortConfig={brandSortConfig} onSort={requestBrandSort} right>거래처수</ItemAnalysisSortableTh>
                   <PopupTh rowSpan={2}>상세</PopupTh>
                 </tr>
                 <tr>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#EAF7D7] text-black" sortKey="prevYear" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#EAF7D7] text-black" sortKey="prevYearRate" sortConfig={brandSortConfig} onSort={requestBrandSort} right>당월 대비</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#DFF3FC] text-black" sortKey="prevMonth" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#DFF3FC] text-black" sortKey="prevMonthRate" sortConfig={brandSortConfig} onSort={requestBrandSort} right>당월 대비</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#FCE4EF] text-black" sortKey="current" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F7FCEB] text-black" sortKey="prevYear" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F7FCEB] text-black" sortKey="prevYearRate" sortConfig={brandSortConfig} onSort={requestBrandSort} right>당월 대비</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F3FAFD] text-black" sortKey="prevMonth" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F3FAFD] text-black" sortKey="prevMonthRate" sortConfig={brandSortConfig} onSort={requestBrandSort} right>당월 대비</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#FFF7FA] text-black" sortKey="current" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
                 </tr>
               </thead>
               <tbody>
@@ -7229,7 +7193,7 @@ function ItemAnalysis({
                     <td className="border border-slate-300 p-2">
                       <button
                         onClick={() => setSelectedBrand(r.brand)}
-                        className="rounded-lg border border-[#93C5FD] bg-white px-3 py-1 text-xs font-semibold text-black hover:bg-[#EFF6FF]"
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-black hover:border-blue-300 hover:bg-blue-50"
                       >
                         거래처 보기
                       </button>
@@ -7280,9 +7244,9 @@ function ItemAnalysis({
                       <PopupTh rowSpan={2} className="bg-slate-100 text-center font-bold text-slate-900">상세</PopupTh>
                     </tr>
                     <tr>
-                      <PopupTh top="top-[37px]" className="bg-[#EAF7D7] text-center font-bold text-black">전년동월</PopupTh>
-                      <PopupTh top="top-[37px]" className="bg-[#DFF3FC] text-center font-bold text-black">전월</PopupTh>
-                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#FCE4EF] text-black" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당일까지 매출</ItemAnalysisSortableTh>
+                      <PopupTh top="top-[37px]" className="bg-[#F7FCEB] text-center font-bold text-black">전년동월</PopupTh>
+                      <PopupTh top="top-[37px]" className="bg-[#F3FAFD] text-center font-bold text-black">전월</PopupTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#FFF7FA] text-black" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당일까지 매출</ItemAnalysisSortableTh>
                     </tr>
                   </thead>
                   <tbody>
@@ -7303,7 +7267,7 @@ function ItemAnalysis({
                         <td className="border border-slate-300 px-3 py-2 text-center whitespace-nowrap">
                           <button
                             onClick={() => setSelectedStoreCode(r.store.code)}
-                            className="rounded-lg border border-[#93C5FD] bg-white px-3 py-1 text-xs font-semibold text-black hover:bg-[#EFF6FF]"
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-black hover:border-blue-300 hover:bg-blue-50"
                           >
                             품목 보기
                           </button>
@@ -7327,17 +7291,17 @@ function ItemAnalysis({
                       <ItemAnalysisSortableTh rowSpan={2} sortKey="code" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처코드</ItemAnalysisSortableTh>
                       <ItemAnalysisSortableTh rowSpan={2} sortKey="name" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처명</ItemAnalysisSortableTh>
                       <ItemAnalysisSortableTh rowSpan={2} sortKey="manager" sortConfig={storeSortConfig} onSort={requestStoreSort}>담당자</ItemAnalysisSortableTh>
-                      <PopupTh colSpan={2} className="bg-[#EAF7D7] text-center text-black">전년동월</PopupTh>
-                      <PopupTh colSpan={2} className="bg-[#DFF3FC] text-center text-black">전월</PopupTh>
-                      <PopupTh colSpan={1} className="bg-[#FCE4EF] text-center text-black">당월</PopupTh>
+                      <PopupTh colSpan={2} className="bg-[#F7FCEB] text-center text-black">전년동월</PopupTh>
+                      <PopupTh colSpan={2} className="bg-[#F3FAFD] text-center text-black">전월</PopupTh>
+                      <PopupTh colSpan={1} className="bg-[#FFF7FA] text-center text-black">당월</PopupTh>
                       <PopupTh rowSpan={2}>상세</PopupTh>
                     </tr>
                     <tr>
-                      <PopupTh top="top-[37px]" className="bg-[#EAF7D7] text-right text-black">매출</PopupTh>
-                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#EAF7D7] text-black" sortKey="prevYearRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
-                      <PopupTh top="top-[37px]" className="bg-[#DFF3FC] text-right text-black">매출</PopupTh>
-                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#DFF3FC] text-black" sortKey="prevMonthRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
-                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#FCE4EF] text-black" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>매출</ItemAnalysisSortableTh>
+                      <PopupTh top="top-[37px]" className="bg-[#F7FCEB] text-right text-black">매출</PopupTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F7FCEB] text-black" sortKey="prevYearRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
+                      <PopupTh top="top-[37px]" className="bg-[#F3FAFD] text-right text-black">매출</PopupTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F3FAFD] text-black" sortKey="prevMonthRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#FFF7FA] text-black" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>매출</ItemAnalysisSortableTh>
                     </tr>
                   </thead>
                   <tbody>
@@ -7353,7 +7317,7 @@ function ItemAnalysis({
                         <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevMonth) >= 0 ? "text-emerald-600" : "text-red-600"}`}>{itemSignedPct(itemMetricRate(r.current, r.prevMonth))}</td>
                         <td className="border border-slate-300 p-2 text-right font-bold text-slate-900">{won(r.current)}</td>
                         <td className="border border-slate-300 p-2">
-                          <button onClick={() => setSelectedStoreCode(r.store.code)} className="rounded-lg border border-[#93C5FD] bg-white px-3 py-1 text-xs font-semibold text-black hover:bg-[#EFF6FF]">품목 보기</button>
+                          <button onClick={() => setSelectedStoreCode(r.store.code)} className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-black hover:border-blue-300 hover:bg-blue-50">품목 보기</button>
                         </td>
                       </tr>
                     ))}
@@ -8059,21 +8023,21 @@ function ItemShipmentAnalysis({
                       </select>
                     </div>
                   </th>
-                  <th colSpan={4} className="border border-slate-300 bg-[#DFF3FC] px-3 py-1 text-[15px] font-extrabold text-black">전월</th>
-                  <th colSpan={4} className="border border-slate-300 bg-[#FCE4EF] px-3 py-1 text-[15px] font-extrabold text-black">당월</th>
-                  <th rowSpan={2} className="border border-slate-300 bg-[#FCE7D6] px-1 py-2 font-bold text-black">이익률변동</th>
+                  <th colSpan={4} className="border border-slate-300 bg-[#F3FAFD] px-3 py-1 text-[15px] font-extrabold text-black">전월</th>
+                  <th colSpan={4} className="border border-slate-300 bg-[#FFF7FA] px-3 py-1 text-[15px] font-extrabold text-black">당월</th>
+                  <th rowSpan={2} className="border border-slate-300 bg-[#FFF9F3] px-1 py-2 font-bold text-black">이익률변동</th>
                   <th rowSpan={2} className="border border-slate-300 bg-white px-1 py-2 font-bold text-black">사용 거래처 수</th>
                   <th rowSpan={2} className="border border-slate-300 bg-white px-2 py-2 font-bold text-black">상세</th>
                 </tr>
                 <tr>
-                  <th className="border border-slate-300 bg-[#DFF3FC] px-2 py-2 font-bold text-black">매출</th>
-                  <th className="border border-slate-300 bg-[#DFF3FC] px-2 py-2 font-bold text-black">매입단가</th>
-                  <th className="border border-slate-300 bg-[#DFF3FC] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
-                  <th className="border border-slate-300 bg-[#DFF3FC] px-1 py-2 font-bold text-black">이익률</th>
-                  <th className="border border-slate-300 bg-[#FCE4EF] px-2 py-2 font-bold text-black">매출</th>
-                  <th className="border border-slate-300 bg-[#FCE4EF] px-2 py-2 font-bold text-black">매입단가</th>
-                  <th className="border border-slate-300 bg-[#FCE4EF] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
-                  <th className="border border-slate-300 bg-[#FCE4EF] px-1 py-1 font-bold text-black">
+                  <th className="border border-slate-300 bg-[#F3FAFD] px-2 py-2 font-bold text-black">매출</th>
+                  <th className="border border-slate-300 bg-[#F3FAFD] px-2 py-2 font-bold text-black">매입단가</th>
+                  <th className="border border-slate-300 bg-[#F3FAFD] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
+                  <th className="border border-slate-300 bg-[#F3FAFD] px-1 py-2 font-bold text-black">이익률</th>
+                  <th className="border border-slate-300 bg-[#FFF7FA] px-2 py-2 font-bold text-black">매출</th>
+                  <th className="border border-slate-300 bg-[#FFF7FA] px-2 py-2 font-bold text-black">매입단가</th>
+                  <th className="border border-slate-300 bg-[#FFF7FA] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
+                  <th className="border border-slate-300 bg-[#FFF7FA] px-1 py-1 font-bold text-black">
                     <div className="flex w-full flex-col items-center gap-1">
                       <span>이익률</span>
                       <select
@@ -8151,7 +8115,7 @@ function ItemShipmentAnalysis({
                     <td className="border border-slate-300 p-2">
                       <button
                         onClick={() => setSelectedItemCode(r.itemCode)}
-                        className="rounded-lg border border-[#93C5FD] bg-white px-3 py-1 text-xs font-semibold text-black hover:bg-[#EFF6FF]"
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-black hover:border-blue-300 hover:bg-blue-50"
                       >
                         거래처 보기
                       </button>
@@ -10400,22 +10364,22 @@ function ThCompact({
 }) {
   const toneClass =
     tone === "mint"
-      ? "border-[#A3E635] bg-[#EAF7D7] text-black"
+      ? "border-[#E5E7EB] bg-[#F7FCEB] text-black"
       : tone === "blue"
-        ? "border-[#38BDF8] bg-[#DFF3FC] text-black"
+        ? "border-[#E5E7EB] bg-[#F3FAFD] text-black"
         : tone === "pink"
-          ? "border-[#F472B6] bg-[#FCE4EF] text-black"
+          ? "border-[#E5E7EB] bg-[#FFF7FA] text-black"
           : tone === "yellow"
-            ? "border-[#FACC15] bg-[#FFF4CC] text-black"
+            ? "border-[#E5E7EB] bg-[#FFFDF2] text-black"
             : tone === "orange"
-              ? "border-[#FB923C] bg-[#FCE7D6] text-black"
-              : "border-[#BFDBFE] bg-white text-black";
+              ? "border-[#E5E7EB] bg-[#FFF9F3] text-black"
+              : "border-[#E5E7EB] bg-white text-black";
 
   return (
     <th
       rowSpan={rowSpan}
       colSpan={colSpan}
-      className={`sticky ${top} z-50 border px-0.5 py-1.5 align-middle text-center text-[14px] font-bold leading-tight whitespace-nowrap break-keep shadow-sm bg-clip-padding ${toneClass} ${w}`}
+      className={`sticky ${top} z-50 border px-0.5 py-1.5 align-middle text-center text-[14px] font-bold leading-tight whitespace-nowrap break-keep bg-clip-padding ${toneClass} ${w}`}
     >
       {children}
     </th>
@@ -12962,15 +12926,15 @@ function Th({
 }) {
   const toneClass =
     tone === "mint"
-      ? "border-[#A3E635] bg-[#EAF7D7] text-black"
+      ? "border-[#E5E7EB] bg-[#F7FCEB] text-black"
       : tone === "blue"
-        ? "border-[#38BDF8] bg-[#DFF3FC] text-black"
+        ? "border-[#E5E7EB] bg-[#F3FAFD] text-black"
         : tone === "pink"
-          ? "border-[#F472B6] bg-[#FCE4EF] text-black"
+          ? "border-[#E5E7EB] bg-[#FFF7FA] text-black"
           : tone === "yellow"
-            ? "border-[#FACC15] bg-[#FFF4CC] text-black"
+            ? "border-[#E5E7EB] bg-[#FFFDF2] text-black"
             : tone === "orange"
-              ? "border-[#FB923C] bg-[#FCE7D6] text-black"
+              ? "border-[#E5E7EB] bg-[#FFF9F3] text-black"
               : "border-slate-300 bg-white text-black";
 
   return (
