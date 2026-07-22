@@ -4769,9 +4769,19 @@ export default function SalesReportClient() {
             border-top-width: 0 !important;
             box-shadow: none !important;
           }
-          .sales-report-root .item-profit-pivot thead tr:nth-child(3) th {
+          .sales-report-root .item-profit-pivot thead tr:nth-child(3) {
+            position: sticky !important;
             top: 78px !important;
-            z-index: 85 !important;
+            z-index: 88 !important;
+            height: 34px;
+            min-height: 34px;
+            background: #fefce8 !important;
+            transform: translateZ(0);
+          }
+          .sales-report-root .item-profit-pivot thead tr:nth-child(3) th {
+            position: sticky !important;
+            top: 78px !important;
+            z-index: 89 !important;
             height: 34px;
             min-height: 34px;
             background: #fefce8 !important;
@@ -4782,6 +4792,7 @@ export default function SalesReportClient() {
             border-top: 1px solid #94a3b8 !important;
             border-bottom: 1px solid #94a3b8 !important;
             box-shadow: 0 2px 4px rgba(15, 23, 42, 0.12) !important;
+            transform: translateZ(0);
           }
           .sales-report-root .item-profit-pivot thead tr:nth-child(1) th::after,
           .sales-report-root .item-profit-pivot thead tr:nth-child(2) th::after {
