@@ -8,7 +8,7 @@ type Manager = string;
 type StoreType = string;
 type PeriodType = "current" | "prevMonth" | "prevYear";
 type SalesView = "거래처별" | "브랜드별" | "담당자별" | "채널별";
-type MonthStartTab = "거래처 리스트 관리" | "업로드 관리";
+type MonthStartTab = "거래처 리스트 관리" | "업로드 관리" | "이익금액 검증표";
 type DrillPeriod = "prevYear" | "prevMonth" | "current" | "currentFullMonth";
 type SalesStatusSortKey =
   | "label"
@@ -149,6 +149,7 @@ const SALES_VIEWS: SalesView[] = ["거래처별", "브랜드별", "담당자별"
 const MONTH_TABS: MonthStartTab[] = [
   "거래처 리스트 관리",
   "업로드 관리",
+  "이익금액 검증표",
 ];
 
 const initialStores: Store[] = [
@@ -10572,6 +10573,9 @@ function MonthStartManagement({
           setItemMasters={setItemMasters}
         />
       )}
+      {tab === "이익금액 검증표" && (
+        <ProfitValidationPanel sales={sales} month={month} date={date} />
+      )}
     </div>
   );
 }
@@ -12309,7 +12313,7 @@ function UploadPage({
             {salesActions.storageMode === "v3" ? "안전 저장 V3" : salesActions.storageMode === "checking" ? "저장소 확인 중" : "기존 저장 방식"}
           </span>
         </div>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <UploadBox
             title="당월 매출 업로드"
             description="같은 날짜 파일을 다시 올리면 해당 날짜 기존 당월 매출을 삭제하고 새 파일로 업데이트합니다."
@@ -12333,7 +12337,6 @@ function UploadPage({
         </div>
       </div>
 
-      <ProfitValidationPanel sales={sales} month={month} date={date} />
 
       <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-5 shadow-sm backdrop-blur">
         <h2 className="mb-3 text-lg font-bold">당월 특정 날짜 삭제</h2>
@@ -12534,10 +12537,10 @@ function UploadBox({
   onUpload: (file: File | null) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-gray-300 bg-slate-50/70 p-4">
-      <h3 className="font-bold text-slate-900">{title}</h3>
-      <p className="mt-2 min-h-[44px] text-sm text-slate-500">{description}</p>
-      <label className="mt-4 inline-block cursor-pointer rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
+    <div className="flex min-h-[116px] flex-col rounded-xl border border-gray-300 bg-slate-50/70 p-3">
+      <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+      <p className="mt-1 line-clamp-2 flex-1 text-xs leading-5 text-slate-500">{description}</p>
+      <label className="mt-2 inline-flex w-full cursor-pointer items-center justify-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
         엑셀 업로드
         <input
           type="file"
