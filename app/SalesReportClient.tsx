@@ -4716,14 +4716,17 @@ export default function SalesReportClient() {
             background: inherit;
             pointer-events: none;
           }
-          /* 매출현황 2단 헤더: 상단·하단 사이의 선, 그림자, 틈을 완전히 제거 */
+          /* 매출현황 2단 헤더: 품목분석과 동일하게 상단 그룹과 하단 세부 헤더 사이 구분선 표시 */
           .sales-report-root .sales-status-table thead tr:first-child th {
             height: 31px;
             min-height: 31px;
             padding-top: 0 !important;
             padding-bottom: 0 !important;
-            border-bottom-width: 0 !important;
             box-shadow: none !important;
+          }
+          .sales-report-root .sales-status-table thead tr:first-child th:not([rowspan]) {
+            border-bottom: 1px solid #d7dee7 !important;
+            box-shadow: inset 0 -1px 0 #d7dee7 !important;
           }
           .sales-report-root .sales-status-table thead tr:first-child th::after {
             display: none !important;
@@ -4740,13 +4743,16 @@ export default function SalesReportClient() {
             bottom: -1px;
           }
 
-          /* 거래처별 상세·품목분석 2단 헤더: 상단/하단 사이 틈과 테두리 제거 */
+          /* 거래처별 상세 2단 헤더: 품목분석과 동일하게 상단 그룹과 하단 세부 헤더 사이 구분선 표시 */
           .sales-report-root .connected-two-tier thead tr:first-child th {
             height: 37px;
             min-height: 37px;
-            border-bottom-width: 0 !important;
             box-shadow: none !important;
             text-align: center !important;
+          }
+          .sales-report-root .connected-two-tier thead tr:first-child th:not([rowspan]) {
+            border-bottom: 1px solid #d7dee7 !important;
+            box-shadow: inset 0 -1px 0 #d7dee7 !important;
           }
           .sales-report-root .connected-two-tier thead tr:first-child th::after {
             display: none !important;
