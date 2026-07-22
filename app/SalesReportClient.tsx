@@ -4734,16 +4734,39 @@ export default function SalesReportClient() {
             z-index: 30;
             background: #fff;
           }
+          .sales-report-root .item-profit-fixed-header thead tr:first-child {
+            height: 34px;
+          }
+          .sales-report-root .item-profit-fixed-header thead tr:nth-child(2) {
+            height: 44px;
+          }
+          .sales-report-root .item-profit-fixed-header thead tr:nth-child(3) {
+            height: 34px;
+          }
           .sales-report-root .item-profit-fixed-header thead,
-          .sales-report-root .item-profit-fixed-header thead tr,
-          .sales-report-root .item-profit-fixed-header thead th {
+          .sales-report-root .item-profit-fixed-header thead tr {
             position: static !important;
             top: auto !important;
           }
-          .sales-report-root .item-profit-fixed-header .item-profit-subtotal th {
-            position: static !important;
+          .sales-report-root .item-profit-fixed-header thead th {
+            position: relative !important;
             top: auto !important;
-            z-index: auto !important;
+            z-index: 1 !important;
+            overflow: hidden;
+            background-clip: border-box !important;
+          }
+          /* 공통 sticky 헤더용 가상 배경이 분리형 헤더 전체를 덮지 않도록 차단 */
+          .sales-report-root .item-profit-fixed-header thead th::before,
+          .sales-report-root .item-profit-fixed-header thead th::after,
+          .sales-report-root .item-profit-fixed-header .item-profit-subtotal th::before,
+          .sales-report-root .item-profit-fixed-header .item-profit-subtotal th::after {
+            display: none !important;
+            content: none !important;
+          }
+          .sales-report-root .item-profit-fixed-header .item-profit-subtotal th {
+            position: relative !important;
+            top: auto !important;
+            z-index: 2 !important;
             background: #fefce8 !important;
             box-shadow: inset 0 -1px 0 #94a3b8;
           }
@@ -4754,96 +4777,6 @@ export default function SalesReportClient() {
             font-size: 12px;
           }
 
-          /* 품목분석 손익요약: 1단·2단 헤더와 SUBTOTAL 전체를 한 묶음으로 고정 */
-          .sales-report-root .item-profit-pivot {
-            table-layout: fixed;
-            font-size: 12px;
-          }
-          .sales-report-root .item-profit-pivot thead {
-            position: relative !important;
-            z-index: 90 !important;
-            background: #fff;
-          }
-          .sales-report-root .item-profit-pivot thead tr {
-            position: relative !important;
-          }
-          .sales-report-root .item-profit-pivot thead th {
-            position: sticky !important;
-            background-clip: border-box !important;
-            opacity: 1 !important;
-          }
-          .sales-report-root .item-profit-pivot thead tr:nth-child(1) th {
-            top: 0 !important;
-            z-index: 82 !important;
-            height: 34px;
-            min-height: 34px;
-            padding-top: 4px !important;
-            padding-bottom: 4px !important;
-            border-bottom-width: 0 !important;
-            box-shadow: none !important;
-          }
-          .sales-report-root .item-profit-pivot thead tr:nth-child(1) th[rowspan="2"] {
-            top: 0 !important;
-            z-index: 84 !important;
-            height: 78px;
-            min-height: 78px;
-            vertical-align: middle;
-            border-bottom-width: 1px !important;
-          }
-          .sales-report-root .item-profit-pivot thead tr:nth-child(2) th {
-            top: 34px !important;
-            z-index: 83 !important;
-            height: 44px;
-            min-height: 44px;
-            padding-top: 3px !important;
-            padding-bottom: 3px !important;
-            border-top-width: 0 !important;
-            box-shadow: none !important;
-          }
-          .sales-report-root .item-profit-pivot thead tr:nth-child(3) {
-            position: sticky !important;
-            top: 78px !important;
-            z-index: 88 !important;
-            height: 34px;
-            min-height: 34px;
-            background: #fefce8 !important;
-            transform: translateZ(0);
-          }
-          .sales-report-root .item-profit-pivot thead tr:nth-child(3) th {
-            position: sticky !important;
-            top: 78px !important;
-            z-index: 89 !important;
-            height: 34px;
-            min-height: 34px;
-            background: #fefce8 !important;
-            background-clip: border-box !important;
-            opacity: 1 !important;
-            padding-top: 5px !important;
-            padding-bottom: 5px !important;
-            border-top: 1px solid #94a3b8 !important;
-            border-bottom: 1px solid #94a3b8 !important;
-            box-shadow: 0 2px 4px rgba(15, 23, 42, 0.12) !important;
-            transform: translateZ(0);
-          }
-          .sales-report-root .item-profit-pivot thead tr:nth-child(1) th::after,
-          .sales-report-root .item-profit-pivot thead tr:nth-child(2) th::after {
-            display: none !important;
-          }
-          .sales-report-root .item-profit-pivot thead select {
-            height: 26px;
-            min-height: 26px;
-            font-size: 12px;
-            line-height: 1;
-          }
-          .sales-report-root .item-profit-pivot .item-name-cell {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            font-size: 13px;
-          }
-          .sales-report-root .item-profit-pivot .sales-value-cell {
-            font-size: 15px;
-          }
         `}</style>
         <div
           className={
