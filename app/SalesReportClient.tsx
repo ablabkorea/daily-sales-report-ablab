@@ -10623,9 +10623,14 @@ function StoreListManagement({
   const [bulkChannel2, setBulkChannel2] = useState<"" | "매장" | "비매장">("");
   const [newManager, setNewManager] = useState("");
   const [newChannel1, setNewChannel1] = useState("");
+  const [showNewOnly, setShowNewOnly] = useState(false);
   const [savedManagers, setSavedManagers] = useLocal<string[]>(
     "month-start-manager-options-v1",
     ["SY", "KT", "SW", "NH", "BOMI", "BM"],
+  );
+  const [deletedManagers, setDeletedManagers] = useLocal<string[]>(
+    "month-start-deleted-manager-options-v1",
+    [],
   );
   const [savedChannel1Options, setSavedChannel1Options] = useLocal<string[]>(
     "month-start-channel1-options-v1",
@@ -10637,6 +10642,7 @@ function StoreListManagement({
     setListTab(section === "list" ? "기존거래처 리스트" : "기타 관리");
     setSearch("");
     setSelectedCodes(new Set());
+    setShowNewOnly(false);
   }, [section]);
 
   type SalesStoreSummary = {
@@ -10868,13 +10874,32 @@ function StoreListManagement({
       .toLowerCase()
       .includes(normalizedSearch),
   );
-  const visibleOtherRows = visibleTotalRows;
+  const newStoreCodes = new Set(
+    existingRows
+      .filter((row) => row.statusLabel === "당월 신규")
+      .map((row) => row.code),
+  );
+  const needsReferenceSetup = (row: Store) => {
+    if (otherTab === "브랜드 관리") {
+      const brand = displayBrand(row.brand).trim();
+      return newStoreCodes.has(row.code) || !brand || brand === "당월 신규 거래처" || brand === "미지정";
+    }
+    if (otherTab === "채널 관리") {
+      const channel = row.channel.trim();
+      return newStoreCodes.has(row.code) || !channel || channel === "미지정";
+    }
+    return newStoreCodes.has(row.code) || !row.manager.trim();
+  };
+  const visibleOtherRows = showNewOnly && otherTab !== "담당자 관리"
+    ? visibleTotalRows.filter(needsReferenceSetup)
+    : visibleTotalRows;
   const normalizeManager = (value: string) => value.trim().toUpperCase();
+  const deletedManagerSet = new Set(deletedManagers.map(normalizeManager));
   const managerOptions = Array.from(
     new Set(
       [...savedManagers, ...MANAGERS, ...totalRows.map((row) => row.manager)]
         .map(normalizeManager)
-        .filter(Boolean),
+        .filter((value) => Boolean(value) && !deletedManagerSet.has(value)),
     ),
   ).sort((a, b) => a.localeCompare(b, "ko-KR"));
   const channel1Options = Array.from(
@@ -10947,8 +10972,26 @@ function StoreListManagement({
       return alert("같은 철자의 담당자가 이미 있어 기존 담당자로 선택했습니다.");
     }
     setSavedManagers([...savedManagers, value]);
+    setDeletedManagers(deletedManagers.filter((item) => normalizeManager(item) !== value));
     setBulkManager(value);
     setNewManager("");
+  }
+
+  function deleteManager() {
+    const value = normalizeManager(bulkManager);
+    if (!value) return alert("삭제할 담당자를 먼저 선택해주세요.");
+    const assignedCount = totalRows.filter((row) => normalizeManager(row.manager) === value).length;
+    const assignedMessage = assignedCount
+      ? `\n현재 ${assignedCount.toLocaleString("ko-KR")}개 거래처에 지정되어 있습니다. 삭제하면 해당 거래처의 담당자는 미지정으로 변경됩니다.`
+      : "";
+    if (!window.confirm(`담당자 '${value}'를 삭제할까요?${assignedMessage}`)) return;
+    setSavedManagers(savedManagers.filter((item) => normalizeManager(item) !== value));
+    if (!deletedManagerSet.has(value)) setDeletedManagers([...deletedManagers, value]);
+    if (assignedCount) {
+      setStores(totalRows.map((row) => normalizeManager(row.manager) === value ? { ...row, manager: "" } : row));
+    }
+    setBulkManager("");
+    setSelectedCodes(new Set());
   }
 
   function addChannel1Option() {
@@ -11005,6 +11048,7 @@ function StoreListManagement({
                     setListTab("기타 관리");
                     setOtherTab(menu as typeof otherTab);
                     setSelectedCodes(new Set());
+                    setShowNewOnly(false);
                   }
                 }}
                 className={`w-full rounded-lg border-l-4 px-3 py-2 text-left text-xs font-bold transition ${active ? "border-blue-600 bg-blue-50 text-blue-800" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
@@ -11019,12 +11063,7 @@ function StoreListManagement({
       <main className="min-w-0 space-y-3">
         <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-extrabold text-slate-900">{section === "list" ? listTab : otherTab}</h2>
-              <p className="mt-0.5 text-[11px] text-slate-500">
-                {section === "list" ? "전월·당월·전년동월 거래처를 비교하고 최종 거래처 기준을 관리합니다." : "총 거래처 리스트를 기준으로 선택 항목을 일괄 수정합니다."}
-              </p>
-            </div>
+            <h2 className="text-sm font-extrabold text-slate-900">{section === "list" ? listTab : otherTab}</h2>
             <div className="flex flex-wrap items-center gap-2">
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={section === "reference" ? "거래처명/담당자/브랜드/채널 검색" : "사업자번호/거래처명/상태 검색"} className="h-8 w-[270px] rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-blue-500" />
               {section === "list" && listTab === "총 거래처 리스트" && (
@@ -11039,10 +11078,23 @@ function StoreListManagement({
                 <span className="mr-1 text-[11px] font-semibold text-slate-600">선택 {selectedCodes.size.toLocaleString("ko-KR")}건 / 검색결과 {visibleOtherRows.length.toLocaleString("ko-KR")}건</span>
                 <button type="button" onClick={toggleVisibleSelection} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100">{allVisibleSelected ? "검색결과 선택 해제" : "검색결과 전체 선택"}</button>
                 <button type="button" onClick={() => setSelectedCodes(new Set())} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100">선택 초기화</button>
+                {otherTab !== "담당자 관리" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewOnly((previous) => !previous);
+                      setSelectedCodes(new Set());
+                    }}
+                    className={`h-8 rounded-lg border px-3 text-xs font-bold ${showNewOnly ? "border-orange-400 bg-orange-50 text-orange-800" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}
+                  >
+                    {showNewOnly ? "전체 거래처 보기" : "신규·미설정 거래처 보기"}
+                  </button>
+                )}
                 {otherTab === "담당자 관리" && (
                   <>
                     <select value={bulkManager} onChange={(event) => setBulkManager(event.target.value)} className="h-8 min-w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold"><option value="">변경 담당자 선택</option>{managerOptions.map((manager) => <option key={manager} value={manager}>{manager}</option>)}</select>
                     <button type="button" onClick={() => applyBulkChange("manager")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">담당자 일괄 수정</button>
+                    <button type="button" onClick={deleteManager} className="h-8 rounded-lg border border-red-300 bg-red-50 px-3 text-xs font-bold text-red-700 hover:bg-red-100">담당자 삭제</button>
                     <span className="mx-1 h-5 w-px bg-slate-300" />
                     <input value={newManager} onChange={(event) => setNewManager(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addManager(); }} placeholder="신규 담당자" className="h-8 w-[130px] rounded-lg border border-slate-300 bg-white px-2 text-xs" />
                     <button type="button" onClick={addManager} className="h-8 rounded-lg border border-blue-300 bg-blue-50 px-3 text-xs font-bold text-blue-700">담당자 추가</button>
@@ -11075,7 +11127,6 @@ function StoreListManagement({
                   </>
                 )}
               </div>
-              <p className="mt-1.5 text-[11px] text-slate-500">담당자명은 대소문자를 구분하지 않고 같은 철자는 하나로 통합해 대문자로 표시합니다.</p>
             </>
           )}
         </div>
