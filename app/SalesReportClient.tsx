@@ -4564,6 +4564,7 @@ export default function SalesReportClient() {
   return (
     <main
       className="sales-report-root h-screen overflow-hidden bg-white text-black"
+      data-active={active}
       style={{ fontFamily: '"Malgun Gothic", "맑은 고딕", sans-serif' }}
     >
       <header className="sticky top-0 z-40 border-b border-gray-200 bg-white shadow-sm">
@@ -4622,6 +4623,70 @@ export default function SalesReportClient() {
           .sales-report-root .metric-black { color: #000 !important; }
           .sales-report-root table th,
           .sales-report-root table td { border-color: #e5e7eb !important; }
+
+          /* 대시보드·매출현황·거래처별 상세·품목분석 표 헤더 공통 디자인
+             파스텔 배경과 같은 계열의 선명한 테두리를 사용해 상단 KPI 카드와 통일합니다. */
+          .sales-report-root[data-active="대시보드"] table thead th,
+          .sales-report-root[data-active="매출현황"] table thead th,
+          .sales-report-root[data-active="거래처별 상세"] table thead th,
+          .sales-report-root[data-active="품목분석"] table thead th {
+            border-width: 1px !important;
+            border-style: solid !important;
+            border-color: #bfdbfe !important;
+            border-radius: 7px;
+            color: #111827 !important;
+            background-clip: padding-box !important;
+          }
+          .sales-report-root[data-active="대시보드"] table thead th.bg-lime-100,
+          .sales-report-root[data-active="매출현황"] table thead th.bg-lime-100,
+          .sales-report-root[data-active="거래처별 상세"] table thead th.bg-lime-100,
+          .sales-report-root[data-active="품목분석"] table thead th.bg-lime-100,
+          .sales-report-root[data-active="대시보드"] table thead th[class*="bg-[#EAF7D7]"],
+          .sales-report-root[data-active="매출현황"] table thead th[class*="bg-[#EAF7D7]"],
+          .sales-report-root[data-active="거래처별 상세"] table thead th[class*="bg-[#EAF7D7]"],
+          .sales-report-root[data-active="품목분석"] table thead th[class*="bg-[#EAF7D7]"] {
+            border-color: #a3e635 !important;
+          }
+          .sales-report-root[data-active="대시보드"] table thead th.bg-sky-100,
+          .sales-report-root[data-active="매출현황"] table thead th.bg-sky-100,
+          .sales-report-root[data-active="거래처별 상세"] table thead th.bg-sky-100,
+          .sales-report-root[data-active="품목분석"] table thead th.bg-sky-100,
+          .sales-report-root[data-active="대시보드"] table thead th[class*="bg-[#DFF3FC]"],
+          .sales-report-root[data-active="매출현황"] table thead th[class*="bg-[#DFF3FC]"],
+          .sales-report-root[data-active="거래처별 상세"] table thead th[class*="bg-[#DFF3FC]"],
+          .sales-report-root[data-active="품목분석"] table thead th[class*="bg-[#DFF3FC]"] {
+            border-color: #38bdf8 !important;
+          }
+          .sales-report-root[data-active="대시보드"] table thead th.bg-pink-100,
+          .sales-report-root[data-active="매출현황"] table thead th.bg-pink-100,
+          .sales-report-root[data-active="거래처별 상세"] table thead th.bg-pink-100,
+          .sales-report-root[data-active="품목분석"] table thead th.bg-pink-100,
+          .sales-report-root[data-active="대시보드"] table thead th[class*="bg-[#FCE4EF]"],
+          .sales-report-root[data-active="매출현황"] table thead th[class*="bg-[#FCE4EF]"],
+          .sales-report-root[data-active="거래처별 상세"] table thead th[class*="bg-[#FCE4EF]"],
+          .sales-report-root[data-active="품목분석"] table thead th[class*="bg-[#FCE4EF]"] {
+            border-color: #f472b6 !important;
+          }
+          .sales-report-root[data-active="대시보드"] table thead th.bg-yellow-100,
+          .sales-report-root[data-active="매출현황"] table thead th.bg-yellow-100,
+          .sales-report-root[data-active="거래처별 상세"] table thead th.bg-yellow-100,
+          .sales-report-root[data-active="품목분석"] table thead th.bg-yellow-100,
+          .sales-report-root[data-active="대시보드"] table thead th[class*="bg-[#FFF4CC]"],
+          .sales-report-root[data-active="매출현황"] table thead th[class*="bg-[#FFF4CC]"],
+          .sales-report-root[data-active="거래처별 상세"] table thead th[class*="bg-[#FFF4CC]"],
+          .sales-report-root[data-active="품목분석"] table thead th[class*="bg-[#FFF4CC]"] {
+            border-color: #facc15 !important;
+          }
+          .sales-report-root[data-active="대시보드"] table thead th.bg-orange-100,
+          .sales-report-root[data-active="매출현황"] table thead th.bg-orange-100,
+          .sales-report-root[data-active="거래처별 상세"] table thead th.bg-orange-100,
+          .sales-report-root[data-active="품목분석"] table thead th.bg-orange-100,
+          .sales-report-root[data-active="대시보드"] table thead th[class*="bg-[#FCE7D6]"],
+          .sales-report-root[data-active="매출현황"] table thead th[class*="bg-[#FCE7D6]"],
+          .sales-report-root[data-active="거래처별 상세"] table thead th[class*="bg-[#FCE7D6]"],
+          .sales-report-root[data-active="품목분석"] table thead th[class*="bg-[#FCE7D6]"] {
+            border-color: #fb923c !important;
+          }
 
           /* 모든 카테고리 공통: 표 내부 스크롤 시 고정 헤더 뒤로 본문이 비치지 않도록 처리 */
           .sales-report-root .overflow-auto:has(table) {
@@ -4702,7 +4767,7 @@ export default function SalesReportClient() {
           .sales-report-root .sales-status-table thead tr:nth-child(2) th {
             top: 31px !important;
             border-top-width: 0 !important;
-            box-shadow: inset 0 -1px 0 #d1d5db, 0 2px 3px rgba(15, 23, 42, 0.08) !important;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
           }
           .sales-report-root .sales-status-table thead tr:nth-child(2) th::before {
             top: -1px;
@@ -4726,7 +4791,7 @@ export default function SalesReportClient() {
             top: 37px !important;
             border-top-width: 0 !important;
             text-align: center !important;
-            box-shadow: inset 0 -1px 0 #d1d5db, 0 2px 3px rgba(15, 23, 42, 0.08) !important;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
           }
           .sales-report-root .connected-two-tier thead tr:nth-child(2) th::before {
             top: -1px;
@@ -4787,9 +4852,9 @@ export default function SalesReportClient() {
             top: auto !important;
             z-index: 2 !important;
             background: #fff8dc !important;
-            border-top: 2px solid #94a3b8 !important;
-            border-bottom: 1px solid #cbd5e1 !important;
-            box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.45);
+            border: 1px solid #facc15 !important;
+            border-radius: 7px;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
           }
           .sales-report-root .item-profit-fixed-header .item-profit-subtotal .subtotal-label {
             padding-left: 16px !important;
@@ -10335,16 +10400,16 @@ function ThCompact({
 }) {
   const toneClass =
     tone === "mint"
-      ? "border-lime-300 bg-lime-100 text-black"
+      ? "border-[#A3E635] bg-[#EAF7D7] text-black"
       : tone === "blue"
-        ? "border-sky-300 bg-sky-100 text-black"
+        ? "border-[#38BDF8] bg-[#DFF3FC] text-black"
         : tone === "pink"
-          ? "border-pink-300 bg-pink-100 text-black"
+          ? "border-[#F472B6] bg-[#FCE4EF] text-black"
           : tone === "yellow"
-            ? "border-yellow-300 bg-yellow-100 text-black"
+            ? "border-[#FACC15] bg-[#FFF4CC] text-black"
             : tone === "orange"
-              ? "border-orange-300 bg-orange-100 text-black"
-              : "border-slate-300 bg-white text-black";
+              ? "border-[#FB923C] bg-[#FCE7D6] text-black"
+              : "border-[#BFDBFE] bg-white text-black";
 
   return (
     <th
@@ -12897,15 +12962,15 @@ function Th({
 }) {
   const toneClass =
     tone === "mint"
-      ? "border-lime-300 bg-lime-100 text-black"
+      ? "border-[#A3E635] bg-[#EAF7D7] text-black"
       : tone === "blue"
-        ? "border-sky-300 bg-sky-100 text-black"
+        ? "border-[#38BDF8] bg-[#DFF3FC] text-black"
         : tone === "pink"
-          ? "border-pink-300 bg-pink-100 text-black"
+          ? "border-[#F472B6] bg-[#FCE4EF] text-black"
           : tone === "yellow"
-            ? "border-yellow-300 bg-yellow-100 text-black"
+            ? "border-[#FACC15] bg-[#FFF4CC] text-black"
             : tone === "orange"
-              ? "border-orange-300 bg-orange-100 text-black"
+              ? "border-[#FB923C] bg-[#FCE7D6] text-black"
               : "border-slate-300 bg-white text-black";
 
   return (
