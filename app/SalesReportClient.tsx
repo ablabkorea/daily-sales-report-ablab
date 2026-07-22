@@ -4765,6 +4765,13 @@ export default function SalesReportClient() {
             text-align: center !important;
             justify-content: center !important;
           }
+          /* 2단 헤더 기간 그룹 구분선: sticky 위치는 유지하고 그룹 경계만 또렷하게 표시 */
+          .sales-report-root .period-group-start {
+            border-left: 2px solid #cbd5e1 !important;
+          }
+          .sales-report-root .period-subgroup-start {
+            border-left: 2px solid #d7dee8 !important;
+          }
           /* 품목분석 손익요약: 헤더·SUBTOTAL과 본문 스크롤 영역을 완전히 분리 */
           .sales-report-root .item-profit-fixed-header,
           .sales-report-root .item-profit-fixed-body {
@@ -7162,18 +7169,18 @@ function ItemAnalysis({
               <thead>
                 <tr>
                   <ItemAnalysisSortableTh rowSpan={2} sortKey="brand" sortConfig={brandSortConfig} onSort={requestBrandSort}>브랜드</ItemAnalysisSortableTh>
-                  <PopupTh colSpan={2} className="bg-[#F7FCEB] text-center text-black">전년동월</PopupTh>
-                  <PopupTh colSpan={2} className="bg-[#F3FAFD] text-center text-black">전월</PopupTh>
-                  <PopupTh colSpan={1} className="bg-[#FFF7FA] text-center text-black">당월</PopupTh>
+                  <PopupTh colSpan={2} className="period-group-start bg-[#F7FCEB] text-center text-black">전년동월</PopupTh>
+                  <PopupTh colSpan={2} className="period-group-start bg-[#F3FAFD] text-center text-black">전월</PopupTh>
+                  <PopupTh colSpan={1} className="period-group-start bg-[#FFF7FA] text-center text-black">당월</PopupTh>
                   <ItemAnalysisSortableTh rowSpan={2} sortKey="storeCount" sortConfig={brandSortConfig} onSort={requestBrandSort} right>거래처수</ItemAnalysisSortableTh>
                   <PopupTh rowSpan={2}>상세</PopupTh>
                 </tr>
                 <tr>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F7FCEB] text-black" sortKey="prevYear" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="period-group-start bg-[#F7FCEB] text-black" sortKey="prevYear" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
                   <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F7FCEB] text-black" sortKey="prevYearRate" sortConfig={brandSortConfig} onSort={requestBrandSort} right>당월 대비</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F3FAFD] text-black" sortKey="prevMonth" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="period-group-start bg-[#F3FAFD] text-black" sortKey="prevMonth" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
                   <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F3FAFD] text-black" sortKey="prevMonthRate" sortConfig={brandSortConfig} onSort={requestBrandSort} right>당월 대비</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#FFF7FA] text-black" sortKey="current" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="period-group-start bg-[#FFF7FA] text-black" sortKey="current" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
                 </tr>
               </thead>
               <tbody>
@@ -7240,13 +7247,13 @@ function ItemAnalysis({
                       <ItemAnalysisSortableTh rowSpan={2} sortKey="name" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처명</ItemAnalysisSortableTh>
                       <ItemAnalysisSortableTh rowSpan={2} sortKey="manager" sortConfig={storeSortConfig} onSort={requestStoreSort}>담당자</ItemAnalysisSortableTh>
                       <PopupTh rowSpan={2} className="bg-slate-100 text-center font-bold text-slate-900">구분</PopupTh>
-                      <PopupTh colSpan={3} className="bg-white text-center text-[13px] font-extrabold text-black">Time Gone 대비</PopupTh>
+                      <PopupTh colSpan={3} className="period-group-start bg-white text-center text-[13px] font-extrabold text-black">Time Gone 대비</PopupTh>
                       <PopupTh rowSpan={2} className="bg-slate-100 text-center font-bold text-slate-900">상세</PopupTh>
                     </tr>
                     <tr>
-                      <PopupTh top="top-[37px]" className="bg-[#F7FCEB] text-center font-bold text-black">전년동월</PopupTh>
-                      <PopupTh top="top-[37px]" className="bg-[#F3FAFD] text-center font-bold text-black">전월</PopupTh>
-                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#FFF7FA] text-black" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당일까지 매출</ItemAnalysisSortableTh>
+                      <PopupTh top="top-[37px]" className="period-group-start bg-[#F7FCEB] text-center font-bold text-black">전년동월</PopupTh>
+                      <PopupTh top="top-[37px]" className="period-subgroup-start bg-[#F3FAFD] text-center font-bold text-black">전월</PopupTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="period-group-start bg-[#FFF7FA] text-black" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당일까지 매출</ItemAnalysisSortableTh>
                     </tr>
                   </thead>
                   <tbody>
@@ -7291,17 +7298,17 @@ function ItemAnalysis({
                       <ItemAnalysisSortableTh rowSpan={2} sortKey="code" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처코드</ItemAnalysisSortableTh>
                       <ItemAnalysisSortableTh rowSpan={2} sortKey="name" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처명</ItemAnalysisSortableTh>
                       <ItemAnalysisSortableTh rowSpan={2} sortKey="manager" sortConfig={storeSortConfig} onSort={requestStoreSort}>담당자</ItemAnalysisSortableTh>
-                      <PopupTh colSpan={2} className="bg-[#F7FCEB] text-center text-black">전년동월</PopupTh>
-                      <PopupTh colSpan={2} className="bg-[#F3FAFD] text-center text-black">전월</PopupTh>
-                      <PopupTh colSpan={1} className="bg-[#FFF7FA] text-center text-black">당월</PopupTh>
+                      <PopupTh colSpan={2} className="period-group-start bg-[#F7FCEB] text-center text-black">전년동월</PopupTh>
+                      <PopupTh colSpan={2} className="period-group-start bg-[#F3FAFD] text-center text-black">전월</PopupTh>
+                      <PopupTh colSpan={1} className="period-group-start bg-[#FFF7FA] text-center text-black">당월</PopupTh>
                       <PopupTh rowSpan={2}>상세</PopupTh>
                     </tr>
                     <tr>
-                      <PopupTh top="top-[37px]" className="bg-[#F7FCEB] text-right text-black">매출</PopupTh>
+                      <PopupTh top="top-[37px]" className="period-group-start bg-[#F7FCEB] text-right text-black">매출</PopupTh>
                       <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F7FCEB] text-black" sortKey="prevYearRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
-                      <PopupTh top="top-[37px]" className="bg-[#F3FAFD] text-right text-black">매출</PopupTh>
+                      <PopupTh top="top-[37px]" className="period-group-start bg-[#F3FAFD] text-right text-black">매출</PopupTh>
                       <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F3FAFD] text-black" sortKey="prevMonthRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
-                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#FFF7FA] text-black" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>매출</ItemAnalysisSortableTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="period-group-start bg-[#FFF7FA] text-black" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>매출</ItemAnalysisSortableTh>
                     </tr>
                   </thead>
                   <tbody>
@@ -7376,7 +7383,7 @@ function ItemAnalysis({
                   </ItemAnalysisSortableTh>
                   <PopupTh
                     colSpan={3}
-                    className="bg-white text-center font-extrabold text-black"
+                    className="period-group-start bg-white text-center font-extrabold text-black"
                   >
                     Time Gone 대비
                   </PopupTh>
@@ -7385,7 +7392,7 @@ function ItemAnalysis({
                 <tr>
                   <ItemAnalysisSortableTh
                     top="top-[37px]"
-                    className="bg-[#F7FCEB] text-black"
+                    className="period-group-start bg-[#F7FCEB] text-black"
                     sortKey="prevYearSales"
                     sortConfig={itemSortConfig}
                     onSort={requestItemSort}
@@ -7395,7 +7402,7 @@ function ItemAnalysis({
                   </ItemAnalysisSortableTh>
                   <ItemAnalysisSortableTh
                     top="top-[37px]"
-                    className="bg-[#F3FAFD] text-black"
+                    className="period-subgroup-start bg-[#F3FAFD] text-black"
                     sortKey="prevMonthSales"
                     sortConfig={itemSortConfig}
                     onSort={requestItemSort}
@@ -7405,7 +7412,7 @@ function ItemAnalysis({
                   </ItemAnalysisSortableTh>
                   <ItemAnalysisSortableTh
                     top="top-[37px]"
-                    className="bg-[#FFF7FA] text-black"
+                    className="period-subgroup-start bg-[#FFF7FA] text-black"
                     sortKey="currentSales"
                     sortConfig={itemSortConfig}
                     onSort={requestItemSort}
@@ -9244,22 +9251,22 @@ function SalesStatus({
                 {!compact && isStoreListView && (
                   <ThCompact rowSpan={2} tone="gray" w="w-[7%]">마지막발주일</ThCompact>
                 )}
-                <ThCompact colSpan={2} tone="mint">전년동월</ThCompact>
-                <ThCompact colSpan={2} tone="blue">전월</ThCompact>
-                <ThCompact colSpan={2} tone="pink">당월</ThCompact>
-                <ThCompact colSpan={2} tone="yellow">EST</ThCompact>
-                <ThCompact colSpan={2} tone="orange">이익</ThCompact>
+                <ThCompact colSpan={2} tone="mint" className="period-group-start">전년동월</ThCompact>
+                <ThCompact colSpan={2} tone="blue" className="period-group-start">전월</ThCompact>
+                <ThCompact colSpan={2} tone="pink" className="period-group-start">당월</ThCompact>
+                <ThCompact colSpan={2} tone="yellow" className="period-group-start">EST</ThCompact>
+                <ThCompact colSpan={2} tone="orange" className="period-group-start">이익</ThCompact>
               </tr>
               <tr>
-                <ThCompactSortable right tone="mint" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>매출</ThCompactSortable>
+                <ThCompactSortable right tone="mint" top="top-[31px]" className="period-group-start" w={compact ? "w-[6%]" : ""} sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>매출</ThCompactSortable>
                 <ThCompactSortable right tone="mint" top="top-[31px]" sortKey="prevYearTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>Time gone</ThCompactSortable>
-                <ThCompactSortable right tone="blue" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>매출</ThCompactSortable>
+                <ThCompactSortable right tone="blue" top="top-[31px]" className="period-group-start" w={compact ? "w-[6%]" : ""} sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>매출</ThCompactSortable>
                 <ThCompactSortable right tone="blue" top="top-[31px]" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>Time gone</ThCompactSortable>
-                <ThCompactSortable right tone="pink" top="top-[31px]" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
+                <ThCompactSortable right tone="pink" top="top-[31px]" className="period-group-start" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
                 <ThCompactSortable right tone="pink" top="top-[31px]" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>전체 매출</ThCompactSortable>
-                <ThCompactSortable right tone="yellow" top="top-[31px]" w={compact ? "w-[5%]" : ""} sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" className="period-group-start" w={compact ? "w-[5%]" : ""} sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
-                <ThCompactSortable right tone="orange" top="top-[31px]" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
+                <ThCompactSortable right tone="orange" top="top-[31px]" className="period-group-start" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
                 <ThCompactSortable right tone="orange" top="top-[31px]" w="w-[5%]" sortKey="profitRate" sortConfig={sortConfig} onSort={requestSort}>이익률</ThCompactSortable>
               </tr>
             </thead>
@@ -9442,6 +9449,7 @@ function ThCompactSortable({
   tone = "default",
   rowSpan,
   top = "top-0",
+  className = "",
 }: {
   children: React.ReactNode;
   sortKey: SalesStatusSortKey;
@@ -9452,9 +9460,10 @@ function ThCompactSortable({
   tone?: "default" | "mint" | "blue" | "pink" | "yellow" | "gray" | "purple" | "green" | "orange";
   rowSpan?: number;
   top?: string;
+  className?: string;
 }) {
   return (
-    <ThCompact right={right} w={w} tone={tone} rowSpan={rowSpan} top={top}>
+    <ThCompact right={right} w={w} tone={tone} rowSpan={rowSpan} top={top} className={className}>
       <button
         type="button"
         onClick={() => onSort(sortKey)}
@@ -10353,6 +10362,7 @@ function ThCompact({
   rowSpan,
   colSpan,
   top = "top-0",
+  className = "",
 }: {
   children: React.ReactNode;
   right?: boolean;
@@ -10361,6 +10371,7 @@ function ThCompact({
   rowSpan?: number;
   colSpan?: number;
   top?: string;
+  className?: string;
 }) {
   const toneClass =
     tone === "mint"
@@ -10379,7 +10390,7 @@ function ThCompact({
     <th
       rowSpan={rowSpan}
       colSpan={colSpan}
-      className={`sticky ${top} z-50 border px-0.5 py-1.5 align-middle text-center text-[14px] font-bold leading-tight whitespace-nowrap break-keep bg-clip-padding ${toneClass} ${w}`}
+      className={`sticky ${top} z-50 border px-0.5 py-1.5 align-middle text-center text-[14px] font-bold leading-tight whitespace-nowrap break-keep bg-clip-padding ${toneClass} ${w} ${className}`}
     >
       {children}
     </th>
