@@ -4723,6 +4723,37 @@ export default function SalesReportClient() {
             text-align: center !important;
             justify-content: center !important;
           }
+          /* 품목분석 손익요약: 헤더·SUBTOTAL과 본문 스크롤 영역을 완전히 분리 */
+          .sales-report-root .item-profit-fixed-header,
+          .sales-report-root .item-profit-fixed-body {
+            table-layout: fixed;
+            font-size: 12px;
+          }
+          .sales-report-root .item-profit-fixed-header {
+            position: relative;
+            z-index: 30;
+            background: #fff;
+          }
+          .sales-report-root .item-profit-fixed-header thead,
+          .sales-report-root .item-profit-fixed-header thead tr,
+          .sales-report-root .item-profit-fixed-header thead th {
+            position: static !important;
+            top: auto !important;
+          }
+          .sales-report-root .item-profit-fixed-header .item-profit-subtotal th {
+            position: static !important;
+            top: auto !important;
+            z-index: auto !important;
+            background: #fefce8 !important;
+            box-shadow: inset 0 -1px 0 #94a3b8;
+          }
+          .sales-report-root .item-profit-fixed-body tbody {
+            position: static !important;
+          }
+          .sales-report-root .item-profit-fixed-body td {
+            font-size: 12px;
+          }
+
           /* 품목분석 손익요약: 1단·2단 헤더와 SUBTOTAL 전체를 한 묶음으로 고정 */
           .sales-report-root .item-profit-pivot {
             table-layout: fixed;
@@ -7894,8 +7925,10 @@ function ItemShipmentAnalysis({
               필터 결과 {itemRows.length.toLocaleString("ko-KR")}개 품목
             </div>
           </div>
-          <div className="max-h-[68vh] overflow-auto isolate">
-            <table className="item-profit-pivot w-full min-w-[1650px] border-separate border-spacing-0 text-center text-black whitespace-nowrap">
+          <div className="overflow-x-auto isolate">
+            <div className="min-w-[1650px]">
+              {/* 헤더와 SUBTOTAL은 스크롤 영역 밖에 두어 완전히 고정합니다. */}
+              <table className="item-profit-fixed-header w-full table-fixed border-separate border-spacing-0 text-center text-black whitespace-nowrap">
               <colgroup>
                 <col style={{ width: "120px" }} />
                 <col style={{ width: "300px" }} />
@@ -7982,6 +8015,27 @@ function ItemShipmentAnalysis({
                   <th className="border border-slate-400" />
                 </tr>
               </thead>
+              </table>
+
+              {/* 품목 데이터 행만 세로로 스크롤됩니다. */}
+              <div className="max-h-[68vh] overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
+                <table className="item-profit-fixed-body w-full table-fixed border-separate border-spacing-0 text-center text-black whitespace-nowrap">
+              <colgroup>
+                <col style={{ width: "120px" }} />
+                <col style={{ width: "300px" }} />
+                <col style={{ width: "100px" }} />
+                <col style={{ width: "130px" }} />
+                <col style={{ width: "100px" }} />
+                <col style={{ width: "120px" }} />
+                <col style={{ width: "82px" }} />
+                <col style={{ width: "130px" }} />
+                <col style={{ width: "100px" }} />
+                <col style={{ width: "120px" }} />
+                <col style={{ width: "90px" }} />
+                <col style={{ width: "82px" }} />
+                <col style={{ width: "78px" }} />
+                <col style={{ width: "100px" }} />
+              </colgroup>
               <tbody>
                 {itemRows.map((r) => (
                   <tr key={`${r.itemCode}-${r.itemName}`} className="hover:bg-blue-50">
@@ -8018,8 +8072,9 @@ function ItemShipmentAnalysis({
                   </tr>
                 )}
               </tbody>
-
-            </table>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       )}
