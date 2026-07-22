@@ -4773,8 +4773,23 @@ export default function SalesReportClient() {
             position: relative !important;
             top: auto !important;
             z-index: 2 !important;
-            background: #fefce8 !important;
-            box-shadow: inset 0 -1px 0 #94a3b8;
+            background: #fff8dc !important;
+            border-top: 2px solid #94a3b8 !important;
+            border-bottom: 1px solid #cbd5e1 !important;
+            box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.45);
+          }
+          .sales-report-root .item-profit-fixed-header .item-profit-subtotal .subtotal-label {
+            padding-left: 16px !important;
+            text-align: left !important;
+            letter-spacing: 0.01em;
+          }
+          .sales-report-root .item-profit-fixed-header .item-profit-subtotal .subtotal-number {
+            padding-right: 12px !important;
+            text-align: right !important;
+          }
+          .sales-report-root .item-profit-fixed-body .item-profit-number-cell {
+            padding-right: 12px !important;
+            text-align: right !important;
           }
           .sales-report-root .item-profit-fixed-body tbody {
             position: static !important;
@@ -7951,16 +7966,16 @@ function ItemShipmentAnalysis({
                   </th>
                 </tr>
                 <tr className="item-profit-subtotal font-extrabold text-black">
-                  <th colSpan={3} className="border border-slate-400 text-center">SUBTOTAL</th>
-                  <th className="sales-value-cell border border-slate-400 text-right font-extrabold">{won(subtotal.prevMonth.sales)}</th>
-                  <th className="border border-slate-400 text-right">{won(subtotal.prevMonthUnitCost)}</th>
-                  <th className="border border-slate-400 text-right">{won(subtotal.prevMonth.profit)}</th>
-                  <th className="border border-slate-400 text-right">{pct(subtotal.prevRate)}</th>
-                  <th className="sales-value-cell border border-slate-400 text-right font-extrabold">{won(subtotal.current.sales)}</th>
-                  <th className="border border-slate-400 text-right">{won(subtotal.currentUnitCost)}</th>
-                  <th className="border border-slate-400 text-right">{won(subtotal.current.profit)}</th>
-                  <th className="border border-slate-400 text-right">{pct(subtotal.currentRate)}</th>
-                  <th className={`border border-slate-400 text-right ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
+                  <th colSpan={3} className="subtotal-label border border-slate-400 font-extrabold">SUBTOTAL</th>
+                  <th className="subtotal-number sales-value-cell border border-slate-400 font-extrabold">{won(subtotal.prevMonth.sales)}</th>
+                  <th className="subtotal-number border border-slate-400">{won(subtotal.prevMonthUnitCost)}</th>
+                  <th className="subtotal-number border border-slate-400">{won(subtotal.prevMonth.profit)}</th>
+                  <th className="subtotal-number border border-slate-400">{pct(subtotal.prevRate)}</th>
+                  <th className="subtotal-number sales-value-cell border border-slate-400 font-extrabold">{won(subtotal.current.sales)}</th>
+                  <th className="subtotal-number border border-slate-400">{won(subtotal.currentUnitCost)}</th>
+                  <th className="subtotal-number border border-slate-400">{won(subtotal.current.profit)}</th>
+                  <th className="subtotal-number border border-slate-400">{pct(subtotal.currentRate)}</th>
+                  <th className={`subtotal-number border border-slate-400 ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
                     {itemSignedPct(subtotal.rateChange)}
                   </th>
                   <th className="border border-slate-400 text-center">{subtotal.storeCount.toLocaleString("ko-KR")}</th>
@@ -7995,15 +8010,15 @@ function ItemShipmentAnalysis({
                     <td className="border border-slate-300 p-2">{r.itemCode}</td>
                     <td className="item-name-cell border border-slate-300 p-2 text-left font-semibold" title={r.itemName}>{r.itemName}</td>
                     <td className="border border-slate-300 p-2 font-semibold">{r.category}</td>
-                    <td className="sales-value-cell border border-slate-300 p-2 text-right font-bold">{won(r.prevMonth.sales)}</td>
-                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonthUnitCost)}</td>
-                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.profit)}</td>
-                    <td className="border border-slate-300 p-2 text-right font-bold">{pct(r.prevMonthProfitRate)}</td>
-                    <td className="sales-value-cell border border-slate-300 p-2 text-right font-extrabold">{won(r.current.sales)}</td>
-                    <td className="border border-slate-300 p-2 text-right">{won(r.currentUnitCost)}</td>
-                    <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.profit)}</td>
-                    <td className="border border-slate-300 p-2 text-right font-extrabold">{pct(r.currentProfitRate)}</td>
-                    <td className={`border border-slate-300 p-2 text-right font-extrabold ${r.profitRateChange > 0 ? "text-emerald-700" : r.profitRateChange < 0 ? "text-red-600" : "text-black"}`}>
+                    <td className="item-profit-number-cell sales-value-cell border border-slate-300 p-2 font-bold">{won(r.prevMonth.sales)}</td>
+                    <td className="item-profit-number-cell border border-slate-300 p-2">{won(r.prevMonthUnitCost)}</td>
+                    <td className="item-profit-number-cell border border-slate-300 p-2">{won(r.prevMonth.profit)}</td>
+                    <td className="item-profit-number-cell border border-slate-300 p-2 font-bold">{pct(r.prevMonthProfitRate)}</td>
+                    <td className="item-profit-number-cell sales-value-cell border border-slate-300 p-2 font-extrabold">{won(r.current.sales)}</td>
+                    <td className="item-profit-number-cell border border-slate-300 p-2">{won(r.currentUnitCost)}</td>
+                    <td className="item-profit-number-cell border border-slate-300 p-2 font-bold">{won(r.current.profit)}</td>
+                    <td className="item-profit-number-cell border border-slate-300 p-2 font-extrabold">{pct(r.currentProfitRate)}</td>
+                    <td className={`item-profit-number-cell border border-slate-300 p-2 font-extrabold ${r.profitRateChange > 0 ? "text-emerald-700" : r.profitRateChange < 0 ? "text-red-600" : "text-black"}`}>
                       {itemSignedPct(r.profitRateChange)}
                     </td>
                     <td className="border border-slate-300 p-2 text-center font-extrabold">{r.storeCodes.size.toLocaleString("ko-KR")}</td>
