@@ -5239,16 +5239,6 @@ function EstQuickEntry({
     estMap,
   ]);
 
-  const allEntryStores = useMemo(
-    () =>
-      stores.filter(
-        (store) =>
-          store.status !== "거래종료" &&
-          EST_ENTRY_MANAGERS.includes(store.manager),
-      ),
-    [stores],
-  );
-
   const managerInfo = useMemo(() => {
     const managerStores = stores.filter(
       (store) =>
@@ -5270,18 +5260,18 @@ function EstQuickEntry({
     (total, store) => total + Number(estMap.get(store.code) || 0),
     0,
   );
-  const storeEstTotal = allEntryStores
+  const filteredStoreCount = rows.filter((store) => store.storeType === "매장").length;
+  const filteredNonStoreCount = rows.filter((store) => store.storeType !== "매장").length;
+  const storeEstTotal = rows
     .filter((store) => store.storeType === "매장")
     .reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0);
-  const nonStoreEstTotal = allEntryStores
+  const nonStoreEstTotal = rows
     .filter((store) => store.storeType !== "매장")
     .reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0);
-  const managerEstTotals = EST_ENTRY_MANAGERS.map((manager) => ({
-    manager,
-    amount: allEntryStores
-      .filter((store) => store.manager === manager)
-      .reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0),
-  }));
+  const selectedChannelLabel =
+    channelView === "store" ? "매장" : channelView === "nonStore" ? "비매장" : "전체 채널";
+  const selectedStatusLabel =
+    statusView === "active" ? "거래중" : statusView === "paused" ? "거래중지" : "거래종료";
   const canEditTarget = canEdit && (isAdmin || selectedManager === "SY");
 
   const handleSort = (key: typeof sortKey) => {
@@ -5504,8 +5494,11 @@ function EstQuickEntry({
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-          <div className="max-h-[68vh] overflow-auto isolate">
+        <div
+          className="flex min-h-[440px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
+          style={{ height: "clamp(440px, calc(100vh - 340px), 760px)" }}
+        >
+          <div className="isolate min-h-0 flex-1 overflow-auto pb-5 pr-2">
             <table className="w-full min-w-[1580px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-100">
@@ -5627,6 +5620,27 @@ function EstQuickEntry({
                 )}
               </tbody>
             </table>
+            <div aria-hidden="true" className="h-3" />
+          </div>
+
+          <div className="flex min-h-[48px] shrink-0 flex-wrap items-center justify-between gap-x-5 gap-y-2 border-t border-slate-300 bg-slate-50 px-4 py-2.5 text-[12px] font-bold text-slate-700">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span className="font-extrabold text-slate-900">
+                현재 필터 거래처 <strong className="text-orange-600">{won(rows.length)}개</strong>
+              </span>
+              <span>매장 {won(filteredStoreCount)}개</span>
+              <span>비매장 {won(filteredNonStoreCount)}개</span>
+              <span className="text-slate-500">
+                {selectedManager} · {selectedChannelLabel} · {selectedStatusLabel}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span>매장 EST <strong className="text-slate-900">{won(storeEstTotal)}</strong></span>
+              <span>비매장 EST <strong className="text-slate-900">{won(nonStoreEstTotal)}</strong></span>
+              <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-slate-900">
+                필터 EST 합계 <strong className="text-orange-700">{won(totalEst)}</strong>
+              </span>
+            </div>
           </div>
         </div>
       </div>
