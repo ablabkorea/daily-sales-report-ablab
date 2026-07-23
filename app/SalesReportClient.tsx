@@ -6053,7 +6053,7 @@ function DashboardTopKpis({
         ]}
       />
       <KpiGroup
-        className="bg-sky-50/95 ring-1 ring-sky-200/90"
+        className="bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.94)_0%,rgba(255,255,255,0.5)_30%,transparent_58%),linear-gradient(135deg,#fffef7_0%,#fff8d8_52%,#ffed9a_100%)] ring-1 ring-amber-300/80 shadow-[0_8px_22px_rgba(202,138,4,0.14),inset_0_1px_0_rgba(255,255,255,0.92)]"
         items={[
           { title: "매장 EST", value: storeEst, format: "won" },
           { title: "비매장 EST", value: nonStoreEst, format: "won" },
