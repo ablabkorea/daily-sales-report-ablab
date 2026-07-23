@@ -6486,8 +6486,7 @@ type ItemDetailSortKey =
   | "salesAmount"
   | "costAmount"
   | "profitAmount"
-  | "profitRate"
-  | "lastOrderDate";
+  | "profitRate";
 
 type ItemBrandSortKey =
   | "brand"
@@ -11865,7 +11864,7 @@ function MappingPage({
                 닫기
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto bg-white pb-10 scroll-pb-10 px-4 pb-4 pt-0">
+            <div className="min-h-0 flex-1 overflow-auto bg-white px-4 pb-10 pt-0 scroll-pb-10">
               <div className="rounded-xl border border-gray-300 bg-slate-50 p-3">
                 <div className="mb-2 flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
                   <div>
