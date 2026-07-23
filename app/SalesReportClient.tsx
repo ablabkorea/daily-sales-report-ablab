@@ -5304,13 +5304,13 @@ function EstQuickEntry({
           <table className="w-full min-w-[1450px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
-                <th className="sticky top-0 z-20 border border-slate-300 bg-white px-3 py-2 font-bold text-slate-700">거래처명</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-white px-3 py-2 font-bold text-slate-700">담당자</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-white px-3 py-2 font-bold text-slate-700">채널</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처명</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">담당자</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">채널</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">전년동월 매출</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">전월 매출</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-[#F7F2FF] px-3 py-2 text-[14px] font-bold text-[#5B4A85]">전월 EST</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-[#F7F2FF] px-3 py-2 text-[14px] font-bold text-[#5B4A85]">전월 EST 달성률</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">전월 EST</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">전월 EST 달성률</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">{month} EST 입력</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">전월 EST 대비 차이</th>
               </tr>
