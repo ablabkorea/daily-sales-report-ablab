@@ -6527,6 +6527,11 @@ function Dashboard({
   void timeGone;
   void codeMappings;
 
+  const [detailModal, setDetailModal] = useState<{
+    kind: "paused" | "new";
+    manager: string;
+  } | null>(null);
+
   const stMap = storeMap(stores);
   const normalizeDashboardManager = (value: unknown) =>
     norm(value).trim().toUpperCase();
@@ -6552,12 +6557,23 @@ function Dashboard({
       s.period === "current" &&
       inRange(s.saleDate, monthStart(month), monthEnd(month)),
   );
-  const prevMonth = sales.filter(
+  const prevMonthRowsAll = sales.filter(
     (s) => s.period === "prevMonth" && s.refMonth === month,
   );
   const prevYear = sales.filter(
     (s) => s.period === "prevYear" && s.refMonth === month,
   );
+  const previousMonthValue = previousMonth(month);
+
+  const previousEstByStore = useMemo(() => {
+    const map = new Map<string, number>();
+    ests
+      .filter((row) => row.month === previousMonthValue)
+      .forEach((row) =>
+        map.set(row.storeCode, (map.get(row.storeCode) || 0) + Number(row.amount || 0)),
+      );
+    return map;
+  }, [ests, previousMonthValue]);
 
   const managers = Array.from(
     new Set(
@@ -6567,7 +6583,7 @@ function Dashboard({
     ),
   ).sort((a, b) => a.localeCompare(b, "ko"));
   const hasUnassigned =
-    [...currentFullMonth, ...prevMonth, ...prevYear].some(
+    [...currentFullMonth, ...prevMonthRowsAll, ...prevYear].some(
       (row) => managerOfSale(row) === "미지정",
     ) ||
     ests.some(
@@ -6580,7 +6596,9 @@ function Dashboard({
     const currentFullRows = currentFullMonth.filter(
       (s) => managerOfSale(s) === manager,
     );
-    const prevMonthRows = prevMonth.filter((s) => managerOfSale(s) === manager);
+    const prevMonthRows = prevMonthRowsAll.filter(
+      (s) => managerOfSale(s) === manager,
+    );
     const prevYearRows = prevYear.filter((s) => managerOfSale(s) === manager);
     const managerEst = ests
       .filter((e) => e.month === month && managerOfEst(e) === manager)
@@ -6589,6 +6607,27 @@ function Dashboard({
     const prevMonthSales = sum(prevMonthRows, "salesAmount");
     const prevYearSales = sum(prevYearRows, "salesAmount");
     const profitAmount = sum(currentRows, "profitAmount");
+    const pausedCount = stores.filter(
+      (store) =>
+        normalizeDashboardManager(store.manager) === manager &&
+        store.status === "거래중단",
+    ).length;
+    const newStoreCodes = new Set(
+      currentRows
+        .filter((sale) => {
+          const store = stMap.get(sale.storeCode);
+          const managerName = normalizeDashboardManager(
+            store?.manager ?? sale.manager,
+          ) || "미지정";
+          const brandName = displayBrand(store?.brand ?? sale.brand);
+          return (
+            Number(sale.salesAmount || 0) !== 0 &&
+            managerName === "미지정" &&
+            brandName === "당월 신규 거래처"
+          );
+        })
+        .map((sale) => sale.storeCode),
+    );
 
     return {
       manager,
@@ -6606,6 +6645,8 @@ function Dashboard({
       estRate: managerEst ? (currentSales / managerEst) * 100 : 0,
       profitAmount,
       profitRate: weightedProfitRate(currentRows),
+      pausedCount,
+      newStoreCount: newStoreCodes.size,
     };
   });
 
@@ -6617,6 +6658,8 @@ function Dashboard({
       fullMonthSales: acc.fullMonthSales + row.fullMonthSales,
       est: acc.est + row.est,
       profitAmount: acc.profitAmount + row.profitAmount,
+      pausedCount: acc.pausedCount + row.pausedCount,
+      newStoreCount: acc.newStoreCount + row.newStoreCount,
     }),
     {
       prevYearSales: 0,
@@ -6625,11 +6668,15 @@ function Dashboard({
       fullMonthSales: 0,
       est: 0,
       profitAmount: 0,
+      pausedCount: 0,
+      newStoreCount: 0,
     },
   );
 
   const dashboardManagerExcelRows = rows.map((r) => ({
     담당자: r.manager,
+    거래중단수: r.pausedCount,
+    전월신규수: r.newStoreCount,
     전년동월: r.prevYearSales,
     전년대비: pct(r.prevYearRate),
     전월: r.prevMonthSales,
@@ -6642,160 +6689,193 @@ function Dashboard({
     이익률: pct(r.profitRate),
   }));
 
+  const pausedModalRows = useMemo(() => {
+    if (!detailModal || detailModal.kind !== "paused") return [];
+    const recentMonths = [addMonths(month, -2), addMonths(month, -1), month];
+    const managerStores = stores.filter(
+      (store) =>
+        normalizeDashboardManager(store.manager) === detailModal.manager &&
+        store.status === "거래중단",
+    );
+
+    const salesForMonth = (storeCode: string, targetMonth: string) => {
+      const directRows = sales.filter(
+        (row) =>
+          row.storeCode === storeCode &&
+          row.period === "current" &&
+          row.saleDate.startsWith(targetMonth),
+      );
+      if (directRows.length) return directRows;
+      if (targetMonth === previousMonthValue) {
+        return prevMonthRowsAll.filter((row) => row.storeCode === storeCode);
+      }
+      return [];
+    };
+
+    return managerStores.map((store) => {
+      const monthlySales = recentMonths.map((targetMonth) =>
+        sum(salesForMonth(store.code, targetMonth), "salesAmount"),
+      );
+      const allStoreRows = sales.filter((row) => row.storeCode === store.code);
+      const lastOrderDate = allStoreRows.reduce(
+        (latest, row) => (row.saleDate > latest ? row.saleDate : latest),
+        "",
+      );
+      return {
+        store,
+        recentMonths,
+        monthlySales,
+        averageSales: monthlySales.reduce((a, b) => a + b, 0) / 3,
+        lastOrderDate: lastOrderDate || "-",
+      };
+    });
+  }, [detailModal, stores, sales, month, previousMonthValue, prevMonthRowsAll]);
+
+  const newStoreModalRows = useMemo(() => {
+    if (!detailModal || detailModal.kind !== "new") return [];
+    const managerCurrentRows = current.filter(
+      (row) => managerOfSale(row) === detailModal.manager,
+    );
+    const newCodes = Array.from(
+      new Set(
+        managerCurrentRows
+          .filter((row) => {
+            const store = stMap.get(row.storeCode);
+            const managerName = normalizeDashboardManager(
+              store?.manager ?? row.manager,
+            ) || "미지정";
+            const brandName = displayBrand(store?.brand ?? row.brand);
+            return (
+              Number(row.salesAmount || 0) !== 0 &&
+              managerName === "미지정" &&
+              brandName === "당월 신규 거래처"
+            );
+          })
+          .map((row) => row.storeCode),
+      ),
+    );
+
+    return newCodes
+      .map((storeCode) => {
+        const store = stMap.get(storeCode);
+        const currentRows = managerCurrentRows.filter((row) => row.storeCode === storeCode);
+        const previousRows = prevMonthRowsAll.filter((row) => row.storeCode === storeCode);
+        const currentSales = sum(currentRows, "salesAmount");
+        const profitAmount = sum(currentRows, "profitAmount");
+        return {
+          storeCode,
+          storeName: store?.name || currentRows[0]?.storeName || storeCode,
+          previousSales: sum(previousRows, "salesAmount"),
+          currentSales,
+          profitAmount,
+          profitRate: weightedProfitRate(currentRows),
+        };
+      })
+      .sort((a, b) => b.currentSales - a.currentSales);
+  }, [detailModal, current, prevMonthRowsAll, stMap]);
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-300 px-4 py-3">
-        <div>
-          <div className="text-base font-extrabold text-slate-900">
-            담당자별 매출 요약
+    <>
+      <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-300 px-4 py-3">
+          <div className="text-base font-extrabold text-slate-900">담당자별 매출 요약</div>
+          <button
+            type="button"
+            onClick={() => exportExcel(dashboardManagerExcelRows, `담당자별_매출요약_${month}`)}
+            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+          >
+            엑셀 다운로드
+          </button>
+        </div>
+        <div className="overflow-auto pb-4">
+          <table className="w-full min-w-[1320px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="sticky top-0 z-10 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">담당자</th>
+                <th className="sticky top-0 z-10 border border-slate-300 bg-amber-50 px-3 py-2 font-bold text-amber-900">거래중단</th>
+                <th className="sticky top-0 z-10 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-900">전월 신규 수</th>
+                <th className="sticky top-0 z-10 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">전년동월</th>
+                <th className="sticky top-0 z-10 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">전년대비</th>
+                <th className="sticky top-0 z-10 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">전월</th>
+                <th className="sticky top-0 z-10 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">전월대비</th>
+                <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF7FA] px-3 py-2 font-bold text-black">당일까지 매출</th>
+                <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF7FA] px-3 py-2 font-bold text-black">당월 전체 매출</th>
+                <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFFDF2] px-3 py-2 font-bold text-black">EST</th>
+                <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFFDF2] px-3 py-2 font-bold text-black">EST 달성률</th>
+                <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF9F3] px-3 py-2 font-bold text-black">이익금액</th>
+                <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF9F3] px-3 py-2 font-bold text-black">이익률</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.manager} className="hover:bg-slate-50">
+                  <td className="border border-slate-300 px-3 py-2 text-center text-sm font-extrabold text-slate-900">{r.manager}</td>
+                  <td className="border border-slate-300 px-3 py-2 text-center">
+                    <button type="button" disabled={!r.pausedCount} onClick={() => setDetailModal({ kind: "paused", manager: r.manager })} className={`min-w-[44px] rounded-full px-3 py-1 font-extrabold ${r.pausedCount ? "bg-amber-100 text-amber-900 hover:bg-amber-200" : "bg-slate-100 text-slate-400"}`}>{won(r.pausedCount)}</button>
+                  </td>
+                  <td className="border border-slate-300 px-3 py-2 text-center">
+                    <button type="button" disabled={!r.newStoreCount} onClick={() => setDetailModal({ kind: "new", manager: r.manager })} className={`min-w-[44px] rounded-full px-3 py-1 font-extrabold ${r.newStoreCount ? "bg-blue-100 text-blue-800 hover:bg-blue-200" : "bg-slate-100 text-slate-400"}`}>{won(r.newStoreCount)}</button>
+                  </td>
+                  <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(r.prevYearSales)}</td>
+                  <td className={`border border-slate-300 px-3 py-2 text-right font-semibold ${r.prevYearRate >= 0 ? "text-emerald-700" : "text-red-600"}`}>{pct(r.prevYearRate)}</td>
+                  <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(r.prevMonthSales)}</td>
+                  <td className={`border border-slate-300 px-3 py-2 text-right font-semibold ${r.prevMonthRate >= 0 ? "text-emerald-700" : "text-red-600"}`}>{pct(r.prevMonthRate)}</td>
+                  <td className="border border-slate-300 px-3 py-2 text-right font-extrabold text-blue-700">{won(r.currentSales)}</td>
+                  <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(r.fullMonthSales)}</td>
+                  <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(r.est)}</td>
+                  <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{pct(r.estRate)}</td>
+                  <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(r.profitAmount)}</td>
+                  <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{pct(r.profitRate)}</td>
+                </tr>
+              ))}
+              <tr className="bg-slate-100 font-extrabold">
+                <td className="border border-slate-300 px-3 py-2 text-center">합계</td>
+                <td className="border border-slate-300 px-3 py-2 text-center">{won(total.pausedCount)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-center">{won(total.newStoreCount)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right">{won(total.prevYearSales)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right">{pct(total.prevYearSales ? ((total.currentSales - total.prevYearSales) / total.prevYearSales) * 100 : 0)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right">{won(total.prevMonthSales)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right">{pct(total.prevMonthSales ? ((total.currentSales - total.prevMonthSales) / total.prevMonthSales) * 100 : 0)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right text-blue-700">{won(total.currentSales)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right">{won(total.fullMonthSales)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right">{won(total.est)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right">{pct(total.est ? (total.currentSales / total.est) * 100 : 0)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right">{won(total.profitAmount)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right">{pct(total.currentSales ? (total.profitAmount / total.currentSales) * 100 : 0)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {detailModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/40 p-4" onMouseDown={() => setDetailModal(null)}>
+          <div className="flex max-h-[82vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-300 px-5 py-4">
+              <div>
+                <div className="text-base font-extrabold text-slate-900">{detailModal.kind === "paused" ? `${detailModal.manager} 거래중단 거래처` : `${detailModal.manager} 전월 신규 거래처`}</div>
+                <div className="mt-1 text-xs text-slate-500">{detailModal.kind === "paused" ? "최근 3개월 매출과 마지막 출고일을 표시합니다." : "기준: 담당자가 미지정이고 브랜드명이 당월 신규 거래처인 곳 중 당월 매출이 발생한 거래처"}</div>
+              </div>
+              <button type="button" onClick={() => setDetailModal(null)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100">닫기</button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-4 pb-8">
+              {detailModal.kind === "paused" ? (
+                <table className="w-full min-w-[900px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
+                  <thead><tr className="bg-amber-50"><th className="sticky top-0 border border-slate-300 bg-amber-50 px-3 py-2">거래처코드</th><th className="sticky top-0 border border-slate-300 bg-amber-50 px-3 py-2">거래처명</th>{[addMonths(month,-2),addMonths(month,-1),month].map((m)=><th key={m} className="sticky top-0 border border-slate-300 bg-amber-50 px-3 py-2">{m} 매출</th>)}<th className="sticky top-0 border border-slate-300 bg-amber-50 px-3 py-2">3개월 평균</th><th className="sticky top-0 border border-slate-300 bg-amber-50 px-3 py-2">마지막 출고일</th></tr></thead>
+                  <tbody>{pausedModalRows.map((row)=><tr key={row.store.code} className="hover:bg-amber-50/40"><td className="border border-slate-300 px-3 py-2">{row.store.code}</td><td className="border border-slate-300 px-3 py-2 text-left font-semibold">{row.store.name}</td>{row.monthlySales.map((value,index)=><td key={`${row.store.code}-${index}`} className="border border-slate-300 px-3 py-2 text-right">{won(value)}</td>)}<td className="border border-slate-300 px-3 py-2 text-right font-bold">{won(row.averageSales)}</td><td className="border border-slate-300 px-3 py-2">{row.lastOrderDate}</td></tr>)}</tbody>
+                </table>
+              ) : (
+                <table className="w-full min-w-[850px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
+                  <thead><tr className="bg-blue-50"><th className="sticky top-0 border border-slate-300 bg-blue-50 px-3 py-2">거래처코드</th><th className="sticky top-0 border border-slate-300 bg-blue-50 px-3 py-2">거래처명</th><th className="sticky top-0 border border-slate-300 bg-blue-50 px-3 py-2">전월 매출</th><th className="sticky top-0 border border-slate-300 bg-blue-50 px-3 py-2">당월 매출</th><th className="sticky top-0 border border-slate-300 bg-orange-50 px-3 py-2">이익금액</th><th className="sticky top-0 border border-slate-300 bg-orange-50 px-3 py-2">이익률</th></tr></thead>
+                  <tbody>{newStoreModalRows.map((row)=><tr key={row.storeCode} className="hover:bg-blue-50/40"><td className="border border-slate-300 px-3 py-2">{row.storeCode}</td><td className="border border-slate-300 px-3 py-2 text-left font-semibold">{row.storeName}</td><td className="border border-slate-300 px-3 py-2 text-right">{won(row.previousSales)}</td><td className="border border-slate-300 px-3 py-2 text-right font-bold text-blue-700">{won(row.currentSales)}</td><td className="border border-slate-300 px-3 py-2 text-right font-bold">{won(row.profitAmount)}</td><td className="border border-slate-300 px-3 py-2 text-right font-bold">{pct(row.profitRate)}</td></tr>)}</tbody>
+                </table>
+              )}
+              {((detailModal.kind === "paused" && !pausedModalRows.length) || (detailModal.kind === "new" && !newStoreModalRows.length)) && <div className="p-10 text-center text-sm text-slate-500">표시할 거래처가 없습니다.</div>}
+            </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() =>
-            exportExcel(dashboardManagerExcelRows, `담당자별_매출요약_${month}`)
-          }
-          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
-        >
-          엑셀 다운로드
-        </button>
-      </div>
-      <div className="overflow-auto">
-        <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
-          <thead>
-            <tr className="bg-slate-100">
-              <th className="sticky top-0 z-10 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">
-                담당자
-              </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">
-                전년동월
-              </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">
-                전년대비
-              </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">
-                전월
-              </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">
-                전월대비
-              </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF7FA] px-3 py-2 font-bold text-black">
-                당일까지 매출
-              </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF7FA] px-3 py-2 font-bold text-black">
-                당월 전체 매출
-              </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFFDF2] px-3 py-2 font-bold text-black">
-                EST
-              </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFFDF2] px-3 py-2 font-bold text-black">
-                EST 달성률
-              </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF9F3] px-3 py-2 font-bold text-black">
-                이익금액
-              </th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF9F3] px-3 py-2 font-bold text-black">
-                이익률
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.manager} className="hover:bg-slate-50">
-                <td className="border border-slate-300 px-3 py-2 text-center text-sm font-extrabold text-slate-900">
-                  {r.manager}
-                </td>
-                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
-                  {won(r.prevYearSales)}
-                </td>
-                <td
-                  className={`border border-slate-300 px-3 py-2 text-right font-semibold ${r.prevYearRate >= 0 ? "text-emerald-700" : "text-red-600"}`}
-                >
-                  {pct(r.prevYearRate)}
-                </td>
-                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
-                  {won(r.prevMonthSales)}
-                </td>
-                <td
-                  className={`border border-slate-300 px-3 py-2 text-right font-semibold ${r.prevMonthRate >= 0 ? "text-emerald-700" : "text-red-600"}`}
-                >
-                  {pct(r.prevMonthRate)}
-                </td>
-                <td className="border border-slate-300 px-3 py-2 text-right text-blue-700 font-extrabold">
-                  {won(r.currentSales)}
-                </td>
-                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
-                  {won(r.fullMonthSales)}
-                </td>
-                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
-                  {won(r.est)}
-                </td>
-                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
-                  {pct(r.estRate)}
-                </td>
-                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
-                  {won(r.profitAmount)}
-                </td>
-                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
-                  {pct(r.profitRate)}
-                </td>
-              </tr>
-            ))}
-            <tr className="bg-slate-100 font-extrabold">
-              <td className="border border-slate-300 px-3 py-2 text-center">
-                합계
-              </td>
-              <td className="border border-slate-300 px-3 py-2 text-right">
-                {won(total.prevYearSales)}
-              </td>
-              <td className="border border-slate-300 px-3 py-2 text-right">
-                {pct(
-                  total.prevYearSales
-                    ? ((total.currentSales - total.prevYearSales) /
-                        total.prevYearSales) *
-                        100
-                    : 0,
-                )}
-              </td>
-              <td className="border border-slate-300 px-3 py-2 text-right">
-                {won(total.prevMonthSales)}
-              </td>
-              <td className="border border-slate-300 px-3 py-2 text-right">
-                {pct(
-                  total.prevMonthSales
-                    ? ((total.currentSales - total.prevMonthSales) /
-                        total.prevMonthSales) *
-                        100
-                    : 0,
-                )}
-              </td>
-              <td className="border border-slate-300 px-3 py-2 text-right text-blue-700">
-                {won(total.currentSales)}
-              </td>
-              <td className="border border-slate-300 px-3 py-2 text-right">
-                {won(total.fullMonthSales)}
-              </td>
-              <td className="border border-slate-300 px-3 py-2 text-right">
-                {won(total.est)}
-              </td>
-              <td className="border border-slate-300 px-3 py-2 text-right">
-                {pct(total.est ? (total.currentSales / total.est) * 100 : 0)}
-              </td>
-              <td className="border border-slate-300 px-3 py-2 text-right">
-                {won(total.profitAmount)}
-              </td>
-              <td className="border border-slate-300 px-3 py-2 text-right">
-                {pct(
-                  total.currentSales
-                    ? (total.profitAmount / total.currentSales) * 100
-                    : 0,
-                )}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 
@@ -10996,8 +11076,8 @@ function MonthStartManagement({
   const [tab, setTab] = useState<MonthStartTab>("거래처 리스트");
 
   return (
-    <div className="space-y-3">
-      <div className="border-b border-slate-300 bg-white px-2">
+    <div className="flex min-h-0 flex-1 flex-col space-y-3 overflow-hidden pb-5">
+      <div className="shrink-0 border-b border-slate-300 bg-white px-2">
         <div className="flex min-w-max gap-1 overflow-x-auto">
           {MONTH_TABS.map((t) => (
             <button
@@ -11526,7 +11606,7 @@ function StoreListManagement({
   };
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[150px_minmax(0,1fr)]">
+    <div className="grid min-h-0 flex-1 gap-3 overflow-hidden pb-5 lg:grid-cols-[150px_minmax(0,1fr)]">
       <aside className="h-fit rounded-xl border border-slate-300 bg-white p-2 shadow-sm">
         <div className="px-2 pb-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">
           {section === "list" ? "거래처 리스트" : "기준정보"}
@@ -11579,7 +11659,7 @@ function StoreListManagement({
         </div>
       </aside>
 
-      <main className="min-w-0 space-y-3">
+      <main className="flex min-h-0 min-w-0 flex-col space-y-3 overflow-hidden">
         <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-extrabold text-slate-900">{section === "list" ? listTab : otherTab === "담당자 관리" ? managerSubTab : otherTab}</h2>
@@ -11706,7 +11786,7 @@ function StoreListManagement({
         </div>
 
       <div className="min-h-0 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-        <div className={section === "reference" ? "max-h-[68vh] overflow-auto pb-3" : "max-h-[65vh] overflow-auto"}>
+        <div className="min-h-0 flex-1 overflow-auto pb-8 pr-2" style={{ height: "clamp(420px, calc(100vh - 285px), 760px)" }}>
           {listTab === "기존거래처 리스트" && (
             <table className="w-full min-w-[1250px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
               <thead>
