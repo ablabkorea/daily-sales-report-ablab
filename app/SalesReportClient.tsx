@@ -4865,43 +4865,11 @@ export default function SalesReportClient() {
             white-space: nowrap;
           }
 
-          /* 대시보드 EST 핵심 카드: 연한 크림 옐로우와 은은한 진주광택 */
-          .sales-report-root .est-pearl-card {
-            position: relative;
-            overflow: hidden;
+          /* 대시보드 EST 카드: 담당자별 매출요약의 EST 계열과 동일한 색상 */
+          .sales-report-root .est-summary-card {
             border-color: #f2d675 !important;
-            background:
-              linear-gradient(
-                135deg,
-                rgba(255, 255, 255, 0.72) 0%,
-                rgba(255, 255, 255, 0.12) 38%,
-                rgba(255, 255, 255, 0.42) 62%,
-                rgba(255, 255, 255, 0.08) 100%
-              ),
-              #fff8d9 !important;
-            box-shadow:
-              0 3px 10px rgba(15, 23, 42, 0.07),
-              inset 0 1px 0 rgba(255, 255, 255, 0.85) !important;
-          }
-          .sales-report-root .est-pearl-card::after {
-            content: "";
-            position: absolute;
-            top: -55%;
-            left: -18%;
-            width: 54%;
-            height: 210%;
-            transform: rotate(18deg);
-            background: linear-gradient(
-              90deg,
-              rgba(255, 255, 255, 0),
-              rgba(255, 255, 255, 0.24),
-              rgba(255, 255, 255, 0)
-            );
-            pointer-events: none;
-          }
-          .sales-report-root .est-pearl-card > * {
-            position: relative;
-            z-index: 1;
+            background: #fffdf2 !important;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
           }
 
         `}</style>
@@ -6092,7 +6060,7 @@ function DashboardTopKpis({
         ]}
       />
       <KpiGroup
-        className="est-pearl-card"
+        className="est-summary-card"
         items={[
           { title: "매장 EST", value: storeEst, format: "won" },
           { title: "비매장 EST", value: nonStoreEst, format: "won" },
