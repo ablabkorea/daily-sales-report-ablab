@@ -5066,9 +5066,21 @@ function EstQuickEntry({
   isAdmin: boolean;
 }) {
   const [selectedManager, setSelectedManager] = useState<Manager>("SY");
-  const [search, setSearch] = useState("");
-  const [statusView, setStatusView] = useState<"active" | "activeAndPaused" | "all">("activeAndPaused");
-  const normalizedSearch = search.trim().toLowerCase();
+  const [statusView, setStatusView] = useState<"active" | "paused" | "ended">("active");
+  const [channelView, setChannelView] = useState<"all" | "store" | "nonStore">("all");
+  const [sortKey, setSortKey] = useState<
+    | "name"
+    | "manager"
+    | "channel"
+    | "status"
+    | "prevYearSales"
+    | "prevSales"
+    | "prevEst"
+    | "prevEstRate"
+    | "est"
+    | "estDifference"
+  >("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const prevMonth = previousMonth(month);
   const prevYearMonthValue = previousYearMonth(month);
 
@@ -5153,21 +5165,79 @@ function EstQuickEntry({
   }, [sales, month, prevYearMonthValue]);
 
   const rows = useMemo(() => {
+    const statusOrder: Record<Store["status"], number> = {
+      거래중: 0,
+      거래중단: 1,
+      거래종료: 2,
+    };
+
+    const getSortValue = (store: Store): string | number => {
+      const prevYearSales = prevYearSalesMap.get(store.code) || 0;
+      const prevSales = prevSalesMap.get(store.code) || 0;
+      const prevEst = prevEstMap.get(store.code) || 0;
+      const est = estMap.get(store.code) || 0;
+
+      switch (sortKey) {
+        case "manager":
+          return store.manager || "";
+        case "channel":
+          return store.storeType === "매장" ? "매장" : "비매장";
+        case "status":
+          return statusOrder[store.status];
+        case "prevYearSales":
+          return prevYearSales;
+        case "prevSales":
+          return prevSales;
+        case "prevEst":
+          return prevEst;
+        case "prevEstRate":
+          return prevEst ? (prevSales / prevEst) * 100 : -1;
+        case "est":
+          return est;
+        case "estDifference":
+          return est - prevEst;
+        case "name":
+        default:
+          return store.name || "";
+      }
+    };
+
     return stores
       .filter((store) => {
         if (statusView === "active") return store.status === "거래중";
-        if (statusView === "activeAndPaused") return store.status !== "거래종료";
-        return true;
+        if (statusView === "paused") return store.status === "거래중단";
+        return store.status === "거래종료";
       })
       .filter((store) => EST_ENTRY_MANAGERS.includes(store.manager))
       .filter((store) => store.manager === selectedManager)
       .filter((store) => {
-        if (!normalizedSearch) return true;
-        return [store.code, store.name, store.brand, store.channel, store.storeType, store.status]
-          .some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
+        if (channelView === "store") return store.storeType === "매장";
+        if (channelView === "nonStore") return store.storeType !== "매장";
+        return true;
       })
-      .sort((a, b) => a.name.localeCompare(b.name, "ko-KR", { numeric: true }));
-  }, [stores, selectedManager, normalizedSearch, statusView]);
+      .sort((a, b) => {
+        const av = getSortValue(a);
+        const bv = getSortValue(b);
+        const direction = sortDirection === "asc" ? 1 : -1;
+
+        if (typeof av === "number" && typeof bv === "number") {
+          return (av - bv) * direction;
+        }
+
+        return String(av).localeCompare(String(bv), "ko-KR", { numeric: true }) * direction;
+      });
+  }, [
+    stores,
+    selectedManager,
+    statusView,
+    channelView,
+    sortKey,
+    sortDirection,
+    prevYearSalesMap,
+    prevSalesMap,
+    prevEstMap,
+    estMap,
+  ]);
 
   const allEntryStores = useMemo(
     () =>
@@ -5196,6 +5266,20 @@ function EstQuickEntry({
       .reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0),
   }));
   const canEditTarget = canEdit && (isAdmin || selectedManager === "SY");
+
+  const handleSort = (key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
+  };
+
+  const sortMark = (key: typeof sortKey) => {
+    if (sortKey !== key) return "↕";
+    return sortDirection === "asc" ? "↑" : "↓";
+  };
 
   const updateEst = (store: Store, amount: number) => {
     if (!canEdit) return;
@@ -5239,48 +5323,32 @@ function EstQuickEntry({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              {EST_ENTRY_MANAGERS.map((manager) => (
-                <button
-                  key={manager}
-                  type="button"
-                  onClick={() => setSelectedManager(manager)}
-                  className={`rounded-xl px-4 py-2 text-sm font-bold ${
-                    selectedManager === manager
-                      ? "bg-orange-500 text-white shadow"
-                      : "bg-orange-50 text-orange-900 hover:bg-orange-100"
-                  }`}
-                >
-                  {manager}
-                </button>
-              ))}
-            </div>
-          </div>
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+      <aside className="w-full shrink-0 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm lg:w-[116px]">
+        <div className="border-b border-slate-200 bg-slate-50 px-3 py-3 text-center text-xs font-extrabold text-slate-700">
+          담당자
+        </div>
+        <div className="flex gap-2 p-2 lg:flex-col">
+          {EST_ENTRY_MANAGERS.map((manager) => (
+            <button
+              key={manager}
+              type="button"
+              onClick={() => setSelectedManager(manager)}
+              className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-extrabold transition lg:w-full ${
+                selectedManager === manager
+                  ? "bg-orange-500 text-white shadow-sm"
+                  : "bg-white text-slate-700 hover:bg-orange-50 hover:text-orange-800"
+              }`}
+            >
+              {manager}
+            </button>
+          ))}
+        </div>
+      </aside>
 
-          <div className="flex flex-wrap items-start justify-end gap-3">
-            <div className="flex items-center gap-2">
-              <select
-                value={statusView}
-                onChange={(e) => setStatusView(e.target.value as "active" | "activeAndPaused" | "all")}
-                className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
-                aria-label="거래상태 표시 범위"
-              >
-                <option value="active">거래중만 보기</option>
-                <option value="activeAndPaused">거래중단 포함</option>
-                <option value="all">거래종료 포함</option>
-              </select>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="거래처명/코드/채널/상태 검색"
-                className="h-9 w-[220px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
-              />
-            </div>
-
+      <div className="min-w-0 flex-1 space-y-4">
+        <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-stretch justify-end gap-3">
             <div className="min-w-[310px] overflow-hidden rounded-xl border border-amber-200 bg-[#FFFDF2] shadow-sm">
               <div className="border-b border-amber-200 bg-[#FFF8D9] px-4 py-2 text-center text-[13px] font-extrabold text-slate-900">
                 EST 입력 합계
@@ -5298,12 +5366,12 @@ function EstQuickEntry({
             </div>
 
             {selectedManager === "SY" && (
-              <div className="w-[390px] max-w-full shrink-0 overflow-hidden rounded-xl border border-violet-200 bg-[#F7F4FF] shadow-sm">
+              <div className="w-[330px] max-w-full shrink-0 overflow-hidden rounded-xl border border-violet-200 bg-[#F7F4FF] shadow-sm">
                 <div className="border-b border-violet-200 bg-[#EEE8FF] px-4 py-2 text-center text-[13px] font-extrabold text-violet-950">
                   Target 입력
                 </div>
                 <div className="grid grid-cols-2 divide-x divide-violet-200">
-                  <label className="px-4 py-2.5 text-center text-[12px] font-bold text-violet-950">
+                  <label className="px-3 py-2.5 text-center text-[12px] font-bold text-violet-950">
                     매장 Target
                     <input
                       type="text"
@@ -5312,10 +5380,10 @@ function EstQuickEntry({
                       value={targetByType.store ? won(targetByType.store) : ""}
                       onChange={(e) => updateTargetByType("매장", num(e.target.value))}
                       placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                      className="mt-1 h-8 w-full rounded-lg border border-violet-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
+                      className="mt-1 h-8 w-full min-w-0 rounded-lg border border-violet-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
                     />
                   </label>
-                  <label className="px-4 py-2.5 text-center text-[12px] font-bold text-violet-950">
+                  <label className="px-3 py-2.5 text-center text-[12px] font-bold text-violet-950">
                     비매장 Target
                     <input
                       type="text"
@@ -5324,122 +5392,191 @@ function EstQuickEntry({
                       value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
                       onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
                       placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                      className="mt-1 h-8 w-full rounded-lg border border-violet-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
+                      className="mt-1 h-8 w-full min-w-0 rounded-lg border border-violet-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
                     />
                   </label>
                 </div>
               </div>
             )}
           </div>
-        </div>
-      </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-        <div className="max-h-[68vh] overflow-auto isolate">
-          <table className="w-full min-w-[1580px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
-            <thead>
-              <tr className="bg-slate-100">
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처명</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">담당자</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">채널</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래상태</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">전년동월 매출</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">전월 매출</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2 text-[14px] font-bold text-black">전월 EST</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2 text-[14px] font-bold text-black">전월 EST 달성률</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">{month} EST 입력</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">전월 EST 대비 차이</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((store) => {
-                const value = estMap.get(store.code) || 0;
-                const prevYearSales = prevYearSalesMap.get(store.code) || 0;
-                const prevSales = prevSalesMap.get(store.code) || 0;
-                const prevEst = prevEstMap.get(store.code) || 0;
-                const prevEstRate = prevEst ? (prevSales / prevEst) * 100 : 0;
-                const estDifference = Number(value || 0) - Number(prevEst || 0);
-                const isCriticalRate = Boolean(prevEst && prevEstRate < 30);
-                const rateTone = !prevEst
-                  ? "bg-slate-100 text-slate-500 ring-slate-200"
-                  : isCriticalRate
-                    ? "bg-red-600 text-white ring-red-300 shadow-red-300 animate-pulse"
-                    : prevEstRate > 120
-                      ? "bg-yellow-100 text-yellow-900 ring-yellow-300"
-                      : prevEstRate >= 80
-                        ? "bg-emerald-100 text-emerald-800 ring-emerald-300"
-                        : "bg-slate-100 text-slate-700 ring-slate-200";
-                const differenceTone = estDifference > 0
-                  ? "text-emerald-700 bg-emerald-50"
-                  : estDifference < 0
-                    ? "text-red-600 bg-red-50"
-                    : "text-slate-500 bg-slate-50";
-                return (
-                  <tr key={store.code} className="hover:bg-orange-50/60">
-                    <td className="border border-slate-300 px-3 py-2 text-center font-semibold text-slate-900">{store.name}</td>
-                    <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{store.manager}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.storeType === "매장" ? "매장" : "비매장"}</td>
-                    <td className="border border-slate-300 px-3 py-2">
-                      <select
-                        value={store.status}
-                        disabled={!canEdit}
-                        onChange={(e) => updateStoreStatus(store, e.target.value as Store["status"])}
-                        className={`h-8 min-w-[106px] rounded-lg border px-2 text-xs font-extrabold outline-none disabled:opacity-70 ${
-                          store.status === "거래중"
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                            : store.status === "거래중단"
-                              ? "border-amber-200 bg-amber-50 text-amber-900"
-                              : "border-slate-300 bg-slate-100 text-slate-700"
-                        }`}
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-extrabold text-slate-600">채널</span>
+              <select
+                value={channelView}
+                onChange={(e) => setChannelView(e.target.value as "all" | "store" | "nonStore")}
+                className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-orange-400"
+                aria-label="매장 비매장 채널 필터"
+              >
+                <option value="all">전체 채널</option>
+                <option value="store">매장</option>
+                <option value="nonStore">비매장</option>
+              </select>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-extrabold text-slate-600">거래상태</span>
+              <button
+                type="button"
+                onClick={() => setStatusView("active")}
+                className={`h-9 rounded-lg border bg-white px-3 text-xs font-extrabold text-black transition ${
+                  statusView === "active" ? "border-black ring-1 ring-black" : "border-slate-300 hover:border-slate-500"
+                }`}
+              >
+                거래중
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusView("paused")}
+                className={`h-9 rounded-lg border bg-white px-3 text-xs font-extrabold text-blue-600 transition ${
+                  statusView === "paused" ? "border-blue-500 ring-1 ring-blue-500" : "border-slate-300 hover:border-blue-300"
+                }`}
+              >
+                거래중지
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusView("ended")}
+                className={`h-9 rounded-lg border bg-white px-3 text-xs font-extrabold text-red-600 transition ${
+                  statusView === "ended" ? "border-red-500 ring-1 ring-red-500" : "border-slate-300 hover:border-red-300"
+                }`}
+              >
+                거래종료
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+          <div className="max-h-[68vh] overflow-auto isolate">
+            <table className="w-full min-w-[1580px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+              <thead>
+                <tr className="bg-slate-100">
+                  {[
+                    ["name", "거래처명", "bg-slate-100"],
+                    ["manager", "담당자", "bg-slate-100"],
+                    ["channel", "채널", "bg-slate-100"],
+                    ["status", "거래상태", "bg-slate-100"],
+                    ["prevYearSales", "전년동월 매출", "bg-[#F7FCEB]"],
+                    ["prevSales", "전월 매출", "bg-[#F3FAFD]"],
+                    ["prevEst", "전월 EST", "bg-[#F3FAFD]"],
+                    ["prevEstRate", "전월 EST 달성률", "bg-[#F3FAFD]"],
+                    ["est", `${month} EST 입력`, "bg-yellow-100"],
+                    ["estDifference", "전월 EST 대비 차이", "bg-yellow-100"],
+                  ].map(([key, label, background]) => (
+                    <th
+                      key={key}
+                      className={`sticky top-0 z-20 border border-slate-300 px-3 py-2 font-bold text-black ${background}`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleSort(key as typeof sortKey)}
+                        className="inline-flex w-full items-center justify-center gap-1.5 whitespace-nowrap hover:text-orange-700"
+                        title={`${label} 정렬`}
                       >
-                        <option value="거래중">거래중</option>
-                        <option value="거래중단">거래중단</option>
-                        {isAdmin && <option value="거래종료">거래종료</option>}
-                      </select>
-                    </td>
-                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevYearSales)}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevSales)}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevEst)}</td>
-                    <td className="border border-slate-300 px-3 py-2">
-                      <span
-                        className={`inline-flex min-w-[86px] justify-center rounded-full px-3 py-1.5 text-xs font-extrabold ring-2 shadow-sm ${rateTone}`}
-                        style={isCriticalRate ? { animationDuration: "0.65s" } : undefined}
-                      >
-                        {isCriticalRate ? "🚨 " : ""}{prevEst ? pct(prevEstRate) : "-"}
-                      </span>
-                    </td>
-                    <td className="border border-slate-300 px-3 py-2">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        disabled={!canEdit}
-                        value={value ? won(value) : ""}
-                        onChange={(e) => updateEst(store, num(e.target.value))}
-                        placeholder="0"
-                        className="h-9 w-full min-w-[150px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
-                      />
-                    </td>
-                    <td className={`border border-slate-300 px-3 py-2 text-right font-extrabold ${differenceTone}`}>
-                      {value || prevEst
-                        ? `${estDifference > 0 ? "+" : ""}${won(estDifference)}`
-                        : "-"}
+                        <span className={key === "prevEst" || key === "prevEstRate" || key === "est" || key === "estDifference" ? "text-[14px]" : ""}>
+                          {label}
+                        </span>
+                        <span className={`text-[11px] ${sortKey === key ? "text-orange-600" : "text-slate-400"}`}>
+                          {sortMark(key as typeof sortKey)}
+                        </span>
+                      </button>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((store) => {
+                  const value = estMap.get(store.code) || 0;
+                  const prevYearSales = prevYearSalesMap.get(store.code) || 0;
+                  const prevSales = prevSalesMap.get(store.code) || 0;
+                  const prevEst = prevEstMap.get(store.code) || 0;
+                  const prevEstRate = prevEst ? (prevSales / prevEst) * 100 : 0;
+                  const estDifference = Number(value || 0) - Number(prevEst || 0);
+                  const isCriticalRate = Boolean(prevEst && prevEstRate < 30);
+                  const rateTone = !prevEst
+                    ? "bg-slate-100 text-slate-500 ring-slate-200"
+                    : isCriticalRate
+                      ? "bg-red-600 text-white ring-red-300 shadow-red-300 animate-pulse"
+                      : prevEstRate > 120
+                        ? "bg-yellow-100 text-yellow-900 ring-yellow-300"
+                        : prevEstRate >= 80
+                          ? "bg-emerald-100 text-emerald-800 ring-emerald-300"
+                          : "bg-slate-100 text-slate-700 ring-slate-200";
+                  const differenceTone = estDifference > 0
+                    ? "text-emerald-700 bg-emerald-50"
+                    : estDifference < 0
+                      ? "text-red-600 bg-red-50"
+                      : "text-slate-500 bg-slate-50";
+                  return (
+                    <tr key={store.code} className="hover:bg-orange-50/60">
+                      <td className="border border-slate-300 px-3 py-2 text-center font-semibold text-slate-900">{store.name}</td>
+                      <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{store.manager}</td>
+                      <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.storeType === "매장" ? "매장" : "비매장"}</td>
+                      <td className="border border-slate-300 px-3 py-2">
+                        <select
+                          value={store.status}
+                          disabled={!canEdit}
+                          onChange={(e) => updateStoreStatus(store, e.target.value as Store["status"])}
+                          className={`h-8 min-w-[106px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-extrabold outline-none disabled:opacity-70 ${
+                            store.status === "거래중"
+                              ? "text-black"
+                              : store.status === "거래중단"
+                                ? "text-blue-600"
+                                : "text-red-600"
+                          }`}
+                        >
+                          <option value="거래중">거래중</option>
+                          <option value="거래중단">거래중지</option>
+                          {isAdmin && <option value="거래종료">거래종료</option>}
+                        </select>
+                      </td>
+                      <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevYearSales)}</td>
+                      <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevSales)}</td>
+                      <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevEst)}</td>
+                      <td className="border border-slate-300 px-3 py-2">
+                        <span
+                          className={`inline-flex min-w-[86px] justify-center rounded-full px-3 py-1.5 text-xs font-extrabold ring-2 shadow-sm ${rateTone}`}
+                          style={isCriticalRate ? { animationDuration: "0.65s" } : undefined}
+                        >
+                          {isCriticalRate ? "🚨 " : ""}{prevEst ? pct(prevEstRate) : "-"}
+                        </span>
+                      </td>
+                      <td className="border border-slate-300 px-3 py-2">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          disabled={!canEdit}
+                          value={value ? won(value) : ""}
+                          onChange={(e) => updateEst(store, num(e.target.value))}
+                          placeholder="0"
+                          className="h-9 w-full min-w-[150px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                        />
+                      </td>
+                      <td className={`border border-slate-300 px-3 py-2 text-right font-extrabold ${differenceTone}`}>
+                        {value || prevEst
+                          ? `${estDifference > 0 ? "+" : ""}${won(estDifference)}`
+                          : "-"}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!rows.length && (
+                  <tr>
+                    <td colSpan={10} className="border border-slate-300 p-8 text-center text-slate-500">
+                      선택한 담당자·채널·거래상태에 해당하는 거래처가 없습니다.
                     </td>
                   </tr>
-                );
-              })}
-              {!rows.length && (
-                <tr>
-                  <td colSpan={10} className="border border-slate-300 p-8 text-center text-slate-500">
-                    표시할 거래처가 없습니다.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
   );
+
 }
 
 function ItemCostStatus({
