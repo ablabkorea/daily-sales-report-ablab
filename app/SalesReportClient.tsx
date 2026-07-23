@@ -37,7 +37,7 @@ type Store = {
   manager: Manager;
   storeType: StoreType;
   brand: string;
-  status: "거래중" | "거래종료";
+  status: "거래중" | "거래중단" | "거래종료";
 };
 
 type StoreCodeMapping = {
@@ -3456,14 +3456,23 @@ function displayBrand(v: unknown) {
 
 function normalizeStatus(v: unknown): Store["status"] {
   const t = norm(v);
-  return t === "종료" ||
+  const lower = t.toLowerCase();
+  if (
+    t === "종료" ||
     t === "거래종료" ||
     t === "비활성" ||
     t === "비활성화" ||
-    t.toLowerCase() === "inactive" ||
-    t.toLowerCase() === "closed"
-    ? "거래종료"
-    : "거래중";
+    lower === "inactive" ||
+    lower === "closed"
+  ) return "거래종료";
+  if (
+    t === "중단" ||
+    t === "거래중단" ||
+    t === "일시중단" ||
+    lower === "paused" ||
+    lower === "suspended"
+  ) return "거래중단";
+  return "거래중";
 }
 
 function normalizeChannel(v: unknown) {
@@ -4945,6 +4954,7 @@ export default function SalesReportClient() {
         {active === "EST 입력" && (
           <EstQuickEntry
             stores={stores}
+            setStores={setStores}
             sales={sales}
             ests={ests}
             setEsts={setEsts}
@@ -5034,6 +5044,7 @@ export default function SalesReportClient() {
 
 function EstQuickEntry({
   stores,
+  setStores,
   sales,
   ests,
   setEsts,
@@ -5044,6 +5055,7 @@ function EstQuickEntry({
   isAdmin,
 }: {
   stores: Store[];
+  setStores: (v: Store[]) => void;
   sales: SalesRecord[];
   ests: EstRecord[];
   setEsts: React.Dispatch<React.SetStateAction<EstRecord[]>>;
@@ -5055,6 +5067,7 @@ function EstQuickEntry({
 }) {
   const [selectedManager, setSelectedManager] = useState<Manager>("SY");
   const [search, setSearch] = useState("");
+  const [statusView, setStatusView] = useState<"active" | "activeAndPaused" | "all">("activeAndPaused");
   const normalizedSearch = search.trim().toLowerCase();
   const prevMonth = previousMonth(month);
   const prevYearMonthValue = previousYearMonth(month);
@@ -5141,16 +5154,20 @@ function EstQuickEntry({
 
   const rows = useMemo(() => {
     return stores
-      .filter((store) => store.status !== "거래종료")
+      .filter((store) => {
+        if (statusView === "active") return store.status === "거래중";
+        if (statusView === "activeAndPaused") return store.status !== "거래종료";
+        return true;
+      })
       .filter((store) => EST_ENTRY_MANAGERS.includes(store.manager))
       .filter((store) => store.manager === selectedManager)
       .filter((store) => {
         if (!normalizedSearch) return true;
-        return [store.code, store.name, store.brand, store.channel, store.storeType]
+        return [store.code, store.name, store.brand, store.channel, store.storeType, store.status]
           .some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
       })
       .sort((a, b) => a.name.localeCompare(b.name, "ko-KR", { numeric: true }));
-  }, [stores, selectedManager, normalizedSearch]);
+  }, [stores, selectedManager, normalizedSearch, statusView]);
 
   const allEntryStores = useMemo(
     () =>
@@ -5193,6 +5210,12 @@ function EstQuickEntry({
       }
       return [...prev, { storeCode: store.code, storeName: store.name, month, amount }];
     });
+  };
+
+  const updateStoreStatus = (store: Store, status: Store["status"]) => {
+    if (!canEdit) return;
+    if (!isAdmin && status === "거래종료") return;
+    setStores(stores.map((row) => row.code === store.code ? { ...row, status } : row));
   };
 
   const updateTargetByType = (storeType: StoreType, amount: number) => {
@@ -5239,12 +5262,24 @@ function EstQuickEntry({
           </div>
 
           <div className="flex flex-wrap items-start justify-end gap-3">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="거래처명/코드/채널 검색"
-              className="h-9 w-[240px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
-            />
+            <div className="flex items-center gap-2">
+              <select
+                value={statusView}
+                onChange={(e) => setStatusView(e.target.value as "active" | "activeAndPaused" | "all")}
+                className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                aria-label="거래상태 표시 범위"
+              >
+                <option value="active">거래중만 보기</option>
+                <option value="activeAndPaused">거래중단 포함</option>
+                <option value="all">거래종료 포함</option>
+              </select>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="거래처명/코드/채널/상태 검색"
+                className="h-9 w-[220px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
+              />
+            </div>
 
             <div className="min-w-[310px] overflow-hidden rounded-xl border border-amber-200 bg-[#FFFDF2] shadow-sm">
               <div className="border-b border-amber-200 bg-[#FFF8D9] px-4 py-2 text-center text-[13px] font-extrabold text-slate-900">
@@ -5263,7 +5298,7 @@ function EstQuickEntry({
             </div>
 
             {selectedManager === "SY" && (
-              <div className="min-w-[310px] overflow-hidden rounded-xl border border-violet-200 bg-[#F7F4FF] shadow-sm">
+              <div className="w-[390px] max-w-full shrink-0 overflow-hidden rounded-xl border border-violet-200 bg-[#F7F4FF] shadow-sm">
                 <div className="border-b border-violet-200 bg-[#EEE8FF] px-4 py-2 text-center text-[13px] font-extrabold text-violet-950">
                   Target 입력
                 </div>
@@ -5301,12 +5336,13 @@ function EstQuickEntry({
 
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="max-h-[68vh] overflow-auto isolate">
-          <table className="w-full min-w-[1450px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+          <table className="w-full min-w-[1580px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처명</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">담당자</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">채널</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래상태</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">전년동월 매출</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">전월 매출</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2 text-[14px] font-bold text-black">전월 EST</th>
@@ -5343,6 +5379,24 @@ function EstQuickEntry({
                     <td className="border border-slate-300 px-3 py-2 text-center font-semibold text-slate-900">{store.name}</td>
                     <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{store.manager}</td>
                     <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.storeType === "매장" ? "매장" : "비매장"}</td>
+                    <td className="border border-slate-300 px-3 py-2">
+                      <select
+                        value={store.status}
+                        disabled={!canEdit}
+                        onChange={(e) => updateStoreStatus(store, e.target.value as Store["status"])}
+                        className={`h-8 min-w-[106px] rounded-lg border px-2 text-xs font-extrabold outline-none disabled:opacity-70 ${
+                          store.status === "거래중"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                            : store.status === "거래중단"
+                              ? "border-amber-200 bg-amber-50 text-amber-900"
+                              : "border-slate-300 bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        <option value="거래중">거래중</option>
+                        <option value="거래중단">거래중단</option>
+                        {isAdmin && <option value="거래종료">거래종료</option>}
+                      </select>
+                    </td>
                     <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevYearSales)}</td>
                     <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevSales)}</td>
                     <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevEst)}</td>
@@ -5375,7 +5429,7 @@ function EstQuickEntry({
               })}
               {!rows.length && (
                 <tr>
-                  <td colSpan={9} className="border border-slate-300 p-8 text-center text-slate-500">
+                  <td colSpan={10} className="border border-slate-300 p-8 text-center text-slate-500">
                     표시할 거래처가 없습니다.
                   </td>
                 </tr>
@@ -10752,13 +10806,14 @@ function StoreListManagement({
   type ListTab = "기존거래처 리스트" | "전년동월 리스트" | "총 거래처 리스트" | "기타 관리";
   const [listTab, setListTab] = useState<ListTab>("기존거래처 리스트");
   const [search, setSearch] = useState("");
-  const [otherTab, setOtherTab] = useState<"담당자 관리" | "브랜드 관리" | "채널 관리">("담당자 관리");
+  const [otherTab, setOtherTab] = useState<"담당자 관리" | "브랜드 관리" | "채널 관리" | "거래상태 관리">("담당자 관리");
   const [channelTab, setChannelTab] = useState<"채널 1" | "채널 2">("채널 1");
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
   const [bulkManager, setBulkManager] = useState("");
   const [bulkBrand, setBulkBrand] = useState("");
   const [bulkChannel1, setBulkChannel1] = useState("");
   const [bulkChannel2, setBulkChannel2] = useState<"" | "매장" | "비매장">("");
+  const [bulkStatus, setBulkStatus] = useState<"" | Store["status"]>("");
   const [newManager, setNewManager] = useState("");
   const [newChannel1, setNewChannel1] = useState("");
   const [showNewOnly, setShowNewOnly] = useState(false);
@@ -11076,18 +11131,20 @@ function StoreListManagement({
     });
   }
 
-  function applyBulkChange(field: "manager" | "brand" | "channel" | "storeType") {
+  function applyBulkChange(field: "manager" | "brand" | "channel" | "storeType" | "status") {
     const rawValue = field === "manager"
       ? bulkManager
       : field === "brand"
         ? bulkBrand
         : field === "channel"
           ? bulkChannel1
-          : bulkChannel2;
+          : field === "storeType"
+            ? bulkChannel2
+            : bulkStatus;
     const value = field === "manager" ? normalizeManager(rawValue) : rawValue.trim();
     if (!selectedCodes.size) return alert("수정할 거래처를 먼저 선택해주세요.");
     if (!value) return alert("변경할 값을 선택하거나 입력해주세요.");
-    const label = field === "manager" ? "담당자" : field === "brand" ? "브랜드" : field === "channel" ? "채널 1" : "채널 2";
+    const label = field === "manager" ? "담당자" : field === "brand" ? "브랜드" : field === "channel" ? "채널 1" : field === "storeType" ? "채널 2" : "거래상태";
     if (!window.confirm(`선택한 ${selectedCodes.size.toLocaleString("ko-KR")}개 거래처의 ${label}를 '${value}'(으)로 일괄 변경할까요?`)) return;
     const nextStores = totalRows.map((row) => selectedCodes.has(row.code) ? { ...row, [field]: value } : row);
     setStores(nextStores);
@@ -11173,7 +11230,7 @@ function StoreListManagement({
         <div className="space-y-1">
           {(section === "list"
             ? (["기존거래처 리스트", "전년동월 리스트", "총 거래처 리스트"] as const)
-            : (["담당자 관리", "브랜드 관리", "채널 관리"] as const)
+            : (["담당자 관리", "브랜드 관리", "채널 관리", "거래상태 관리"] as const)
           ).map((menu) => {
             const active = section === "list" ? listTab === menu : otherTab === menu;
             return (
@@ -11264,6 +11321,18 @@ function StoreListManagement({
                     )}
                   </>
                 )}
+                {otherTab === "거래상태 관리" && (
+                  <>
+                    <select value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value as "" | Store["status"])} className="h-8 min-w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold">
+                      <option value="">거래상태 선택</option>
+                      <option value="거래중">거래중</option>
+                      <option value="거래중단">거래중단</option>
+                      <option value="거래종료">거래종료</option>
+                    </select>
+                    <button type="button" onClick={() => applyBulkChange("status")} className="h-8 rounded-lg bg-violet-600 px-3 text-xs font-bold text-white">거래상태 일괄 수정</button>
+                    <span className="text-[11px] font-semibold text-slate-500">EST 입력 화면과 동일한 거래상태를 사용합니다.</span>
+                  </>
+                )}
               </div>
             </>
           )}
@@ -11347,7 +11416,7 @@ function StoreListManagement({
                     <td className="border border-slate-300 px-3 py-2">{row.channel}</td>
                     <td className="border border-slate-300 px-3 py-2">{row.storeType}</td>
                     <td className="border border-slate-300 px-3 py-2 text-left">{row.brand}</td>
-                    <td className="border border-slate-300 px-3 py-2"><span className={`rounded-full px-3 py-1 font-bold ${row.status === "거래중" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>{row.status}</span></td>
+                    <td className="border border-slate-300 px-3 py-2"><span className={`rounded-full px-3 py-1 font-bold ${row.status === "거래중" ? "bg-emerald-100 text-emerald-800" : row.status === "거래중단" ? "bg-amber-100 text-amber-900" : "bg-slate-200 text-slate-700"}`}>{row.status}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -11402,7 +11471,7 @@ function StoreListManagement({
                       <td className="border border-slate-300 px-3 py-2">{row.channel}</td>
                       <td className="border border-slate-300 px-3 py-2">{row.storeType}</td>
                       <td className="border border-slate-300 px-3 py-2">
-                        <span className={`rounded-full px-3 py-1 font-bold ${row.status === "거래중" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>
+                        <span className={`rounded-full px-3 py-1 font-bold ${row.status === "거래중" ? "bg-emerald-100 text-emerald-800" : row.status === "거래중단" ? "bg-amber-100 text-amber-900" : "bg-slate-200 text-slate-700"}`}>
                           {row.status}
                         </span>
                       </td>
