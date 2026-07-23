@@ -5263,12 +5263,12 @@ function EstQuickEntry({
             </div>
 
             {selectedManager === "SY" && (
-              <div className="min-w-[270px] overflow-hidden rounded-xl border border-sky-200 bg-sky-50 shadow-sm">
-                <div className="border-b border-sky-200 bg-sky-100 px-3 py-1 text-center text-[12px] font-extrabold text-sky-950">
+              <div className="min-w-[310px] overflow-hidden rounded-xl border border-violet-200 bg-[#F7F4FF] shadow-sm">
+                <div className="border-b border-violet-200 bg-[#EEE8FF] px-4 py-2 text-center text-[13px] font-extrabold text-violet-950">
                   Target 입력
                 </div>
-                <div className="grid grid-cols-2 divide-x divide-sky-200">
-                  <label className="px-2.5 py-1.5 text-center text-[12px] font-bold text-sky-950">
+                <div className="grid grid-cols-2 divide-x divide-violet-200">
+                  <label className="px-4 py-2.5 text-center text-[12px] font-bold text-violet-950">
                     매장 Target
                     <input
                       type="text"
@@ -5277,10 +5277,10 @@ function EstQuickEntry({
                       value={targetByType.store ? won(targetByType.store) : ""}
                       onChange={(e) => updateTargetByType("매장", num(e.target.value))}
                       placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                      className="mt-1 h-7 w-full rounded-lg border border-sky-200 bg-white px-2 text-right text-[12px] font-extrabold text-slate-900 outline-none focus:border-sky-500 disabled:bg-slate-100 disabled:text-slate-500"
+                      className="mt-1 h-8 w-full rounded-lg border border-violet-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
                     />
                   </label>
-                  <label className="px-2.5 py-1.5 text-center text-[12px] font-bold text-sky-950">
+                  <label className="px-4 py-2.5 text-center text-[12px] font-bold text-violet-950">
                     비매장 Target
                     <input
                       type="text"
@@ -5289,7 +5289,7 @@ function EstQuickEntry({
                       value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
                       onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
                       placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                      className="mt-1 h-7 w-full rounded-lg border border-sky-200 bg-white px-2 text-right text-[12px] font-extrabold text-slate-900 outline-none focus:border-sky-500 disabled:bg-slate-100 disabled:text-slate-500"
+                      className="mt-1 h-8 w-full rounded-lg border border-violet-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
                     />
                   </label>
                 </div>
