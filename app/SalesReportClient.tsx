@@ -5249,6 +5249,23 @@ function EstQuickEntry({
     [stores],
   );
 
+  const managerInfo = useMemo(() => {
+    const managerStores = stores.filter(
+      (store) =>
+        EST_ENTRY_MANAGERS.includes(store.manager) &&
+        store.manager === selectedManager,
+    );
+
+    return {
+      total: managerStores.length,
+      store: managerStores.filter((store) => store.storeType === "매장").length,
+      nonStore: managerStores.filter((store) => store.storeType !== "매장").length,
+      active: managerStores.filter((store) => store.status === "거래중").length,
+      paused: managerStores.filter((store) => store.status === "거래중단").length,
+      ended: managerStores.filter((store) => store.status === "거래종료").length,
+    };
+  }, [stores, selectedManager]);
+
   const totalEst = rows.reduce(
     (total, store) => total + Number(estMap.get(store.code) || 0),
     0,
@@ -5324,7 +5341,7 @@ function EstQuickEntry({
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-      <aside className="w-full shrink-0 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm lg:w-[116px]">
+      <aside className="w-full shrink-0 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm lg:w-[176px]">
         <div className="border-b border-slate-200 bg-slate-50 px-3 py-3 text-center text-xs font-extrabold text-slate-700">
           담당자
         </div>
@@ -5344,106 +5361,145 @@ function EstQuickEntry({
             </button>
           ))}
         </div>
+
+        <div className="border-t border-slate-200 bg-slate-50/70 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-extrabold text-slate-700">담당자 정보</span>
+            <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-black text-orange-700">
+              {selectedManager}
+            </span>
+          </div>
+          <div className="space-y-1.5 rounded-xl border border-slate-200 bg-white p-3 text-[12px] shadow-sm">
+            <div className="flex items-center justify-between font-bold text-slate-700">
+              <span>전체 거래처</span>
+              <span className="font-black text-slate-900">{won(managerInfo.total)}</span>
+            </div>
+            <div className="h-px bg-slate-100" />
+            <div className="flex items-center justify-between text-slate-600">
+              <span>매장</span>
+              <span className="font-extrabold text-slate-900">{won(managerInfo.store)}</span>
+            </div>
+            <div className="flex items-center justify-between text-slate-600">
+              <span>비매장</span>
+              <span className="font-extrabold text-slate-900">{won(managerInfo.nonStore)}</span>
+            </div>
+            <div className="h-px bg-slate-100" />
+            <div className="flex items-center justify-between text-slate-600">
+              <span className="text-black">거래중</span>
+              <span className="font-extrabold text-black">{won(managerInfo.active)}</span>
+            </div>
+            <div className="flex items-center justify-between text-blue-600">
+              <span>거래중지</span>
+              <span className="font-extrabold">{won(managerInfo.paused)}</span>
+            </div>
+            <div className="flex items-center justify-between text-red-600">
+              <span>거래종료</span>
+              <span className="font-extrabold">{won(managerInfo.ended)}</span>
+            </div>
+          </div>
+        </div>
       </aside>
 
       <div className="min-w-0 flex-1 space-y-4">
-        <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-stretch justify-end gap-3">
-            <div className="min-w-[310px] overflow-hidden rounded-xl border border-amber-200 bg-[#FFFDF2] shadow-sm">
-              <div className="border-b border-amber-200 bg-[#FFF8D9] px-4 py-2 text-center text-[13px] font-extrabold text-slate-900">
-                EST 입력 합계
-              </div>
-              <div className="grid grid-cols-2 divide-x divide-amber-200">
-                <div className="px-4 py-2.5 text-center">
-                  <div className="text-[12px] font-bold text-slate-600">매장 EST</div>
-                  <div className="mt-1 text-[18px] font-black text-slate-900">{won(storeEstTotal)}</div>
+        <div className="rounded-2xl border border-slate-300 bg-white p-3 shadow-sm">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+            <div className="flex flex-wrap items-stretch gap-3">
+              <div className="min-w-[310px] overflow-hidden rounded-xl border border-amber-200 bg-[#FFFDF2] shadow-sm">
+                <div className="border-b border-amber-200 bg-[#FFF8D9] px-4 py-2 text-center text-[13px] font-extrabold text-slate-900">
+                  EST 입력 합계
                 </div>
-                <div className="px-4 py-2.5 text-center">
-                  <div className="text-[12px] font-bold text-slate-600">비매장 EST</div>
-                  <div className="mt-1 text-[18px] font-black text-slate-900">{won(nonStoreEstTotal)}</div>
+                <div className="grid grid-cols-2 divide-x divide-amber-200">
+                  <div className="px-4 py-2.5 text-center">
+                    <div className="text-[12px] font-bold text-slate-600">매장 EST</div>
+                    <div className="mt-1 text-[18px] font-black text-slate-900">{won(storeEstTotal)}</div>
+                  </div>
+                  <div className="px-4 py-2.5 text-center">
+                    <div className="text-[12px] font-bold text-slate-600">비매장 EST</div>
+                    <div className="mt-1 text-[18px] font-black text-slate-900">{won(nonStoreEstTotal)}</div>
+                  </div>
                 </div>
               </div>
+
+              {selectedManager === "SY" && (
+                <div className="w-[330px] max-w-full shrink-0 overflow-hidden rounded-xl border border-violet-200 bg-[#F7F4FF] shadow-sm">
+                  <div className="border-b border-violet-200 bg-[#EEE8FF] px-4 py-2 text-center text-[13px] font-extrabold text-violet-950">
+                    Target 입력
+                  </div>
+                  <div className="grid grid-cols-2 divide-x divide-violet-200">
+                    <label className="px-3 py-2.5 text-center text-[12px] font-bold text-violet-950">
+                      매장 Target
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        disabled={!canEditTarget}
+                        value={targetByType.store ? won(targetByType.store) : ""}
+                        onChange={(e) => updateTargetByType("매장", num(e.target.value))}
+                        placeholder={canEditTarget ? "0" : "입력 기간 종료"}
+                        className="mt-1 h-8 w-full min-w-0 rounded-lg border border-violet-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
+                      />
+                    </label>
+                    <label className="px-3 py-2.5 text-center text-[12px] font-bold text-violet-950">
+                      비매장 Target
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        disabled={!canEditTarget}
+                        value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
+                        onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
+                        placeholder={canEditTarget ? "0" : "입력 기간 종료"}
+                        className="mt-1 h-8 w-full min-w-0 rounded-lg border border-violet-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {selectedManager === "SY" && (
-              <div className="w-[330px] max-w-full shrink-0 overflow-hidden rounded-xl border border-violet-200 bg-[#F7F4FF] shadow-sm">
-                <div className="border-b border-violet-200 bg-[#EEE8FF] px-4 py-2 text-center text-[13px] font-extrabold text-violet-950">
-                  Target 입력
-                </div>
-                <div className="grid grid-cols-2 divide-x divide-violet-200">
-                  <label className="px-3 py-2.5 text-center text-[12px] font-bold text-violet-950">
-                    매장 Target
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      disabled={!canEditTarget}
-                      value={targetByType.store ? won(targetByType.store) : ""}
-                      onChange={(e) => updateTargetByType("매장", num(e.target.value))}
-                      placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                      className="mt-1 h-8 w-full min-w-0 rounded-lg border border-violet-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
-                    />
-                  </label>
-                  <label className="px-3 py-2.5 text-center text-[12px] font-bold text-violet-950">
-                    비매장 Target
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      disabled={!canEditTarget}
-                      value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
-                      onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
-                      placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                      className="mt-1 h-8 w-full min-w-0 rounded-lg border border-violet-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
-                    />
-                  </label>
-                </div>
+            <div className="flex flex-wrap items-end gap-x-5 gap-y-3 xl:justify-end">
+              <label className="flex items-center gap-2">
+                <span className="text-xs font-extrabold text-slate-600">채널</span>
+                <select
+                  value={channelView}
+                  onChange={(e) => setChannelView(e.target.value as "all" | "store" | "nonStore")}
+                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-orange-400"
+                  aria-label="매장 비매장 채널 필터"
+                >
+                  <option value="all">전체 채널</option>
+                  <option value="store">매장</option>
+                  <option value="nonStore">비매장</option>
+                </select>
+              </label>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-extrabold text-slate-600">거래상태</span>
+                <button
+                  type="button"
+                  onClick={() => setStatusView("active")}
+                  className={`h-9 rounded-lg border bg-white px-3 text-xs font-extrabold text-black transition ${
+                    statusView === "active" ? "border-black ring-1 ring-black" : "border-slate-300 hover:border-slate-500"
+                  }`}
+                >
+                  거래중
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusView("paused")}
+                  className={`h-9 rounded-lg border bg-white px-3 text-xs font-extrabold text-blue-600 transition ${
+                    statusView === "paused" ? "border-blue-500 ring-1 ring-blue-500" : "border-slate-300 hover:border-blue-300"
+                  }`}
+                >
+                  거래중지
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusView("ended")}
+                  className={`h-9 rounded-lg border bg-white px-3 text-xs font-extrabold text-red-600 transition ${
+                    statusView === "ended" ? "border-red-500 ring-1 ring-red-500" : "border-slate-300 hover:border-red-300"
+                  }`}
+                >
+                  거래종료
+                </button>
               </div>
-            )}
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-extrabold text-slate-600">채널</span>
-              <select
-                value={channelView}
-                onChange={(e) => setChannelView(e.target.value as "all" | "store" | "nonStore")}
-                className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-orange-400"
-                aria-label="매장 비매장 채널 필터"
-              >
-                <option value="all">전체 채널</option>
-                <option value="store">매장</option>
-                <option value="nonStore">비매장</option>
-              </select>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-extrabold text-slate-600">거래상태</span>
-              <button
-                type="button"
-                onClick={() => setStatusView("active")}
-                className={`h-9 rounded-lg border bg-white px-3 text-xs font-extrabold text-black transition ${
-                  statusView === "active" ? "border-black ring-1 ring-black" : "border-slate-300 hover:border-slate-500"
-                }`}
-              >
-                거래중
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusView("paused")}
-                className={`h-9 rounded-lg border bg-white px-3 text-xs font-extrabold text-blue-600 transition ${
-                  statusView === "paused" ? "border-blue-500 ring-1 ring-blue-500" : "border-slate-300 hover:border-blue-300"
-                }`}
-              >
-                거래중지
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusView("ended")}
-                className={`h-9 rounded-lg border bg-white px-3 text-xs font-extrabold text-red-600 transition ${
-                  statusView === "ended" ? "border-red-500 ring-1 ring-red-500" : "border-slate-300 hover:border-red-300"
-                }`}
-              >
-                거래종료
-              </button>
             </div>
           </div>
         </div>
