@@ -4865,6 +4865,45 @@ export default function SalesReportClient() {
             white-space: nowrap;
           }
 
+          /* 대시보드 EST 핵심 카드: 연한 크림 옐로우와 은은한 진주광택 */
+          .sales-report-root .est-pearl-card {
+            position: relative;
+            overflow: hidden;
+            border-color: #f2d675 !important;
+            background:
+              linear-gradient(
+                135deg,
+                rgba(255, 255, 255, 0.72) 0%,
+                rgba(255, 255, 255, 0.12) 38%,
+                rgba(255, 255, 255, 0.42) 62%,
+                rgba(255, 255, 255, 0.08) 100%
+              ),
+              #fff8d9 !important;
+            box-shadow:
+              0 3px 10px rgba(15, 23, 42, 0.07),
+              inset 0 1px 0 rgba(255, 255, 255, 0.85) !important;
+          }
+          .sales-report-root .est-pearl-card::after {
+            content: "";
+            position: absolute;
+            top: -55%;
+            left: -18%;
+            width: 54%;
+            height: 210%;
+            transform: rotate(18deg);
+            background: linear-gradient(
+              90deg,
+              rgba(255, 255, 255, 0),
+              rgba(255, 255, 255, 0.24),
+              rgba(255, 255, 255, 0)
+            );
+            pointer-events: none;
+          }
+          .sales-report-root .est-pearl-card > * {
+            position: relative;
+            z-index: 1;
+          }
+
         `}</style>
         <div
           className={
@@ -6053,6 +6092,7 @@ function DashboardTopKpis({
         ]}
       />
       <KpiGroup
+        className="est-pearl-card"
         items={[
           { title: "매장 EST", value: storeEst, format: "won" },
           { title: "비매장 EST", value: nonStoreEst, format: "won" },
@@ -6067,7 +6107,6 @@ function DashboardTopKpis({
             value: estTotal ? (currentSales / estTotal) * 100 : 0,
             format: "percent",
             color: "text-slate-900",
-            highlightClass: "bg-[#FFF9D9] ring-1 ring-[#F3E08A]",
           },
         ]}
       />
