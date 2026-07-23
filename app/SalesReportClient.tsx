@@ -5,6 +5,12 @@ import * as XLSX from "xlsx";
 
 type Channel = string;
 type Manager = string;
+type ManagerConfig = {
+  name: Manager;
+  active: boolean;
+  order: number;
+  canTarget: boolean;
+};
 type StoreType = string;
 type PeriodType = "current" | "prevMonth" | "prevYear";
 type SalesView = "거래처별" | "브랜드별" | "담당자별" | "채널별";
@@ -146,6 +152,14 @@ const CHANNELS: Channel[] = [
   "본사",
 ];
 const MANAGERS: Manager[] = ["SY", "KT", "SW", "NH", "Bomi", "BM", "bomi"];
+const INITIAL_MANAGER_CONFIGS: ManagerConfig[] = [
+  { name: "SY", active: true, order: 1, canTarget: true },
+  { name: "KT", active: true, order: 2, canTarget: false },
+  { name: "NH", active: true, order: 3, canTarget: false },
+  { name: "SW", active: false, order: 4, canTarget: false },
+  { name: "BOMI", active: false, order: 5, canTarget: false },
+  { name: "BM", active: false, order: 6, canTarget: false },
+];
 const SALES_VIEWS: SalesView[] = ["거래처별", "브랜드별", "담당자별"];
 const MONTH_TABS: MonthStartTab[] = [
   "거래처 리스트",
@@ -4493,7 +4507,6 @@ function orderRowsForExcel(rows: SalesRecord[]) {
 }
 
 const ADMIN_PASSWORD = "ablab2026";
-const EST_ENTRY_MANAGERS: Manager[] = ["SY", "KT", "NH"];
 
 function isEstEntryPeriodToday() {
   return Number(today().slice(8, 10)) <= 4;
@@ -4533,6 +4546,10 @@ export default function SalesReportClient() {
   const [itemMasters, setItemMasters] = useLocal<ItemMasterRecord[]>(
     "ablab_item_masters_v1",
     [],
+  );
+  const [managerConfigs, setManagerConfigs] = useLocal<ManagerConfig[]>(
+    "month-start-manager-configs-v2",
+    INITIAL_MANAGER_CONFIGS,
   );
 
   useEffect(() => {
@@ -4963,6 +4980,7 @@ export default function SalesReportClient() {
             month={dashMonth}
             canEdit={isAdmin || isEstEntryOpen}
             isAdmin={isAdmin}
+            managerConfigs={managerConfigs}
           />
         )}
         {active === "대시보드" && (
@@ -5034,6 +5052,8 @@ export default function SalesReportClient() {
             setCodeMappings={setCodeMappings}
             itemMasters={itemMasters}
             setItemMasters={setItemMasters}
+            managerConfigs={managerConfigs}
+            setManagerConfigs={setManagerConfigs}
           />
         )}
       </section>
@@ -5053,6 +5073,7 @@ function EstQuickEntry({
   month,
   canEdit,
   isAdmin,
+  managerConfigs,
 }: {
   stores: Store[];
   setStores: (v: Store[]) => void;
@@ -5064,8 +5085,27 @@ function EstQuickEntry({
   month: string;
   canEdit: boolean;
   isAdmin: boolean;
+  managerConfigs: ManagerConfig[];
 }) {
-  const [selectedManager, setSelectedManager] = useState<Manager>("SY");
+  const activeManagers = useMemo(
+    () => managerConfigs
+      .filter((config) => config.active)
+      .map((config) => ({ ...config, name: config.name.trim().toUpperCase() }))
+      .filter((config, index, list) => list.findIndex((item) => item.name === config.name) === index)
+      .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, "ko-KR")),
+    [managerConfigs],
+  );
+  const [selectedManager, setSelectedManager] = useState<Manager>("");
+
+  useEffect(() => {
+    if (!activeManagers.length) {
+      setSelectedManager("");
+      return;
+    }
+    if (!activeManagers.some((config) => config.name === selectedManager)) {
+      setSelectedManager(activeManagers[0].name);
+    }
+  }, [activeManagers, selectedManager]);
   const [statusView, setStatusView] = useState<"active" | "paused" | "ended">("active");
   const [channelView, setChannelView] = useState<"all" | "store" | "nonStore">("all");
   const [sortKey, setSortKey] = useState<
@@ -5208,8 +5248,7 @@ function EstQuickEntry({
         if (statusView === "paused") return store.status === "거래중단";
         return store.status === "거래종료";
       })
-      .filter((store) => EST_ENTRY_MANAGERS.includes(store.manager))
-      .filter((store) => store.manager === selectedManager)
+      .filter((store) => store.manager.trim().toUpperCase() === selectedManager)
       .filter((store) => {
         if (channelView === "store") return store.storeType === "매장";
         if (channelView === "nonStore") return store.storeType !== "매장";
@@ -5242,8 +5281,7 @@ function EstQuickEntry({
   const managerInfo = useMemo(() => {
     const managerStores = stores.filter(
       (store) =>
-        EST_ENTRY_MANAGERS.includes(store.manager) &&
-        store.manager === selectedManager,
+        store.manager.trim().toUpperCase() === selectedManager,
     );
 
     return {
@@ -5272,7 +5310,8 @@ function EstQuickEntry({
     channelView === "store" ? "매장" : channelView === "nonStore" ? "비매장" : "전체 채널";
   const selectedStatusLabel =
     statusView === "active" ? "거래중" : statusView === "paused" ? "거래중지" : "거래종료";
-  const canEditTarget = canEdit && (isAdmin || selectedManager === "SY");
+  const selectedManagerConfig = activeManagers.find((config) => config.name === selectedManager);
+  const canEditTarget = canEdit && Boolean(selectedManagerConfig?.canTarget);
 
   const handleSort = (key: typeof sortKey) => {
     if (sortKey === key) {
@@ -5336,20 +5375,39 @@ function EstQuickEntry({
           담당자
         </div>
         <div className="flex gap-2 p-2 lg:flex-col">
-          {EST_ENTRY_MANAGERS.map((manager) => (
-            <button
-              key={manager}
-              type="button"
-              onClick={() => setSelectedManager(manager)}
-              className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-extrabold transition lg:w-full ${
-                selectedManager === manager
-                  ? "bg-orange-500 text-white shadow-sm"
-                  : "bg-white text-slate-700 hover:bg-orange-50 hover:text-orange-800"
-              }`}
-            >
-              {manager}
-            </button>
-          ))}
+          {activeManagers.map((config) => {
+            const visibleCount = stores.filter((store) => {
+              if (store.manager.trim().toUpperCase() !== config.name) return false;
+              if (statusView === "active" && store.status !== "거래중") return false;
+              if (statusView === "paused" && store.status !== "거래중단") return false;
+              if (statusView === "ended" && store.status !== "거래종료") return false;
+              if (channelView === "store" && store.storeType !== "매장") return false;
+              if (channelView === "nonStore" && store.storeType === "매장") return false;
+              return true;
+            }).length;
+            return (
+              <button
+                key={config.name}
+                type="button"
+                onClick={() => setSelectedManager(config.name)}
+                className={`flex flex-1 items-center justify-between rounded-lg px-3 py-2.5 text-sm font-extrabold transition lg:w-full ${
+                  selectedManager === config.name
+                    ? "bg-orange-500 text-white shadow-sm"
+                    : "bg-white text-slate-700 hover:bg-orange-50 hover:text-orange-800"
+                }`}
+              >
+                <span>{config.name}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] ${selectedManager === config.name ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
+                  {visibleCount}
+                </span>
+              </button>
+            );
+          })}
+          {!activeManagers.length && (
+            <div className="px-2 py-4 text-center text-xs font-semibold text-slate-500">
+              월초관리에서 사용할 담당자를 활성화해주세요.
+            </div>
+          )}
         </div>
 
         <div className="border-t border-slate-200 bg-slate-50/70 p-3">
@@ -5410,7 +5468,7 @@ function EstQuickEntry({
                 </div>
               </div>
 
-              {selectedManager === "SY" && (
+              {selectedManagerConfig?.canTarget && (
                 <div className="w-[330px] max-w-full shrink-0 overflow-hidden rounded-xl border border-violet-200 bg-[#F7F4FF] shadow-sm">
                   <div className="border-b border-violet-200 bg-[#EEE8FF] px-4 py-2 text-center text-[13px] font-extrabold text-violet-950">
                     Target 입력
@@ -10912,6 +10970,8 @@ function MonthStartManagement({
   setCodeMappings,
   itemMasters,
   setItemMasters,
+  managerConfigs,
+  setManagerConfigs,
 }: {
   stores: Store[];
   setStores: (v: Store[]) => void;
@@ -10930,6 +10990,8 @@ function MonthStartManagement({
   setCodeMappings: (v: StoreCodeMapping[]) => void;
   itemMasters: ItemMasterRecord[];
   setItemMasters: (v: ItemMasterRecord[]) => void;
+  managerConfigs: ManagerConfig[];
+  setManagerConfigs: React.Dispatch<React.SetStateAction<ManagerConfig[]>>;
 }) {
   const [tab, setTab] = useState<MonthStartTab>("거래처 리스트");
 
@@ -10961,6 +11023,8 @@ function MonthStartManagement({
           sales={sales}
           month={month}
           codeMappings={codeMappings}
+          managerConfigs={managerConfigs}
+          setManagerConfigs={setManagerConfigs}
         />
       )}
       {tab === "기준정보" && (
@@ -10971,6 +11035,8 @@ function MonthStartManagement({
           sales={sales}
           month={month}
           codeMappings={codeMappings}
+          managerConfigs={managerConfigs}
+          setManagerConfigs={setManagerConfigs}
         />
       )}
       {tab === "업로드 관리" && (
@@ -11002,6 +11068,8 @@ function StoreListManagement({
   sales,
   month,
   codeMappings,
+  managerConfigs,
+  setManagerConfigs,
 }: {
   section: "list" | "reference";
   stores: Store[];
@@ -11009,6 +11077,8 @@ function StoreListManagement({
   sales: SalesRecord[];
   month: string;
   codeMappings: StoreCodeMapping[];
+  managerConfigs: ManagerConfig[];
+  setManagerConfigs: React.Dispatch<React.SetStateAction<ManagerConfig[]>>;
 }) {
   type ListTab = "기존거래처 리스트" | "전년동월 리스트" | "총 거래처 리스트" | "기타 관리";
   const [listTab, setListTab] = useState<ListTab>("기존거래처 리스트");
@@ -11024,14 +11094,6 @@ function StoreListManagement({
   const [newManager, setNewManager] = useState("");
   const [newChannel1, setNewChannel1] = useState("");
   const [showNewOnly, setShowNewOnly] = useState(false);
-  const [savedManagers, setSavedManagers] = useLocal<string[]>(
-    "month-start-manager-options-v1",
-    ["SY", "KT", "SW", "NH", "BOMI", "BM"],
-  );
-  const [deletedManagers, setDeletedManagers] = useLocal<string[]>(
-    "month-start-deleted-manager-options-v1",
-    [],
-  );
   const [savedChannel1Options, setSavedChannel1Options] = useLocal<string[]>(
     "month-start-channel1-options-v1",
     ["도매", "체인", "권역배송", "온라인", "식자재마트"],
@@ -11294,14 +11356,11 @@ function StoreListManagement({
     ? visibleTotalRows.filter(needsReferenceSetup)
     : visibleTotalRows;
   const normalizeManager = (value: string) => value.trim().toUpperCase();
-  const deletedManagerSet = new Set(deletedManagers.map(normalizeManager));
-  const managerOptions = Array.from(
-    new Set(
-      [...savedManagers, ...MANAGERS, ...totalRows.map((row) => row.manager)]
-        .map(normalizeManager)
-        .filter((value) => Boolean(value) && !deletedManagerSet.has(value)),
-    ),
-  ).sort((a, b) => a.localeCompare(b, "ko-KR"));
+  const normalizedManagerConfigs = managerConfigs
+    .map((config) => ({ ...config, name: normalizeManager(config.name) }))
+    .filter((config, index, list) => Boolean(config.name) && list.findIndex((item) => item.name === config.name) === index)
+    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, "ko-KR"));
+  const managerOptions = normalizedManagerConfigs.map((config) => config.name);
   const channel1Options = Array.from(
     new Map(
       [...savedChannel1Options, ...totalRows.map((row) => row.channel)]
@@ -11355,8 +11414,11 @@ function StoreListManagement({
     if (!window.confirm(`선택한 ${selectedCodes.size.toLocaleString("ko-KR")}개 거래처의 ${label}를 '${value}'(으)로 일괄 변경할까요?`)) return;
     const nextStores = totalRows.map((row) => selectedCodes.has(row.code) ? { ...row, [field]: value } : row);
     setStores(nextStores);
-    if (field === "manager" && !savedManagers.some((item) => normalizeManager(item) === value)) {
-      setSavedManagers([...savedManagers, value]);
+    if (field === "manager" && !managerConfigs.some((item) => normalizeManager(item.name) === value)) {
+      setManagerConfigs((prev) => [
+        ...prev,
+        { name: value, active: true, order: prev.length + 1, canTarget: false },
+      ]);
     }
     if (field === "channel" && !savedChannel1Options.some((item) => item.toLowerCase() === value.toLowerCase())) {
       setSavedChannel1Options([...savedChannel1Options, value]);
@@ -11368,15 +11430,28 @@ function StoreListManagement({
   function addManager() {
     const value = normalizeManager(newManager);
     if (!value) return alert("추가할 담당자명을 입력해주세요.");
-    if (managerOptions.some((item) => normalizeManager(item) === value)) {
+    if (managerOptions.includes(value)) {
       setBulkManager(value);
       setNewManager("");
       return alert("같은 철자의 담당자가 이미 있어 기존 담당자로 선택했습니다.");
     }
-    setSavedManagers([...savedManagers, value]);
-    setDeletedManagers(deletedManagers.filter((item) => normalizeManager(item) !== value));
+    setManagerConfigs((prev) => [
+      ...prev,
+      { name: value, active: true, order: prev.length + 1, canTarget: false },
+    ]);
     setBulkManager(value);
     setNewManager("");
+  }
+
+  function updateManagerConfig(name: string, patch: Partial<ManagerConfig>) {
+    const normalizedName = normalizeManager(name);
+    setManagerConfigs((prev) =>
+      prev.map((config) =>
+        normalizeManager(config.name) === normalizedName
+          ? { ...config, ...patch, name: normalizedName }
+          : config,
+      ),
+    );
   }
 
   function deleteManager() {
@@ -11387,10 +11462,15 @@ function StoreListManagement({
       ? `\n현재 ${assignedCount.toLocaleString("ko-KR")}개 거래처에 지정되어 있습니다. 삭제하면 해당 거래처의 담당자는 미지정으로 변경됩니다.`
       : "";
     if (!window.confirm(`담당자 '${value}'를 삭제할까요?${assignedMessage}`)) return;
-    setSavedManagers(savedManagers.filter((item) => normalizeManager(item) !== value));
-    if (!deletedManagerSet.has(value)) setDeletedManagers([...deletedManagers, value]);
+    setManagerConfigs((prev) =>
+      prev.filter((config) => normalizeManager(config.name) !== value),
+    );
     if (assignedCount) {
-      setStores(totalRows.map((row) => normalizeManager(row.manager) === value ? { ...row, manager: "" } : row));
+      setStores(
+        totalRows.map((row) =>
+          normalizeManager(row.manager) === value ? { ...row, manager: "" } : row,
+        ),
+      );
     }
     setBulkManager("");
     setSelectedCodes(new Set());
@@ -11541,6 +11621,44 @@ function StoreListManagement({
                   </>
                 )}
               </div>
+              {otherTab === "담당자 관리" && (
+                <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                  <table className="w-full min-w-[720px] border-collapse text-center text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-700">
+                        <th className="border border-slate-200 px-3 py-2">담당자명</th>
+                        <th className="border border-slate-200 px-3 py-2">EST 메뉴 사용</th>
+                        <th className="border border-slate-200 px-3 py-2">표시 순서</th>
+                        <th className="border border-slate-200 px-3 py-2">Target 입력 권한</th>
+                        <th className="border border-slate-200 px-3 py-2">담당 거래처</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {normalizedManagerConfigs.map((config) => {
+                        const assignedCount = totalRows.filter((row) => normalizeManager(row.manager) === config.name).length;
+                        return (
+                          <tr key={config.name} className="hover:bg-blue-50/40">
+                            <td className="border border-slate-200 px-3 py-2 font-extrabold text-slate-900">{config.name}</td>
+                            <td className="border border-slate-200 px-3 py-2">
+                              <input type="checkbox" checked={config.active} onChange={(event) => updateManagerConfig(config.name, { active: event.target.checked })} className="h-4 w-4 accent-orange-500" />
+                            </td>
+                            <td className="border border-slate-200 px-3 py-2">
+                              <input type="number" min={1} value={config.order} onChange={(event) => updateManagerConfig(config.name, { order: Math.max(1, Number(event.target.value) || 1) })} className="h-8 w-20 rounded-lg border border-slate-300 px-2 text-center font-bold" />
+                            </td>
+                            <td className="border border-slate-200 px-3 py-2">
+                              <input type="checkbox" checked={config.canTarget} onChange={(event) => updateManagerConfig(config.name, { canTarget: event.target.checked })} className="h-4 w-4 accent-violet-600" />
+                            </td>
+                            <td className="border border-slate-200 px-3 py-2 font-bold text-slate-700">{assignedCount.toLocaleString("ko-KR")}개</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="border-t border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
+                    사용 체크된 담당자만 EST 입력 왼쪽 메뉴에 표시되며, 표시 순서와 Target 입력 권한도 즉시 연동됩니다.
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
