@@ -6048,12 +6048,11 @@ function DashboardTopKpis({
             value: targetTotal ? (currentSales / targetTotal) * 100 : 0,
             format: "percent",
             color: "text-black",
-            highlightClass: "bg-yellow-200/90 ring-1 ring-yellow-300/90",
+            highlightClass: "bg-[#FFF9D9] ring-1 ring-[#F3E08A]",
           },
         ]}
       />
       <KpiGroup
-        className="bg-[linear-gradient(180deg,rgba(255,255,255,0.78)_0%,rgba(255,255,255,0.18)_38%,rgba(255,255,255,0)_60%),linear-gradient(180deg,#fffffc_0%,#fffdf6_48%,#fff8df_100%)] ring-1 ring-[#eee5c8] shadow-[0_2px_8px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.95)]"
         items={[
           { title: "매장 EST", value: storeEst, format: "won" },
           { title: "비매장 EST", value: nonStoreEst, format: "won" },
@@ -6068,6 +6067,7 @@ function DashboardTopKpis({
             value: estTotal ? (currentSales / estTotal) * 100 : 0,
             format: "percent",
             color: "text-slate-900",
+            highlightClass: "bg-[#FFF9D9] ring-1 ring-[#F3E08A]",
           },
         ]}
       />
