@@ -4733,11 +4733,11 @@ export default function SalesReportClient() {
           }
           .sales-report-root .sales-status-table thead tr:nth-child(2) th {
             top: 31px !important;
-            border-top-width: 0 !important;
+            border-top: 1px solid #cbd5e1 !important;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
           }
           .sales-report-root .sales-status-table thead tr:nth-child(2) th::before {
-            top: -1px;
+            top: 0;
           }
           .sales-report-root .sales-status-table thead tr:nth-child(2) th::after {
             bottom: -1px;
@@ -4759,12 +4759,12 @@ export default function SalesReportClient() {
           }
           .sales-report-root .connected-two-tier thead tr:nth-child(2) th {
             top: 37px !important;
-            border-top-width: 0 !important;
+            border-top: 1px solid #cbd5e1 !important;
             text-align: center !important;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
           }
           .sales-report-root .connected-two-tier thead tr:nth-child(2) th::before {
-            top: -1px;
+            top: 0;
           }
           .sales-report-root .connected-two-tier thead th,
           .sales-report-root .connected-two-tier thead button {
