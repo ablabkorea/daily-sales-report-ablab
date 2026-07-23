@@ -5246,29 +5246,29 @@ function EstQuickEntry({
               className="h-9 w-[240px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
             />
 
-            <div className="min-w-[330px] overflow-hidden rounded-xl border border-amber-200 bg-[#FFFDF2] shadow-sm">
-              <div className="border-b border-amber-200 bg-[#FFF8D9] px-3 py-2 text-center text-xs font-extrabold text-slate-900">
+            <div className="min-w-[285px] overflow-hidden rounded-xl border border-amber-200 bg-[#FFFDF2] shadow-sm">
+              <div className="border-b border-amber-200 bg-[#FFF8D9] px-3 py-1.5 text-center text-[11px] font-extrabold text-slate-900">
                 EST 입력 합계
               </div>
               <div className="grid grid-cols-2 divide-x divide-amber-200">
-                <div className="px-4 py-3 text-center">
+                <div className="px-3 py-2 text-center">
                   <div className="text-[11px] font-bold text-slate-600">매장 EST</div>
-                  <div className="mt-1 text-[18px] font-black text-slate-900">{won(storeEstTotal)}</div>
+                  <div className="mt-0.5 text-[16px] font-black text-slate-900">{won(storeEstTotal)}</div>
                 </div>
-                <div className="px-4 py-3 text-center">
+                <div className="px-3 py-2 text-center">
                   <div className="text-[11px] font-bold text-slate-600">비매장 EST</div>
-                  <div className="mt-1 text-[18px] font-black text-slate-900">{won(nonStoreEstTotal)}</div>
+                  <div className="mt-0.5 text-[16px] font-black text-slate-900">{won(nonStoreEstTotal)}</div>
                 </div>
               </div>
             </div>
 
             {selectedManager === "SY" && (
-              <div className="min-w-[360px] overflow-hidden rounded-xl border border-sky-200 bg-sky-50 shadow-sm">
-                <div className="border-b border-sky-200 bg-sky-100 px-3 py-2 text-center text-xs font-extrabold text-sky-950">
+              <div className="min-w-[310px] overflow-hidden rounded-xl border border-sky-200 bg-sky-50 shadow-sm">
+                <div className="border-b border-sky-200 bg-sky-100 px-3 py-1.5 text-center text-[11px] font-extrabold text-sky-950">
                   Target 입력
                 </div>
                 <div className="grid grid-cols-2 divide-x divide-sky-200">
-                  <label className="px-4 py-3 text-center text-[11px] font-bold text-sky-950">
+                  <label className="px-3 py-2 text-center text-[11px] font-bold text-sky-950">
                     매장 Target
                     <input
                       type="text"
@@ -5277,10 +5277,10 @@ function EstQuickEntry({
                       value={targetByType.store ? won(targetByType.store) : ""}
                       onChange={(e) => updateTargetByType("매장", num(e.target.value))}
                       placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                      className="mt-2 h-9 w-full rounded-lg border border-sky-200 bg-white px-3 text-right text-sm font-extrabold text-slate-900 outline-none focus:border-sky-500 disabled:bg-slate-100 disabled:text-slate-500"
+                      className="mt-1.5 h-8 w-full rounded-lg border border-sky-200 bg-white px-2 text-right text-xs font-extrabold text-slate-900 outline-none focus:border-sky-500 disabled:bg-slate-100 disabled:text-slate-500"
                     />
                   </label>
-                  <label className="px-4 py-3 text-center text-[11px] font-bold text-sky-950">
+                  <label className="px-3 py-2 text-center text-[11px] font-bold text-sky-950">
                     비매장 Target
                     <input
                       type="text"
@@ -5289,7 +5289,7 @@ function EstQuickEntry({
                       value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
                       onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
                       placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                      className="mt-2 h-9 w-full rounded-lg border border-sky-200 bg-white px-3 text-right text-sm font-extrabold text-slate-900 outline-none focus:border-sky-500 disabled:bg-slate-100 disabled:text-slate-500"
+                      className="mt-1.5 h-8 w-full rounded-lg border border-sky-200 bg-white px-2 text-right text-xs font-extrabold text-slate-900 outline-none focus:border-sky-500 disabled:bg-slate-100 disabled:text-slate-500"
                     />
                   </label>
                 </div>
@@ -5309,8 +5309,8 @@ function EstQuickEntry({
                 <th className="sticky top-0 z-20 border border-slate-300 bg-white px-3 py-2 font-bold text-slate-700">채널</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">전년동월 매출</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">전월 매출</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-[#E9D5FF] px-3 py-2 text-[14px] font-bold text-[#4C1D95]">전월 EST</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-[#E9D5FF] px-3 py-2 text-[14px] font-bold text-[#4C1D95]">전월 EST 달성률</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-[#F7F2FF] px-3 py-2 text-[14px] font-bold text-[#5B4A85]">전월 EST</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-[#F7F2FF] px-3 py-2 text-[14px] font-bold text-[#5B4A85]">전월 EST 달성률</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">{month} EST 입력</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">전월 EST 대비 차이</th>
               </tr>
