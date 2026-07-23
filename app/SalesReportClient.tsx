@@ -25,7 +25,8 @@ type SalesStatusSortKey =
   | "est"
   | "estRate"
   | "profitAmount"
-  | "profitRate";
+  | "profitRate"
+  | "lastOrderDate";
 type SortDirection = "asc" | "desc";
 type InactiveOrderTab = "거래처별" | "품목별";
 
@@ -5290,13 +5291,13 @@ function EstQuickEntry({
           <table className="w-full min-w-[1450px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처명</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">담당자</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">채널</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-white px-3 py-2 font-bold text-slate-700">거래처명</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-white px-3 py-2 font-bold text-slate-700">담당자</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-white px-3 py-2 font-bold text-slate-700">채널</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">전년동월 매출</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">전월 매출</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">전월 EST</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">전월 EST 달성률</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-[#1E3A5F] px-3 py-2 text-[14px] font-bold text-white">전월 EST</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-[#1E3A5F] px-3 py-2 text-[14px] font-bold text-white">전월 EST 달성률</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">{month} EST 입력</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2 text-[14px] font-bold text-black">전월 EST 대비 차이</th>
               </tr>
@@ -5597,7 +5598,7 @@ function ItemCostStatus({
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-        <div className="max-h-[70vh] overflow-auto isolate">
+        <div className="max-h-[78vh] overflow-auto isolate">
           <table className="w-full min-w-[1350px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
@@ -6485,7 +6486,8 @@ type ItemDetailSortKey =
   | "salesAmount"
   | "costAmount"
   | "profitAmount"
-  | "profitRate";
+  | "profitRate"
+  | "lastOrderDate";
 
 type ItemBrandSortKey =
   | "brand"
@@ -6688,7 +6690,7 @@ function PopupTh({
     <th
       rowSpan={rowSpan}
       colSpan={colSpan}
-      className={`sticky ${top} z-50 border border-gray-300 px-3 py-2 font-bold shadow-[0_2px_0_0_#e2e8f0] ${className} ${right ? "text-right" : "text-left"}`}
+      className={`sticky ${top} z-50 border border-gray-300 px-3 py-2 font-bold shadow-[0_2px_0_0_#e2e8f0] ${className} text-center`}
     >
       {children}
     </th>
@@ -6766,30 +6768,64 @@ function ItemAnalysis({
     key: ItemDetailSortKey;
     direction: SortDirection;
   }>({ key: "saleDate", direction: "asc" });
+  const defaultCurrentEnd = date.startsWith(month) ? date : monthEnd(month);
   const [analysisStart, setAnalysisStart] = useState(monthStart(month));
-  const [analysisEnd, setAnalysisEnd] = useState(
-    date.startsWith(month) ? date : monthEnd(month),
-  );
+  const [analysisEnd, setAnalysisEnd] = useState(defaultCurrentEnd);
+  const [prevAnalysisStart, setPrevAnalysisStart] = useState(sameDayPrevMonth(monthStart(month)));
+  const [prevAnalysisEnd, setPrevAnalysisEnd] = useState(sameDayPrevMonth(defaultCurrentEnd));
+  const [prevYearAnalysisStart, setPrevYearAnalysisStart] = useState(sameDayPrevYear(monthStart(month)));
+  const [prevYearAnalysisEnd, setPrevYearAnalysisEnd] = useState(sameDayPrevYear(defaultCurrentEnd));
+  const [appliedPeriods, setAppliedPeriods] = useState(() => ({
+    currentStart: monthStart(month),
+    currentEnd: defaultCurrentEnd,
+    prevStart: sameDayPrevMonth(monthStart(month)),
+    prevEnd: sameDayPrevMonth(defaultCurrentEnd),
+    prevYearStart: sameDayPrevYear(monthStart(month)),
+    prevYearEnd: sameDayPrevYear(defaultCurrentEnd),
+  }));
 
   useEffect(() => {
-    setAnalysisStart(monthStart(month));
-    setAnalysisEnd(date.startsWith(month) ? date : monthEnd(month));
+    const nextCurrentStart = monthStart(month);
+    const nextCurrentEnd = date.startsWith(month) ? date : monthEnd(month);
+    const nextPrevStart = sameDayPrevMonth(nextCurrentStart);
+    const nextPrevEnd = sameDayPrevMonth(nextCurrentEnd);
+    const nextPrevYearStart = sameDayPrevYear(nextCurrentStart);
+    const nextPrevYearEnd = sameDayPrevYear(nextCurrentEnd);
+    setAnalysisStart(nextCurrentStart);
+    setAnalysisEnd(nextCurrentEnd);
+    setPrevAnalysisStart(nextPrevStart);
+    setPrevAnalysisEnd(nextPrevEnd);
+    setPrevYearAnalysisStart(nextPrevYearStart);
+    setPrevYearAnalysisEnd(nextPrevYearEnd);
+    setAppliedPeriods({
+      currentStart: nextCurrentStart, currentEnd: nextCurrentEnd,
+      prevStart: nextPrevStart, prevEnd: nextPrevEnd,
+      prevYearStart: nextPrevYearStart, prevYearEnd: nextPrevYearEnd,
+    });
     setSelectedBrand("");
     setSelectedStoreCode("");
     setSelectedItemCode("");
   }, [month, date]);
 
-  useEffect(() => {
-    setSelectedItemCode("");
-  }, [analysisStart, analysisEnd]);
+  const normalizePeriod = (start: string, end: string) =>
+    start <= end ? [start, end] as const : [end, start] as const;
+  const [currentStart, currentEnd] = normalizePeriod(appliedPeriods.currentStart, appliedPeriods.currentEnd);
+  const [prevStart, prevEnd] = normalizePeriod(appliedPeriods.prevStart, appliedPeriods.prevEnd);
+  const [prevYearStart, prevYearEnd] = normalizePeriod(appliedPeriods.prevYearStart, appliedPeriods.prevYearEnd);
 
-  const currentStart =
-    analysisStart <= analysisEnd ? analysisStart : analysisEnd;
-  const currentEnd = analysisStart <= analysisEnd ? analysisEnd : analysisStart;
-  const prevStart = sameDayPrevMonth(currentStart);
-  const prevEnd = sameDayPrevMonth(currentEnd);
-  const prevYearStart = sameDayPrevYear(currentStart);
-  const prevYearEnd = sameDayPrevYear(currentEnd);
+  function applyPeriodSearch() {
+    const [nextCurrentStart, nextCurrentEnd] = normalizePeriod(analysisStart, analysisEnd);
+    const [nextPrevStart, nextPrevEnd] = normalizePeriod(prevAnalysisStart, prevAnalysisEnd);
+    const [nextPrevYearStart, nextPrevYearEnd] = normalizePeriod(prevYearAnalysisStart, prevYearAnalysisEnd);
+    setAppliedPeriods({
+      currentStart: nextCurrentStart, currentEnd: nextCurrentEnd,
+      prevStart: nextPrevStart, prevEnd: nextPrevEnd,
+      prevYearStart: nextPrevYearStart, prevYearEnd: nextPrevYearEnd,
+    });
+    setSelectedBrand("");
+    setSelectedStoreCode("");
+    setSelectedItemCode("");
+  }
   const normalizedSearch = search.trim().toLowerCase();
   const storeByCode = useMemo(
     () => new Map(stores.map((s) => [s.code, s])),
@@ -7110,7 +7146,7 @@ function ItemAnalysis({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-base font-bold text-slate-900">{pageTitle}</div>
-            <div className="mt-1 text-xs text-slate-500">
+            <div className="mt-1 text-sm text-slate-500">
               현재 {currentStart} ~ {currentEnd} / 전월 {prevStart} ~ {prevEnd}{" "}
               / 전년 {prevYearStart} ~ {prevYearEnd}
             </div>
@@ -7132,28 +7168,25 @@ function ItemAnalysis({
             <button
               type="button"
               onClick={applySearch}
-              className="h-8 rounded-lg bg-slate-800 px-3 text-xs font-semibold text-white hover:bg-slate-700"
+              className="h-8 rounded-lg bg-slate-800 px-3 text-sm font-semibold text-white hover:bg-slate-700"
             >
               검색
             </button>
-            <label className="flex items-center gap-1 text-slate-600">
-              시작일
-              <input
-                type="date"
-                value={analysisStart}
-                onChange={(e) => setAnalysisStart(e.target.value)}
-                className="h-8 rounded-lg border border-slate-300 px-2 text-xs outline-none focus:border-blue-500"
-              />
-            </label>
-            <label className="flex items-center gap-1 text-slate-600">
-              종료일
-              <input
-                type="date"
-                value={analysisEnd}
-                onChange={(e) => setAnalysisEnd(e.target.value)}
-                className="h-8 rounded-lg border border-slate-300 px-2 text-xs outline-none focus:border-blue-500"
-              />
-            </label>
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <span className="font-bold text-slate-700">당월</span>
+              <input type="date" value={analysisStart} onChange={(e) => setAnalysisStart(e.target.value)} className="h-8 rounded-lg border border-slate-300 px-2 text-xs" />
+              <span>~</span>
+              <input type="date" value={analysisEnd} onChange={(e) => setAnalysisEnd(e.target.value)} className="h-8 rounded-lg border border-slate-300 px-2 text-xs" />
+              <span className="ml-1 font-bold text-slate-700">전월</span>
+              <input type="date" value={prevAnalysisStart} onChange={(e) => setPrevAnalysisStart(e.target.value)} className="h-8 rounded-lg border border-slate-300 px-2 text-xs" />
+              <span>~</span>
+              <input type="date" value={prevAnalysisEnd} onChange={(e) => setPrevAnalysisEnd(e.target.value)} className="h-8 rounded-lg border border-slate-300 px-2 text-xs" />
+              <span className="ml-1 font-bold text-slate-700">전년동월</span>
+              <input type="date" value={prevYearAnalysisStart} onChange={(e) => setPrevYearAnalysisStart(e.target.value)} className="h-8 rounded-lg border border-slate-300 px-2 text-xs" />
+              <span>~</span>
+              <input type="date" value={prevYearAnalysisEnd} onChange={(e) => setPrevYearAnalysisEnd(e.target.value)} className="h-8 rounded-lg border border-slate-300 px-2 text-xs" />
+              <button type="button" onClick={applyPeriodSearch} className="h-8 rounded-lg bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700">조회</button>
+            </div>
           </div>
           <div className="flex rounded-xl bg-slate-100 p-1 text-sm font-semibold">
             {(["브랜드별", "매장별"] as const).map((m) => (
@@ -7177,7 +7210,7 @@ function ItemAnalysis({
           <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">
             브랜드별 요약
           </div>
-          <div className="max-h-[65vh] overflow-auto isolate">
+          <div className="max-h-[74vh] overflow-auto isolate">
             <table className="w-full min-w-[1100px] connected-two-tier border-separate border-spacing-0 text-center text-[15px] leading-none whitespace-nowrap">
               <thead>
                 <tr>
@@ -7213,7 +7246,7 @@ function ItemAnalysis({
                     <td className="border border-slate-300 p-2">
                       <button
                         onClick={() => setSelectedBrand(r.brand)}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-black hover:border-blue-300 hover:bg-blue-50"
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-semibold text-black hover:border-blue-300 hover:bg-blue-50"
                       >
                         거래처 보기
                       </button>
@@ -7245,13 +7278,13 @@ function ItemAnalysis({
             {selectedBrand && (
               <button
                 onClick={backToTop}
-                className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                className="rounded-lg bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-200"
               >
                 ← 브랜드 목록
               </button>
             )}
           </div>
-          <div className="max-h-[65vh] overflow-auto isolate">
+          <div className="max-h-[74vh] overflow-auto isolate">
             <table className="w-full min-w-[900px] connected-two-tier border-separate border-spacing-0 text-center text-[12px] text-slate-900 whitespace-nowrap">
               {mode === "매장별" && !selectedBrand ? (
                 <>
@@ -7287,7 +7320,7 @@ function ItemAnalysis({
                         <td className="border border-slate-300 px-3 py-2 text-center whitespace-nowrap">
                           <button
                             onClick={() => setSelectedStoreCode(r.store.code)}
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-black hover:border-blue-300 hover:bg-blue-50"
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-semibold text-black hover:border-blue-300 hover:bg-blue-50"
                           >
                             품목 보기
                           </button>
@@ -7337,7 +7370,7 @@ function ItemAnalysis({
                         <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevMonth) >= 0 ? "text-emerald-600" : "text-red-600"}`}>{itemSignedPct(itemMetricRate(r.current, r.prevMonth))}</td>
                         <td className="border border-slate-300 p-2 text-right font-bold text-slate-900">{won(r.current)}</td>
                         <td className="border border-slate-300 p-2">
-                          <button onClick={() => setSelectedStoreCode(r.store.code)} className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-black hover:border-blue-300 hover:bg-blue-50">품목 보기</button>
+                          <button onClick={() => setSelectedStoreCode(r.store.code)} className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-semibold text-black hover:border-blue-300 hover:bg-blue-50">품목 보기</button>
                         </td>
                       </tr>
                     ))}
@@ -7361,21 +7394,21 @@ function ItemAnalysis({
               <div className="text-sm font-bold text-slate-800">
                 {selectedStore.name} 품목별 비교
               </div>
-              <div className="mt-1 text-xs text-slate-500">
+              <div className="mt-1 text-sm text-slate-500">
                 선택한 기간의 당일까지 매출과 전월·전년동월 동일기간 매출을 비교합니다.
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={backToStores}
-                className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                className="rounded-lg bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-200"
               >
                 ← 거래처 목록
               </button>
             </div>
           </div>
-          <div className="max-h-[65vh] overflow-auto isolate">
-            <table className="w-full min-w-[820px] connected-two-tier border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
+          <div className="max-h-[74vh] overflow-auto isolate">
+            <table className="w-full min-w-[820px] connected-two-tier border-separate border-spacing-0 text-center text-[13px] whitespace-nowrap">
               <thead>
                 <tr>
                   <ItemAnalysisSortableTh
@@ -7477,7 +7510,7 @@ function ItemAnalysis({
                     <td className="border border-slate-300 p-2">
                       <button
                         onClick={() => setSelectedItemCode(r.itemCode)}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-black transition hover:border-blue-300 hover:bg-blue-50"
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-semibold text-black transition hover:border-blue-300 hover:bg-blue-50"
                       >
                         상세
                       </button>
@@ -7511,13 +7544,13 @@ function ItemAnalysis({
                   <div className="text-sm font-bold text-slate-800">
                     {selectedStore.name} / {selectedItem.itemName}
                   </div>
-                  <div className="mt-1 text-xs text-slate-500">
+                  <div className="mt-1 text-sm text-slate-500">
                     품목코드 {selectedItem.itemCode} / 현재기간 상세 발주 원본
                   </div>
                 </div>
                 <button
                   onClick={backToItems}
-                  className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                  className="rounded-lg bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-200"
                 >
                   ← 품목 목록
                 </button>
@@ -7571,8 +7604,8 @@ function ItemAnalysis({
               <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">
                 상세 발주 원본
               </div>
-              <div className="max-h-[55vh] overflow-auto isolate">
-                <table className="w-full min-w-[1100px] connected-two-tier border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
+              <div className="max-h-[68vh] overflow-auto isolate">
+                <table className="w-full min-w-[1100px] connected-two-tier border-separate border-spacing-0 text-center text-[13px] whitespace-nowrap">
                   <thead>
                     <tr>
                       {(
@@ -8176,7 +8209,7 @@ function ItemShipmentAnalysis({
             </button>
           </div>
           <div className="max-h-[68vh] overflow-auto isolate">
-            <table className="w-full min-w-[1450px] border-separate border-spacing-0 text-center text-[11px] text-black whitespace-nowrap">
+            <table className="w-full min-w-[1450px] border-separate border-spacing-0 text-center text-[12px] text-black whitespace-nowrap">
               <thead>
                 <tr>
                   <PopupTh>거래처코드</PopupTh>
@@ -8906,7 +8939,14 @@ function SalesStatus({
       const aValue = a[sortConfig.key];
       const bValue = b[sortConfig.key];
       let result = 0;
-      if (typeof aValue === "string" || typeof bValue === "string") {
+      if (sortConfig.key === "lastOrderDate") {
+        const aDate = String(aValue || "-");
+        const bDate = String(bValue || "-");
+        if (aDate === "-" && bDate === "-") result = 0;
+        else if (aDate === "-") return 1;
+        else if (bDate === "-") return -1;
+        else result = aDate.localeCompare(bDate);
+      } else if (typeof aValue === "string" || typeof bValue === "string") {
         result = String(aValue).localeCompare(String(bValue), "ko-KR");
       } else {
         result = Number(aValue || 0) - Number(bValue || 0);
@@ -9146,13 +9186,13 @@ function SalesStatus({
               </span>
               {view === "담당자별" && (
                 <div className="flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
-                  <span className="mr-1 text-[11px] font-bold text-slate-600">
+                  <span className="mr-1 text-[12px] font-bold text-slate-600">
                     담당자 선택
                   </span>
                   {managerFilterOptions.map((manager) => (
                     <label
                       key={manager}
-                      className="flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200"
+                      className="flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[12px] font-semibold text-slate-700 ring-1 ring-slate-200"
                     >
                       <input
                         type="checkbox"
@@ -9167,7 +9207,7 @@ function SalesStatus({
                     <button
                       type="button"
                       onClick={() => setSelectedManagers([])}
-                      className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
+                      className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[12px] font-semibold text-slate-600 hover:bg-slate-50"
                     >
                       전체보기
                     </button>
@@ -9247,7 +9287,7 @@ function SalesStatus({
 
         <div className="relative max-h-[62vh] overflow-auto bg-white">
           <table
-            className={`sales-status-table w-full ${compact ? "min-w-[1360px]" : "min-w-[1180px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[11px] leading-tight`}
+            className={`sales-status-table w-full ${compact ? "min-w-[1360px]" : "min-w-[1180px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[12px] leading-tight`}
           >
             <thead>
               <tr className="bg-white">
@@ -9262,7 +9302,16 @@ function SalesStatus({
                 </ThCompactSortable>
                 {showChannelColumn && <ThCompact rowSpan={2} tone="gray" w="w-[7%]">채널</ThCompact>}
                 {!compact && isStoreListView && (
-                  <ThCompact rowSpan={2} tone="gray" w="w-[7%]">마지막발주일</ThCompact>
+                  <ThCompactSortable
+                    rowSpan={2}
+                    tone="gray"
+                    w="w-[7%]"
+                    sortKey="lastOrderDate"
+                    sortConfig={sortConfig}
+                    onSort={requestSort}
+                  >
+                    마지막발주일
+                  </ThCompactSortable>
                 )}
                 <ThCompact colSpan={2} tone="mint" className="period-group-start">전년동월</ThCompact>
                 <ThCompact colSpan={2} tone="blue" className="period-group-start">전월</ThCompact>
@@ -9362,7 +9411,7 @@ function SalesStatus({
                               className="border border-gray-300 bg-slate-50 px-3 py-2"
                             >
                               <div className="overflow-auto rounded-lg border border-gray-200 bg-white">
-                                <table className="w-full min-w-[700px] border-separate border-spacing-0 text-[11px]">
+                                <table className="w-full min-w-[700px] border-separate border-spacing-0 text-[12px]">
                                   <thead>
                                     <tr className="bg-slate-100">
                                       <th className="border border-gray-200 px-2 py-1.5 text-center font-bold whitespace-nowrap">
@@ -11816,7 +11865,7 @@ function MappingPage({
                 닫기
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto bg-white px-4 pb-4 pt-0">
+            <div className="min-h-0 flex-1 overflow-auto bg-white pb-10 scroll-pb-10 px-4 pb-4 pt-0">
               <div className="rounded-xl border border-gray-300 bg-slate-50 p-3">
                 <div className="mb-2 flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
                   <div>
@@ -12963,7 +13012,7 @@ function Th({
 
   return (
     <th
-      className={`sticky top-0 z-20 border p-2 text-xs font-bold leading-tight whitespace-normal break-keep ${toneClass} ${right ? "text-right" : "text-left"}`}
+      className={`sticky top-0 z-20 border p-2 text-xs font-bold leading-tight whitespace-normal break-keep ${toneClass} text-center`}
     >
       {children}
     </th>
@@ -12983,7 +13032,7 @@ function Td({
 }) {
   return (
     <td
-      className={`border border-gray-300 bg-white p-2 ${right ? "text-right" : "text-left"} ${bold ? "font-semibold" : ""} ${color}`}
+      className={`border border-gray-300 bg-white p-2 text-center ${bold ? "font-semibold" : ""} ${color}`}
     >
       {children}
     </td>
