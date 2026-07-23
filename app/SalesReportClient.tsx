@@ -11084,6 +11084,7 @@ function StoreListManagement({
   const [listTab, setListTab] = useState<ListTab>("기존거래처 리스트");
   const [search, setSearch] = useState("");
   const [otherTab, setOtherTab] = useState<"담당자 관리" | "브랜드 관리" | "채널 관리" | "거래상태 관리">("담당자 관리");
+  const [managerSubTab, setManagerSubTab] = useState<"EST 담당자 관리" | "거래처 담당자 관리">("EST 담당자 관리");
   const [channelTab, setChannelTab] = useState<"채널 1" | "채널 2">("채널 1");
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
   const [bulkManager, setBulkManager] = useState("");
@@ -11093,6 +11094,7 @@ function StoreListManagement({
   const [bulkStatus, setBulkStatus] = useState<"" | Store["status"]>("");
   const [newManager, setNewManager] = useState("");
   const [newChannel1, setNewChannel1] = useState("");
+  const [brandDrafts, setBrandDrafts] = useState<Record<string, string>>({});
   const [showNewOnly, setShowNewOnly] = useState(false);
   const [savedChannel1Options, setSavedChannel1Options] = useLocal<string[]>(
     "month-start-channel1-options-v1",
@@ -11105,6 +11107,8 @@ function StoreListManagement({
     setSearch("");
     setSelectedCodes(new Set());
     setShowNewOnly(false);
+    setManagerSubTab("EST 담당자 관리");
+    setBrandDrafts({});
   }, [section]);
 
   type SalesStoreSummary = {
@@ -11352,7 +11356,7 @@ function StoreListManagement({
     }
     return newStoreCodes.has(row.code) || !row.manager.trim();
   };
-  const visibleOtherRows = showNewOnly && otherTab !== "담당자 관리"
+  const visibleOtherRows = showNewOnly && (otherTab !== "담당자 관리" || managerSubTab === "거래처 담당자 관리")
     ? visibleTotalRows.filter(needsReferenceSetup)
     : visibleTotalRows;
   const normalizeManager = (value: string) => value.trim().toUpperCase();
@@ -11476,6 +11480,19 @@ function StoreListManagement({
     setSelectedCodes(new Set());
   }
 
+
+  function applyBrandDrafts() {
+    const changes = Object.entries(brandDrafts)
+      .map(([code, value]) => [code, value.trim()] as const)
+      .filter(([, value]) => Boolean(value));
+    if (!changes.length) return alert("수정할 브랜드 값을 먼저 입력해주세요.");
+    if (!window.confirm(`입력한 ${changes.length.toLocaleString("ko-KR")}개 거래처의 브랜드를 한꺼번에 반영할까요?`)) return;
+    const changeMap = new Map(changes);
+    setStores(totalRows.map((row) => changeMap.has(row.code) ? { ...row, brand: changeMap.get(row.code) || row.brand } : row));
+    setBrandDrafts({});
+    alert(`브랜드 ${changes.length.toLocaleString("ko-KR")}건을 한꺼번에 반영했습니다.`);
+  }
+
   function addChannel1Option() {
     const value = newChannel1.trim();
     if (!value) return alert("추가할 업종명을 입력해주세요.");
@@ -11521,22 +11538,42 @@ function StoreListManagement({
           ).map((menu) => {
             const active = section === "list" ? listTab === menu : otherTab === menu;
             return (
-              <button
-                key={menu}
-                type="button"
-                onClick={() => {
-                  if (section === "list") setListTab(menu as ListTab);
-                  else {
-                    setListTab("기타 관리");
-                    setOtherTab(menu as typeof otherTab);
-                    setSelectedCodes(new Set());
-                    setShowNewOnly(false);
-                  }
-                }}
-                className={`w-full rounded-lg border-l-4 px-3 py-2 text-left text-xs font-bold transition ${active ? "border-blue-600 bg-blue-50 text-blue-800" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
-              >
-                {menu.replace(" 리스트", "").replace(" 관리", "")}
-              </button>
+              <Fragment key={menu}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (section === "list") setListTab(menu as ListTab);
+                    else {
+                      setListTab("기타 관리");
+                      setOtherTab(menu as typeof otherTab);
+                      setSelectedCodes(new Set());
+                      setShowNewOnly(false);
+                      setBrandDrafts({});
+                    }
+                  }}
+                  className={`w-full rounded-lg border-l-4 px-3 py-2 text-left text-xs font-bold transition ${active ? "border-blue-600 bg-blue-50 text-blue-800" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                >
+                  {menu.replace(" 리스트", "").replace(" 관리", "")}
+                </button>
+                {section === "reference" && menu === "담당자 관리" && otherTab === "담당자 관리" && (
+                  <div className="ml-3 space-y-1 border-l border-slate-200 pl-2">
+                    {(["EST 담당자 관리", "거래처 담당자 관리"] as const).map((subMenu) => (
+                      <button
+                        key={subMenu}
+                        type="button"
+                        onClick={() => {
+                          setManagerSubTab(subMenu);
+                          setSelectedCodes(new Set());
+                          setShowNewOnly(false);
+                        }}
+                        className={`w-full rounded-md px-2 py-1.5 text-left text-[11px] font-bold transition ${managerSubTab === subMenu ? "bg-orange-50 text-orange-800" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}
+                      >
+                        {subMenu}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </Fragment>
             );
           })}
         </div>
@@ -11545,7 +11582,7 @@ function StoreListManagement({
       <main className="min-w-0 space-y-3">
         <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-extrabold text-slate-900">{section === "list" ? listTab : otherTab}</h2>
+            <h2 className="text-sm font-extrabold text-slate-900">{section === "list" ? listTab : otherTab === "담당자 관리" ? managerSubTab : otherTab}</h2>
             <div className="flex flex-wrap items-center gap-2">
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={section === "reference" ? "거래처명/담당자/브랜드/채널 검색" : "사업자번호/거래처명/상태 검색"} className="h-8 w-[270px] rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-blue-500" />
               {section === "list" && listTab === "총 거래처 리스트" && (
@@ -11556,6 +11593,7 @@ function StoreListManagement({
 
           {section === "reference" && (
             <>
+              {(otherTab !== "담당자 관리" || managerSubTab === "거래처 담당자 관리") && (
               <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 p-2">
                 <span className="mr-1 text-[11px] font-semibold text-slate-600">선택 {selectedCodes.size.toLocaleString("ko-KR")}건 / 검색결과 {visibleOtherRows.length.toLocaleString("ko-KR")}건</span>
                 <button type="button" onClick={toggleVisibleSelection} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100">{allVisibleSelected ? "검색결과 선택 해제" : "검색결과 전체 선택"}</button>
@@ -11572,7 +11610,7 @@ function StoreListManagement({
                     {showNewOnly ? "전체 거래처 보기" : "신규·미설정 거래처 보기"}
                   </button>
                 )}
-                {otherTab === "담당자 관리" && (
+                {otherTab === "담당자 관리" && managerSubTab === "거래처 담당자 관리" && (
                   <>
                     <select value={bulkManager} onChange={(event) => setBulkManager(event.target.value)} className="h-8 min-w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold"><option value="">변경 담당자 선택</option>{managerOptions.map((manager) => <option key={manager} value={manager}>{manager}</option>)}</select>
                     <button type="button" onClick={() => applyBulkChange("manager")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">담당자 일괄 수정</button>
@@ -11586,7 +11624,10 @@ function StoreListManagement({
                   <>
                     <input list="store-brand-options" value={bulkBrand} onChange={(event) => setBulkBrand(event.target.value)} placeholder="변경 브랜드 입력 또는 선택" className="h-8 min-w-[220px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold" />
                     <datalist id="store-brand-options">{brandOptions.map((brand) => <option key={brand} value={brand} />)}</datalist>
-                    <button type="button" onClick={() => applyBulkChange("brand")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">브랜드 일괄 수정</button>
+                    <button type="button" onClick={() => applyBulkChange("brand")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">선택 브랜드 일괄 수정</button>
+                    <span className="mx-1 h-5 w-px bg-slate-300" />
+                    <button type="button" onClick={applyBrandDrafts} className="h-8 rounded-lg bg-orange-500 px-3 text-xs font-bold text-white hover:bg-orange-600">입력값 전체 반영</button>
+                    <button type="button" onClick={() => setBrandDrafts({})} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">입력값 초기화</button>
                   </>
                 )}
                 {otherTab === "채널 관리" && (
@@ -11621,7 +11662,8 @@ function StoreListManagement({
                   </>
                 )}
               </div>
-              {otherTab === "담당자 관리" && (
+              )}
+              {otherTab === "담당자 관리" && managerSubTab === "EST 담당자 관리" && (
                 <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
                   <table className="w-full min-w-[720px] border-collapse text-center text-xs">
                     <thead>
@@ -11664,7 +11706,7 @@ function StoreListManagement({
         </div>
 
       <div className="min-h-0 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-        <div className={section === "reference" ? "max-h-[58vh] overflow-auto pb-3" : "max-h-[65vh] overflow-auto"}>
+        <div className={section === "reference" ? "max-h-[68vh] overflow-auto pb-3" : "max-h-[65vh] overflow-auto"}>
           {listTab === "기존거래처 리스트" && (
             <table className="w-full min-w-[1250px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
               <thead>
@@ -11748,7 +11790,7 @@ function StoreListManagement({
             </table>
           )}
 
-          {section === "reference" && listTab === "기타 관리" && (
+          {section === "reference" && listTab === "기타 관리" && !(otherTab === "담당자 관리" && managerSubTab === "EST 담당자 관리") && (
             <table className="w-full min-w-[1150px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-100">
@@ -11792,7 +11834,18 @@ function StoreListManagement({
                       <td className="border border-slate-300 px-3 py-2">{row.code}</td>
                       <td className="border border-slate-300 px-3 py-2 text-left font-semibold">{row.name}</td>
                       <td className="border border-slate-300 px-3 py-2 font-bold">{row.manager ? normalizeManager(row.manager) : "미지정"}</td>
-                      <td className="border border-slate-300 px-3 py-2 text-left">{row.brand || "미지정"}</td>
+                      <td className="border border-slate-300 px-3 py-2 text-left">
+                        {otherTab === "브랜드 관리" ? (
+                          <input
+                            list="store-brand-options"
+                            value={brandDrafts[row.code] ?? row.brand ?? ""}
+                            onChange={(event) => setBrandDrafts((previous) => ({ ...previous, [row.code]: event.target.value }))}
+                            onClick={(event) => event.stopPropagation()}
+                            placeholder="브랜드 입력"
+                            className="h-8 w-full min-w-[220px] rounded-lg border border-orange-200 bg-orange-50 px-2 text-xs font-semibold text-slate-900 outline-none focus:border-orange-500"
+                          />
+                        ) : (row.brand || "미지정")}
+                      </td>
                       <td className="border border-slate-300 px-3 py-2">{row.channel}</td>
                       <td className="border border-slate-300 px-3 py-2">{row.storeType}</td>
                       <td className="border border-slate-300 px-3 py-2">
