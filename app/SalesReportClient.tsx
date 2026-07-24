@@ -5030,6 +5030,8 @@ export default function SalesReportClient() {
             sales={sales}
             itemCosts={itemCosts}
             setItemCosts={setItemCosts}
+            itemMasters={itemMasters}
+            month={dashMonth}
             isAdmin={isAdmin}
           />
         )}
@@ -5711,15 +5713,20 @@ function ItemCostStatus({
   sales,
   itemCosts,
   setItemCosts,
+  itemMasters,
+  month,
   isAdmin,
 }: {
   sales: SalesRecord[];
   itemCosts: ItemCostRecord[];
   setItemCosts: React.Dispatch<React.SetStateAction<ItemCostRecord[]>>;
+  itemMasters: ItemMasterRecord[];
+  month: string;
   isAdmin: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [showChangedOnly, setShowChangedOnly] = useState(false);
+  const [showNewOnly, setShowNewOnly] = useState(false);
   const [openItemCode, setOpenItemCode] = useState("");
   const normalizedSearch = search.trim().toLowerCase();
 
@@ -5765,10 +5772,27 @@ function ItemCostStatus({
     });
   }, [setItemCosts]);
 
+  const itemMasterByCode = useMemo(
+    () => new Map(itemMasters.map((item) => [item.itemCode, item])),
+    [itemMasters],
+  );
+
+  const firstSaleMonthByItem = useMemo(() => {
+    const map = new Map<string, string>();
+    sales.forEach((row) => {
+      const key = row.itemCode || row.itemName || "미지정";
+      const saleMonth = row.saleDate?.slice(0, 7) || row.refMonth;
+      if (!saleMonth) return;
+      const current = map.get(key);
+      if (!current || saleMonth < current) map.set(key, saleMonth);
+    });
+    return map;
+  }, [sales]);
+
   const itemBaseRows = useMemo(() => {
     const map = new Map<
       string,
-      { itemCode: string; itemName: string; estimatedCost: number }
+      { itemCode: string; itemName: string; category: string; estimatedCost: number; isNewItem: boolean }
     >();
     sales.forEach((row) => {
       const key = row.itemCode || row.itemName || "미지정";
@@ -5777,7 +5801,9 @@ function ItemCostStatus({
         map.set(key, {
           itemCode: row.itemCode || "-",
           itemName: row.itemName || "미지정",
+          category: itemMasterByCode.get(row.itemCode)?.category || itemCategoryFromName(row.itemName),
           estimatedCost: quantity ? Number(row.costAmount || 0) / quantity : 0,
+          isNewItem: firstSaleMonthByItem.get(key) === month,
         });
       }
     });
@@ -5787,14 +5813,16 @@ function ItemCostStatus({
         map.set(key, {
           itemCode: item.itemCode || "-",
           itemName: item.itemName || "미지정",
+          category: itemMasterByCode.get(item.itemCode)?.category || itemCategoryFromName(item.itemName),
           estimatedCost: Number(item.currentCost || 0),
+          isNewItem: firstSaleMonthByItem.get(key) === month,
         });
       }
     });
     return Array.from(map.values()).sort((a, b) =>
       a.itemName.localeCompare(b.itemName, "ko-KR", { numeric: true }),
     );
-  }, [sales, itemCosts]);
+  }, [sales, itemCosts, itemMasterByCode, firstSaleMonthByItem, month]);
 
   const costMap = useMemo(
     () => new Map(itemCosts.map((item) => [item.itemCode, item])),
@@ -5835,14 +5863,15 @@ function ItemCostStatus({
       })
       .filter((row) => {
         if (showChangedOnly && !row.nextCost && !row.history.length) return false;
+        if (showNewOnly && !row.isNewItem) return false;
         if (!normalizedSearch) return true;
-        return [row.itemCode, row.itemName, row.memo]
+        return [row.itemCode, row.itemName, row.category, row.memo]
           .some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
       });
-  }, [itemBaseRows, costMap, normalizedSearch, showChangedOnly]);
+  }, [itemBaseRows, costMap, normalizedSearch, showChangedOnly, showNewOnly]);
 
   const upsertItemCost = (
-    base: { itemCode: string; itemName: string; estimatedCost: number },
+    base: { itemCode: string; itemName: string; category: string; estimatedCost: number; isNewItem: boolean },
     patch: Partial<ItemCostRecord>,
   ) => {
     if (!isAdmin) return;
@@ -5914,7 +5943,7 @@ function ItemCostStatus({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="품목코드/품목명/메모 검색"
+              placeholder="품목코드/품목명/카테고리/메모 검색"
               className="h-9 w-[260px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
             />
             <label className="flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 text-xs font-bold text-slate-700">
@@ -5925,19 +5954,28 @@ function ItemCostStatus({
               />
               변동 품목만
             </label>
+            <label className="flex h-9 items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-800">
+              <input
+                type="checkbox"
+                checked={showNewOnly}
+                onChange={(e) => setShowNewOnly(e.target.checked)}
+              />
+              당월 신규 품목만
+            </label>
           </div>
         </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="max-h-[78vh] overflow-auto isolate">
-          <table className="w-full min-w-[1350px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+          <table className="w-full min-w-[1420px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목코드</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목명</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">현재 매입가</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">다음 매입가</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목 카테고리</th>
+                <th className="sticky top-0 z-20 w-[105px] border border-slate-300 bg-[#F3FAFD] px-2 py-2 font-bold text-black">현재 매입가</th>
+                <th className="sticky top-0 z-20 w-[105px] border border-slate-300 bg-orange-50 px-2 py-2 font-bold text-orange-800">다음 매입가</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">적용 예정일</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">상태</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">D-Day</th>
@@ -5956,8 +5994,16 @@ function ItemCostStatus({
                   <Fragment key={row.itemCode}>
                     <tr className={isDueSoon ? "bg-red-50 hover:bg-red-100" : isUpcoming ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-slate-50"}>
                       <td className="border border-slate-300 px-3 py-2 text-slate-700">{row.itemCode}</td>
-                      <td className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">{row.itemName}</td>
-                      <td className="border border-slate-300 px-3 py-2">
+                      <td className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">
+                        <div className="flex items-center gap-2">
+                          <span>{row.itemName}</span>
+                          {row.isNewItem && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">당월 신규</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="border border-slate-300 px-3 py-2 font-semibold text-slate-700">{row.category}</td>
+                      <td className="w-[105px] border border-slate-300 px-2 py-2">
                         <input
                           type="text"
                           inputMode="numeric"
@@ -5965,10 +6011,10 @@ function ItemCostStatus({
                           value={row.currentCost ? won(row.currentCost) : ""}
                           onChange={(e) => upsertItemCost(row, { currentCost: num(e.target.value) })}
                           placeholder="0"
-                          className="h-9 w-full min-w-[120px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          className="h-9 w-[92px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
-                      <td className="border border-slate-300 px-3 py-2">
+                      <td className="w-[105px] border border-slate-300 px-2 py-2">
                         <input
                           type="text"
                           inputMode="numeric"
@@ -5976,7 +6022,7 @@ function ItemCostStatus({
                           value={row.nextCost ? won(row.nextCost) : ""}
                           onChange={(e) => upsertItemCost(row, { nextCost: num(e.target.value) || undefined })}
                           placeholder="변경 예정가"
-                          className="h-9 w-full min-w-[120px] rounded-lg border border-orange-300 bg-orange-50 px-3 text-right text-sm font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          className="h-9 w-[92px] rounded-lg border border-orange-300 bg-orange-50 px-3 text-right text-sm font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
                       <td className="border border-slate-300 px-3 py-2">
@@ -6035,7 +6081,7 @@ function ItemCostStatus({
                     </tr>
                     {openItemCode === row.itemCode && (
                       <tr>
-                        <td colSpan={11} className="border border-slate-300 bg-slate-50 p-3">
+                        <td colSpan={12} className="border border-slate-300 bg-slate-50 p-3">
                           <div className="text-left text-xs font-bold text-slate-700">{row.itemName} 매입가 History</div>
                           <div className="mt-2 overflow-auto rounded-xl border border-slate-300 bg-white">
                             <table className="w-full min-w-[760px] text-center text-[11px]">
@@ -6092,7 +6138,7 @@ function ItemCostStatus({
               })}
               {!rows.length && (
                 <tr>
-                  <td colSpan={11} className="border border-slate-300 p-8 text-center text-slate-500">
+                  <td colSpan={12} className="border border-slate-300 p-8 text-center text-slate-500">
                     표시할 품목이 없습니다.
                   </td>
                 </tr>
@@ -6163,11 +6209,11 @@ function KpiGroup({
               key={item.title}
               className={`flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 rounded-lg px-1.5 py-0.5 first:pt-0 last:pb-0 ${item.highlightClass || ""}`}
             >
-              <p className="shrink-0 break-keep text-[13px] font-semibold text-black">
+              <p className="shrink-0 break-keep text-[12px] font-semibold text-black">
                 {item.title}
               </p>
               <p
-                className={`min-w-0 max-w-full flex-1 whitespace-normal break-all text-right text-[16px] font-bold leading-tight tracking-tight md:text-[16px] xl:text-[17px] 2xl:text-[18px] ${item.color || "text-black"}`}
+                className={`min-w-0 max-w-full flex-1 whitespace-normal break-all text-right text-[15px] font-bold leading-tight tracking-tight md:text-[15px] xl:text-[16px] 2xl:text-[17px] ${item.color || "text-black"}`}
               >
                 {value}
               </p>
@@ -6457,10 +6503,10 @@ function DashboardTopKpis({
         className={`h-full rounded-xl border border-gray-200 bg-white p-2.5 text-left shadow-sm ${activeCostAlertCount > 0 ? "cursor-pointer hover:bg-orange-50 hover:shadow-md" : "cursor-default"}`}
       >
         <div className="divide-y divide-gray-200 text-black">
-          <div className="flex min-h-[31px] items-center justify-between px-1.5"><span className="text-[13px] font-semibold">매입가 알림</span><span className="text-[18px] font-black">{activeCostAlertCount ? `${activeCostAlertCount}건` : "정상"}</span></div>
-          <div className="flex min-h-[31px] items-center justify-between px-1.5"><span className="text-[13px] font-semibold">오늘 적용</span><span className="text-[16px] font-bold">{dueTodayCount}건{overdueCount ? ` / 지남 ${overdueCount}건` : ""}</span></div>
-          <div className="flex min-h-[31px] items-center justify-between px-1.5"><span className="text-[13px] font-semibold">7일 이내</span><span className="text-[16px] font-bold">{dueSoonCount}건</span></div>
-          <div className="flex min-h-[31px] items-center justify-between px-1.5"><span className="text-[13px] font-semibold">30일 이내</span><span className="text-[16px] font-bold">{upcomingCount}건 · 최근변경 {recentHistoryCount}건</span></div>
+          <div className="flex min-h-[31px] items-center justify-between px-1.5"><span className="text-[12px] font-semibold">매입가 알림</span><span className="text-[17px] font-black">{activeCostAlertCount ? `${activeCostAlertCount}건` : "정상"}</span></div>
+          <div className="flex min-h-[31px] items-center justify-between px-1.5"><span className="text-[12px] font-semibold">오늘 적용</span><span className="text-[15px] font-bold">{dueTodayCount}건{overdueCount ? ` / 지남 ${overdueCount}건` : ""}</span></div>
+          <div className="flex min-h-[31px] items-center justify-between px-1.5"><span className="text-[12px] font-semibold">7일 이내</span><span className="text-[15px] font-bold">{dueSoonCount}건</span></div>
+          <div className="flex min-h-[31px] items-center justify-between px-1.5"><span className="text-[12px] font-semibold">30일 이내</span><span className="text-[15px] font-bold">{upcomingCount}건 · 최근변경 {recentHistoryCount}건</span></div>
         </div>
       </button>
     </div>
@@ -6616,13 +6662,9 @@ function Dashboard({
       currentRows
         .filter((sale) => {
           const store = stMap.get(sale.storeCode);
-          const managerName = normalizeDashboardManager(
-            store?.manager ?? sale.manager,
-          ) || "미지정";
           const brandName = displayBrand(store?.brand ?? sale.brand);
           return (
             Number(sale.salesAmount || 0) !== 0 &&
-            managerName === "미지정" &&
             brandName === "당월 신규 거래처"
           );
         })
@@ -6741,13 +6783,9 @@ function Dashboard({
         managerCurrentRows
           .filter((row) => {
             const store = stMap.get(row.storeCode);
-            const managerName = normalizeDashboardManager(
-              store?.manager ?? row.manager,
-            ) || "미지정";
             const brandName = displayBrand(store?.brand ?? row.brand);
             return (
               Number(row.salesAmount || 0) !== 0 &&
-              managerName === "미지정" &&
               brandName === "당월 신규 거래처"
             );
           })
@@ -6854,7 +6892,7 @@ function Dashboard({
             <div className="flex items-center justify-between border-b border-slate-300 px-5 py-4">
               <div>
                 <div className="text-base font-extrabold text-slate-900">{detailModal.kind === "paused" ? `${detailModal.manager} 거래중단 거래처` : `${detailModal.manager} 전월 신규 거래처`}</div>
-                <div className="mt-1 text-xs text-slate-500">{detailModal.kind === "paused" ? "최근 3개월 매출과 마지막 출고일을 표시합니다." : "기준: 담당자가 미지정이고 브랜드명이 당월 신규 거래처인 곳 중 당월 매출이 발생한 거래처"}</div>
+                <div className="mt-1 text-xs text-slate-500">{detailModal.kind === "paused" ? "최근 3개월 매출과 마지막 출고일을 표시합니다." : "기준: 담당자와 관계없이 브랜드명이 당월 신규 거래처인 곳 중 당월 매출이 발생한 거래처"}</div>
               </div>
               <button type="button" onClick={() => setDetailModal(null)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100">닫기</button>
             </div>
@@ -8136,6 +8174,7 @@ function ItemShipmentAnalysis({
   );
   const [categoryFilter, setCategoryFilter] = useState("전체");
   const [profitRateFilter, setProfitRateFilter] = useState("전체");
+  const [newItemFilter, setNewItemFilter] = useState<"전체" | "당월 신규">("전체");
 
   useEffect(() => {
     setAnalysisStart(monthStart(month));
@@ -8143,6 +8182,7 @@ function ItemShipmentAnalysis({
     setSelectedItemCode("");
     setCategoryFilter("전체");
     setProfitRateFilter("전체");
+    setNewItemFilter("전체");
   }, [month, date]);
 
   const currentStart =
@@ -8159,6 +8199,17 @@ function ItemShipmentAnalysis({
     () => new Map(itemMasters.map((item) => [item.itemCode, item])),
     [itemMasters],
   );
+  const firstSaleMonthByItem = useMemo(() => {
+    const map = new Map<string, string>();
+    sales.forEach((row) => {
+      const key = row.itemCode || row.itemName || "미지정";
+      const saleMonth = row.saleDate?.slice(0, 7) || row.refMonth;
+      if (!saleMonth) return;
+      const current = map.get(key);
+      if (!current || saleMonth < current) map.set(key, saleMonth);
+    });
+    return map;
+  }, [sales]);
 
   const itemRows = useMemo(() => {
     const map = new Map<
@@ -8170,6 +8221,7 @@ function ItemShipmentAnalysis({
         current: ItemMetric;
         prevMonth: ItemMetric;
         storeCodes: Set<string>;
+        isNewItem: boolean;
       }
     >();
 
@@ -8183,6 +8235,7 @@ function ItemShipmentAnalysis({
           current: emptyItemMetric(),
           prevMonth: emptyItemMetric(),
           storeCodes: new Set<string>(),
+          isNewItem: firstSaleMonthByItem.get(key) === month,
         });
       }
       return map.get(key)!;
@@ -8243,6 +8296,7 @@ function ItemShipmentAnalysis({
         };
       })
       .filter((r) => categoryFilter === "전체" || r.category === categoryFilter)
+      .filter((r) => newItemFilter === "전체" || r.isNewItem)
       .filter((r) => {
         if (profitRateFilter === "전체") return true;
         if (profitRateFilter === "30% 미만") return r.currentProfitRate < 30;
@@ -8264,7 +8318,10 @@ function ItemShipmentAnalysis({
     prevEnd,
     categoryFilter,
     profitRateFilter,
+    newItemFilter,
     itemMasterByCode,
+    firstSaleMonthByItem,
+    month,
   ]);
 
   const categoryOptions = useMemo(() => {
@@ -8322,6 +8379,18 @@ function ItemShipmentAnalysis({
       currentRate,
       rateChange: currentRate - prevRate,
       storeCount: new Set(itemRows.flatMap((row) => Array.from(row.storeCodes))).size,
+    };
+  }, [itemRows]);
+
+  const newItemSummary = useMemo(() => {
+    const newRows = itemRows.filter((row) => row.isNewItem);
+    const salesAmount = newRows.reduce((total, row) => total + row.current.sales, 0);
+    const profitAmount = newRows.reduce((total, row) => total + row.current.profit, 0);
+    return {
+      count: newRows.length,
+      salesAmount,
+      profitAmount,
+      profitRate: salesAmount ? (profitAmount / salesAmount) * 100 : 0,
     };
   }, [itemRows]);
 
@@ -8441,12 +8510,15 @@ function ItemShipmentAnalysis({
         <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-300 px-4 py-3">
             <div className="text-sm font-bold text-black">품목별 손익 요약</div>
-            <div className="text-xs font-semibold text-black">
-              필터 결과 {itemRows.length.toLocaleString("ko-KR")}개 품목
+            <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-black">
+              <span>필터 결과 {itemRows.length.toLocaleString("ko-KR")}개 품목</span>
+              <span className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-amber-900">
+                당월 신규 {newItemSummary.count.toLocaleString("ko-KR")}개 · 매출 {won(newItemSummary.salesAmount)} · 이익 {won(newItemSummary.profitAmount)} · 이익률 {pct(newItemSummary.profitRate)}
+              </span>
             </div>
           </div>
           <div className="overflow-x-auto isolate">
-            <div className="min-w-[1650px]">
+            <div className="min-w-[1740px]">
               {/* 헤더와 SUBTOTAL은 스크롤 영역 밖에 두어 완전히 고정합니다. */}
               <div className="item-profit-fixed-header-wrap">
               <table className="item-profit-fixed-header w-full table-fixed text-center text-black whitespace-nowrap">
@@ -8454,6 +8526,7 @@ function ItemShipmentAnalysis({
                 <col style={{ width: "120px" }} />
                 <col style={{ width: "300px" }} />
                 <col style={{ width: "100px" }} />
+                <col style={{ width: "90px" }} />
                 <col style={{ width: "130px" }} />
                 <col style={{ width: "100px" }} />
                 <col style={{ width: "120px" }} />
@@ -8484,6 +8557,22 @@ function ItemShipmentAnalysis({
                         {categoryOptions.map((category) => (
                           <option key={category} value={category}>{category}</option>
                         ))}
+                      </select>
+                    </div>
+                  </th>
+                  <th rowSpan={2} className="border border-slate-300 bg-amber-50 px-1 py-2 font-bold text-amber-900">
+                    <div className="flex w-full flex-col items-center gap-1">
+                      <span>신규여부</span>
+                      <select
+                        value={newItemFilter}
+                        onChange={(e) => {
+                          setNewItemFilter(e.target.value as "전체" | "당월 신규");
+                          setSelectedItemCode("");
+                        }}
+                        className="w-full rounded border border-amber-300 bg-white px-1 font-semibold text-black"
+                      >
+                        <option value="전체">전체</option>
+                        <option value="당월 신규">당월 신규</option>
                       </select>
                     </div>
                   </th>
@@ -8520,7 +8609,7 @@ function ItemShipmentAnalysis({
                   </th>
                 </tr>
                 <tr className="item-profit-subtotal font-extrabold text-black">
-                  <th colSpan={3} className="subtotal-label border border-slate-400 font-extrabold">SUBTOTAL</th>
+                  <th colSpan={4} className="subtotal-label border border-slate-400 font-extrabold">SUBTOTAL</th>
                   <th className="subtotal-number sales-value-cell border border-slate-400 font-extrabold">{won(subtotal.prevMonth.sales)}</th>
                   <th className="subtotal-number border border-slate-400">{won(subtotal.prevMonthUnitCost)}</th>
                   <th className="subtotal-number border border-slate-400">{won(subtotal.prevMonth.profit)}</th>
@@ -8546,6 +8635,7 @@ function ItemShipmentAnalysis({
                 <col style={{ width: "120px" }} />
                 <col style={{ width: "300px" }} />
                 <col style={{ width: "100px" }} />
+                <col style={{ width: "90px" }} />
                 <col style={{ width: "130px" }} />
                 <col style={{ width: "100px" }} />
                 <col style={{ width: "120px" }} />
@@ -8560,10 +8650,15 @@ function ItemShipmentAnalysis({
               </colgroup>
               <tbody>
                 {itemRows.map((r) => (
-                  <tr key={`${r.itemCode}-${r.itemName}`} className="hover:bg-blue-50">
+                  <tr key={`${r.itemCode}-${r.itemName}`} className={r.isNewItem ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-blue-50"}>
                     <td className="border border-slate-300 p-2">{r.itemCode}</td>
                     <td className="item-name-cell border border-slate-300 p-2 text-left font-semibold" title={r.itemName}>{r.itemName}</td>
                     <td className="border border-slate-300 p-2 font-semibold">{r.category}</td>
+                    <td className="border border-slate-300 p-2 text-center">
+                      {r.isNewItem ? (
+                        <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">당월 신규</span>
+                      ) : "-"}
+                    </td>
                     <td className="item-profit-number-cell sales-value-cell border border-slate-300 p-2 font-bold">{won(r.prevMonth.sales)}</td>
                     <td className="item-profit-number-cell border border-slate-300 p-2">{won(r.prevMonthUnitCost)}</td>
                     <td className="item-profit-number-cell border border-slate-300 p-2">{won(r.prevMonth.profit)}</td>
@@ -8588,7 +8683,7 @@ function ItemShipmentAnalysis({
                 ))}
                 {!itemRows.length && (
                   <tr>
-                    <td colSpan={14} className="border border-slate-300 p-8 text-center text-black">
+                    <td colSpan={15} className="border border-slate-300 p-8 text-center text-black">
                       표시할 품목이 없습니다.
                     </td>
                   </tr>
