@@ -118,6 +118,9 @@ type ItemMasterRecord = {
   itemCode: string;
   itemName: string;
   category: string;
+  supplier?: string;
+  source?: "initial" | "sales";
+  firstSeenMonth?: string;
   active?: boolean;
   memo?: string;
 };
@@ -4368,6 +4371,9 @@ function readFileRows(file: File): Promise<Record<string, unknown>[]> {
               "매출일",
               "Target",
               "EST",
+              "품목코드",
+              "품목 코드",
+              "품목명",
             ].includes(norm(cell)),
           ),
         );
@@ -5031,6 +5037,7 @@ export default function SalesReportClient() {
             itemCosts={itemCosts}
             setItemCosts={setItemCosts}
             itemMasters={itemMasters}
+            setItemMasters={setItemMasters}
             month={dashMonth}
             isAdmin={isAdmin}
           />
@@ -5714,6 +5721,7 @@ function ItemCostStatus({
   itemCosts,
   setItemCosts,
   itemMasters,
+  setItemMasters,
   month,
   isAdmin,
 }: {
@@ -5721,6 +5729,7 @@ function ItemCostStatus({
   itemCosts: ItemCostRecord[];
   setItemCosts: React.Dispatch<React.SetStateAction<ItemCostRecord[]>>;
   itemMasters: ItemMasterRecord[];
+  setItemMasters: React.Dispatch<React.SetStateAction<ItemMasterRecord[]>>;
   month: string;
   isAdmin: boolean;
 }) {
@@ -5792,18 +5801,22 @@ function ItemCostStatus({
   const itemBaseRows = useMemo(() => {
     const map = new Map<
       string,
-      { itemCode: string; itemName: string; category: string; estimatedCost: number; isNewItem: boolean }
+      { itemCode: string; itemName: string; category: string; supplier: string; estimatedCost: number; isNewItem: boolean }
     >();
     sales.forEach((row) => {
       const key = row.itemCode || row.itemName || "미지정";
       if (!map.has(key)) {
         const quantity = Number(row.quantity || 0);
+        const master = itemMasterByCode.get(row.itemCode);
         map.set(key, {
           itemCode: row.itemCode || "-",
-          itemName: row.itemName || "미지정",
-          category: itemMasterByCode.get(row.itemCode)?.category || itemCategoryFromName(row.itemName),
+          itemName: master?.itemName || row.itemName || "미지정",
+          category: master?.category || "미지정",
+          supplier: master?.supplier || "미지정",
           estimatedCost: quantity ? Number(row.costAmount || 0) / quantity : 0,
-          isNewItem: firstSaleMonthByItem.get(key) === month,
+          isNewItem: master?.source === "sales"
+            ? master.firstSeenMonth === month
+            : !master && firstSaleMonthByItem.get(key) === month,
         });
       }
     });
@@ -5812,10 +5825,13 @@ function ItemCostStatus({
       if (!map.has(key)) {
         map.set(key, {
           itemCode: item.itemCode || "-",
-          itemName: item.itemName || "미지정",
-          category: itemMasterByCode.get(item.itemCode)?.category || itemCategoryFromName(item.itemName),
+          itemName: itemMasterByCode.get(item.itemCode)?.itemName || item.itemName || "미지정",
+          category: itemMasterByCode.get(item.itemCode)?.category || "미지정",
+          supplier: itemMasterByCode.get(item.itemCode)?.supplier || "미지정",
           estimatedCost: Number(item.currentCost || 0),
-          isNewItem: firstSaleMonthByItem.get(key) === month,
+          isNewItem: itemMasterByCode.get(item.itemCode)?.source === "sales"
+            ? itemMasterByCode.get(item.itemCode)?.firstSeenMonth === month
+            : !itemMasterByCode.has(item.itemCode) && firstSaleMonthByItem.get(key) === month,
         });
       }
     });
@@ -5865,13 +5881,13 @@ function ItemCostStatus({
         if (showChangedOnly && !row.nextCost && !row.history.length) return false;
         if (showNewOnly && !row.isNewItem) return false;
         if (!normalizedSearch) return true;
-        return [row.itemCode, row.itemName, row.category, row.memo]
+        return [row.itemCode, row.itemName, row.category, row.supplier, row.memo]
           .some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
       });
   }, [itemBaseRows, costMap, normalizedSearch, showChangedOnly, showNewOnly]);
 
   const upsertItemCost = (
-    base: { itemCode: string; itemName: string; category: string; estimatedCost: number; isNewItem: boolean },
+    base: { itemCode: string; itemName: string; category: string; supplier: string; estimatedCost: number; isNewItem: boolean },
     patch: Partial<ItemCostRecord>,
   ) => {
     if (!isAdmin) return;
@@ -5897,6 +5913,36 @@ function ItemCostStatus({
           currentCost: Number(base.estimatedCost || 0),
           history: [],
           ...patch,
+        },
+      ];
+    });
+  };
+
+  const updateItemMaster = (
+    row: (typeof rows)[number],
+    patch: Partial<Pick<ItemMasterRecord, "category" | "supplier">>,
+  ) => {
+    if (!isAdmin) return;
+    setItemMasters((prev) => {
+      const exists = prev.some((item) => item.itemCode === row.itemCode);
+      if (exists) {
+        return prev.map((item) =>
+          item.itemCode === row.itemCode
+            ? { ...item, itemName: row.itemName, ...patch }
+            : item,
+        );
+      }
+      return [
+        ...prev,
+        {
+          itemCode: row.itemCode,
+          itemName: row.itemName,
+          category: patch.category || row.category || "미지정",
+          supplier: patch.supplier || row.supplier || "미지정",
+          source: "sales",
+          firstSeenMonth: month,
+          active: true,
+          memo: "매출 로우 파일에서 자동 추가",
         },
       ];
     });
@@ -5943,7 +5989,7 @@ function ItemCostStatus({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="품목코드/품목명/카테고리/메모 검색"
+              placeholder="품목코드/품목명/카테고리/매입처/메모 검색"
               className="h-9 w-[260px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
             />
             <label className="flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 text-xs font-bold text-slate-700">
@@ -5968,12 +6014,13 @@ function ItemCostStatus({
 
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="max-h-[78vh] overflow-auto isolate">
-          <table className="w-full min-w-[1420px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+          <table className="w-full min-w-[1540px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목코드</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목명</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목 카테고리</th>
+                <th className="sticky top-0 z-20 w-[240px] max-w-[240px] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목명</th>
+                <th className="sticky top-0 z-20 w-[150px] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목 카테고리</th>
+                <th className="sticky top-0 z-20 w-[150px] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">매입처</th>
                 <th className="sticky top-0 z-20 w-[105px] border border-slate-300 bg-[#F3FAFD] px-2 py-2 font-bold text-black">현재 매입가</th>
                 <th className="sticky top-0 z-20 w-[105px] border border-slate-300 bg-orange-50 px-2 py-2 font-bold text-orange-800">다음 매입가</th>
                 <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">적용 예정일</th>
@@ -5994,15 +6041,32 @@ function ItemCostStatus({
                   <Fragment key={row.itemCode}>
                     <tr className={isDueSoon ? "bg-red-50 hover:bg-red-100" : isUpcoming ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-slate-50"}>
                       <td className="border border-slate-300 px-3 py-2 text-slate-700">{row.itemCode}</td>
-                      <td className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">
-                        <div className="flex items-center gap-2">
-                          <span>{row.itemName}</span>
+                      <td className="w-[240px] max-w-[240px] border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap" title={row.itemName}>{row.itemName}</span>
                           {row.isNewItem && (
-                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">당월 신규</span>
+                            <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">당월 신규</span>
                           )}
                         </div>
                       </td>
-                      <td className="border border-slate-300 px-3 py-2 font-semibold text-slate-700">{row.category}</td>
+                      <td className="w-[150px] border border-slate-300 px-2 py-2">
+                        <input
+                          type="text"
+                          disabled={!isAdmin}
+                          value={row.category}
+                          onChange={(e) => updateItemMaster(row, { category: e.target.value || "미지정" })}
+                          className="h-9 w-full min-w-[130px] rounded-lg border border-slate-300 bg-white px-2 text-center text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-700"
+                        />
+                      </td>
+                      <td className="w-[150px] border border-slate-300 px-2 py-2">
+                        <input
+                          type="text"
+                          disabled={!isAdmin}
+                          value={row.supplier}
+                          onChange={(e) => updateItemMaster(row, { supplier: e.target.value || "미지정" })}
+                          className="h-9 w-full min-w-[130px] rounded-lg border border-slate-300 bg-white px-2 text-center text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-700"
+                        />
+                      </td>
                       <td className="w-[105px] border border-slate-300 px-2 py-2">
                         <input
                           type="text"
@@ -6081,7 +6145,7 @@ function ItemCostStatus({
                     </tr>
                     {openItemCode === row.itemCode && (
                       <tr>
-                        <td colSpan={12} className="border border-slate-300 bg-slate-50 p-3">
+                        <td colSpan={13} className="border border-slate-300 bg-slate-50 p-3">
                           <div className="text-left text-xs font-bold text-slate-700">{row.itemName} 매입가 History</div>
                           <div className="mt-2 overflow-auto rounded-xl border border-slate-300 bg-white">
                             <table className="w-full min-w-[760px] text-center text-[11px]">
@@ -6138,7 +6202,7 @@ function ItemCostStatus({
               })}
               {!rows.length && (
                 <tr>
-                  <td colSpan={12} className="border border-slate-300 p-8 text-center text-slate-500">
+                  <td colSpan={13} className="border border-slate-300 p-8 text-center text-slate-500">
                     표시할 품목이 없습니다.
                   </td>
                 </tr>
@@ -8230,8 +8294,8 @@ function ItemShipmentAnalysis({
       if (!map.has(key)) {
         map.set(key, {
           itemCode: row.itemCode || "-",
-          itemName: row.itemName || "미지정",
-          category: itemMasterByCode.get(row.itemCode)?.category || itemCategoryFromName(row.itemName),
+          itemName: itemMasterByCode.get(row.itemCode)?.itemName || row.itemName || "미지정",
+          category: itemMasterByCode.get(row.itemCode)?.category || "미지정",
           current: emptyItemMetric(),
           prevMonth: emptyItemMetric(),
           storeCodes: new Set<string>(),
@@ -8331,8 +8395,7 @@ function ItemShipmentAnalysis({
     });
     sales.forEach((row) =>
       categories.add(
-        itemMasterByCode.get(row.itemCode)?.category ||
-          itemCategoryFromName(row.itemName),
+        itemMasterByCode.get(row.itemCode)?.category || "미지정",
       ),
     );
     return [
@@ -13288,6 +13351,24 @@ function UploadPage({
       if (result.mode === "legacy") {
         console.warn("Sales V3 SQL이 아직 적용되지 않아 기존 저장 방식을 사용했습니다.");
       }
+
+      const itemMasterMap = new Map(itemMasters.map((item) => [item.itemCode, item]));
+      let addedItemCount = 0;
+      parsed.forEach((row) => {
+        if (!row.itemCode || itemMasterMap.has(row.itemCode)) return;
+        itemMasterMap.set(row.itemCode, {
+          itemCode: row.itemCode,
+          itemName: row.itemName || row.itemCode,
+          category: "미지정",
+          supplier: "미지정",
+          source: "sales",
+          firstSeenMonth: month,
+          active: true,
+          memo: "매출 로우 파일에서 자동 추가",
+        });
+        addedItemCount += 1;
+      });
+      if (addedItemCount > 0) setItemMasters(Array.from(itemMasterMap.values()));
     } catch (error) {
       console.error("매출 업로드 저장 실패", error);
       alert("매출 저장에 실패했습니다. 기존 데이터는 그대로 유지됩니다. Cloudflare D1 연결 상태를 확인해 주세요.");
@@ -13312,19 +13393,24 @@ function UploadPage({
           row["품목명"] ?? row["품목명[규격]"] ?? row["상품명"],
         ),
         category: norm(
-          row["카테고리"] ?? row["품목그룹"] ?? row["분류"],
-        ),
+          row["품목그룹1명"] ?? row["카테고리"] ?? row["품목그룹"] ?? row["분류"],
+        ) || "미지정",
+        supplier: norm(
+          row["매입처"] ?? row["매입처명"] ?? row["주매입처"] ?? row["공급처"],
+        ) || "미지정",
+        source: "initial" as const,
+        firstSeenMonth: undefined,
         active:
           !["중단", "미사용", "N", "FALSE", "0"].includes(
             norm(row["사용여부"] ?? row["사용 여부"]).toUpperCase(),
           ),
         memo: norm(row["메모"] ?? row["비고"]),
       }))
-      .filter((row) => row.itemCode && row.category);
+      .filter((row) => row.itemCode);
 
     if (!parsed.length) {
       alert(
-        "품목코드와 카테고리가 있는 행을 찾지 못했습니다. 파일 헤더를 확인해 주세요.",
+        "품목코드가 있는 행을 찾지 못했습니다. 파일 헤더를 확인해 주세요.",
       );
       return;
     }
@@ -13339,7 +13425,7 @@ function UploadPage({
       });
     });
     setItemMasters(Array.from(map.values()));
-    alert(`품목 카테고리 ${parsed.length}건을 반영했습니다.`);
+    alert(`기초 품목정보 ${parsed.length}건을 반영했습니다. 품목명·카테고리·매입처가 함께 저장됩니다.`);
   }
 
   function saveHolidays() {
@@ -13396,7 +13482,7 @@ function UploadPage({
           />
           <UploadBox
             title="품목 정보 업로드"
-            description="품목코드와 카테고리를 업로드하면 품목분석의 카테고리에 반영됩니다. 기존 품목은 갱신하고 파일에 없는 품목은 유지합니다."
+            description="최초 기초값용입니다. 품목코드·품목명·품목그룹1명·매입처를 저장하며, 이후 매출 파일의 신규 품목은 자동 추가됩니다."
             onUpload={uploadItems}
           />
         </div>
