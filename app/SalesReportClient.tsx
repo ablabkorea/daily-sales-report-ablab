@@ -6019,7 +6019,7 @@ function ItemCostStatus({
         <div className="max-h-[78vh] overflow-y-auto overflow-x-hidden isolate">
           <table className="w-full table-fixed border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
             <thead>
-              <tr className="bg-slate-100">
+              <tr className="bg-slate-100 text-[13px]">
                 <th className="sticky top-0 z-20 w-[5%] border border-slate-300 bg-slate-100 px-2 py-2 font-bold text-slate-700">품목코드</th>
                 <th className="sticky top-0 z-20 w-[25%] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목명</th>
                 <th className="sticky top-0 z-20 w-[8%] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목 카테고리</th>
@@ -11293,6 +11293,8 @@ function MonthStartManagement({
           setTimeConfigs={setTimeConfigs}
           itemMasters={itemMasters}
           setItemMasters={setItemMasters}
+          ests={ests}
+          setEsts={setEsts}
         />
       )}
       {tab === "이익금액 검증표" && (
@@ -13213,6 +13215,8 @@ function UploadPage({
   setTimeConfigs,
   itemMasters,
   setItemMasters,
+  ests,
+  setEsts,
 }: {
   stores: Store[];
   setStores: (v: Store[]) => void;
@@ -13225,6 +13229,8 @@ function UploadPage({
   setTimeConfigs: (v: TimeConfig[]) => void;
   itemMasters: ItemMasterRecord[];
   setItemMasters: (v: ItemMasterRecord[]) => void;
+  ests: EstRecord[];
+  setEsts: (v: EstRecord[]) => void;
 }) {
   const [holidayText, setHolidayText] = useState("");
   const [deleteDate, setDeleteDate] = useState(today());
@@ -13384,6 +13390,75 @@ function UploadPage({
     );
   }
 
+  async function uploadInitialEst(file: File | null) {
+    if (!file) return;
+    const fileRows = await readFileRows(file);
+    const storeIndex = new Map(
+      stores.map((store) => [
+        `${norm(store.manager).toUpperCase()}__${norm(store.code).toUpperCase()}`,
+        store,
+      ]),
+    );
+
+    const matched: EstRecord[] = [];
+    const unmatched: string[] = [];
+
+    fileRows.forEach((row, index) => {
+      const manager = norm(row["담당자"] ?? row["담당자명"] ?? row["MANAGER"]);
+      const storeCode = norm(
+        row["거래처코드"] ??
+          row["거래처 코드"] ??
+          row["매장코드"] ??
+          row["매장 코드"],
+      );
+      const targetMonth = monthText(
+        row["기준월"] ?? row["월"] ?? row["년월"] ?? month,
+      );
+      const amount = num(
+        row["당월 EST"] ?? row["EST"] ?? row["EST 금액"] ?? row["금액"],
+      );
+
+      if (!manager && !storeCode && amount === 0) return;
+      const store = storeIndex.get(
+        `${manager.toUpperCase()}__${storeCode.toUpperCase()}`,
+      );
+      if (!store || !targetMonth) {
+        unmatched.push(`${index + 2}행: ${manager || "담당자 없음"} / ${storeCode || "거래처코드 없음"}`);
+        return;
+      }
+
+      matched.push({
+        storeCode: store.code,
+        storeName: store.name,
+        month: targetMonth,
+        amount,
+      });
+    });
+
+    if (!matched.length) {
+      alert(
+        "담당자와 거래처코드가 모두 일치하는 EST 행을 찾지 못했습니다.\n필수 헤더: 담당자, 거래처코드, 당월 EST",
+      );
+      return;
+    }
+
+    const keyOf = (row: EstRecord) => `${row.month}__${row.storeCode}`;
+    const uploadKeys = new Set(matched.map(keyOf));
+    const next = [
+      ...ests.filter((row) => !uploadKeys.has(keyOf(row))),
+      ...matched,
+    ];
+    setEsts(next);
+
+    const unmatchedPreview = unmatched.slice(0, 10).join("\n");
+    alert(
+      `초기 EST ${matched.length.toLocaleString("ko-KR")}건을 반영했습니다.\n매핑 기준: 담당자 + 거래처코드` +
+        (unmatched.length
+          ? `\n\n미반영 ${unmatched.length.toLocaleString("ko-KR")}건\n${unmatchedPreview}${unmatched.length > 10 ? "\n..." : ""}`
+          : ""),
+    );
+  }
+
   async function resetSalesPeriod(period: PeriodType) {
     const periodLabel = period === "current" ? "당월" : period === "prevMonth" ? "전월" : "전년동월";
     const targetRows = sales.filter((row) => row.period === period && row.refMonth === month);
@@ -13493,7 +13568,7 @@ function UploadPage({
             {salesActions.storageMode === "v3" ? "안전 저장 V3" : salesActions.storageMode === "checking" ? "저장소 확인 중" : "기존 저장 방식"}
           </span>
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <UploadBox
             title="당월 매출 업로드"
             description="같은 날짜 파일을 다시 올리면 해당 날짜 기존 당월 매출을 삭제하고 새 파일로 업데이트합니다."
@@ -13513,6 +13588,11 @@ function UploadPage({
             title="품목 정보 업로드"
             description="최초 기초값용입니다. 품목코드·품목명·품목그룹1명·매입처를 저장하며, 이후 매출 파일의 신규 품목은 자동 추가됩니다."
             onUpload={uploadItems}
+          />
+          <UploadBox
+            title="초기 EST 일괄 업로드"
+            description="최초 세팅용입니다. 담당자와 거래처코드가 모두 일치하는 거래처에만 당월 EST를 반영합니다. 자동 이월은 하지 않습니다."
+            onUpload={uploadInitialEst}
           />
         </div>
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
