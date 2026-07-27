@@ -4883,7 +4883,7 @@ export default function SalesReportClient() {
             position: static !important;
           }
           .sales-report-root .item-profit-fixed-body td {
-            height: 40px;
+            min-height: 40px;
             padding: 8px;
             font-size: 12px;
             vertical-align: middle;
@@ -4893,9 +4893,12 @@ export default function SalesReportClient() {
             box-sizing: border-box;
           }
           .sales-report-root .item-profit-fixed-body .item-name-cell {
-            overflow: hidden;
-            text-overflow: ellipsis;
+            overflow: visible;
+            text-overflow: clip;
             white-space: nowrap;
+            word-break: normal;
+            overflow-wrap: normal;
+            line-height: 1.35;
           }
 
           /* 대시보드 EST 카드: 담당자별 매출요약의 EST 계열과 동일한 색상 */
@@ -6013,23 +6016,23 @@ function ItemCostStatus({
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-        <div className="max-h-[78vh] overflow-auto isolate">
-          <table className="w-full min-w-[1540px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+        <div className="max-h-[78vh] overflow-y-auto overflow-x-hidden isolate">
+          <table className="w-full table-fixed border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목코드</th>
-                <th className="sticky top-0 z-20 w-[240px] max-w-[240px] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목명</th>
-                <th className="sticky top-0 z-20 w-[150px] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목 카테고리</th>
-                <th className="sticky top-0 z-20 w-[150px] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">매입처</th>
-                <th className="sticky top-0 z-20 w-[105px] border border-slate-300 bg-[#F3FAFD] px-2 py-2 font-bold text-black">현재 매입가</th>
-                <th className="sticky top-0 z-20 w-[105px] border border-slate-300 bg-orange-50 px-2 py-2 font-bold text-orange-800">다음 매입가</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">적용 예정일</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">상태</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">D-Day</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">변동금액</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">변동률</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">메모</th>
-                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">History</th>
+                <th className="sticky top-0 z-20 w-[5%] border border-slate-300 bg-slate-100 px-2 py-2 font-bold text-slate-700">품목코드</th>
+                <th className="sticky top-0 z-20 w-[25%] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목명</th>
+                <th className="sticky top-0 z-20 w-[8%] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목 카테고리</th>
+                <th className="sticky top-0 z-20 w-[8%] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">매입처</th>
+                <th className="sticky top-0 z-20 w-[6%] border border-slate-300 bg-[#F3FAFD] px-2 py-2 font-bold text-black">현재 매입가</th>
+                <th className="sticky top-0 z-20 w-[6%] border border-slate-300 bg-orange-50 px-2 py-2 font-bold text-orange-800">다음 매입가</th>
+                <th className="sticky top-0 z-20 w-[8%] border border-slate-300 bg-orange-50 px-1 py-2 font-bold text-orange-800">적용 예정일</th>
+                <th className="sticky top-0 z-20 w-[5%] border border-slate-300 bg-slate-100 px-1 py-2 font-bold text-slate-700">상태</th>
+                <th className="sticky top-0 z-20 w-[4%] border border-slate-300 bg-slate-100 px-1 py-2 font-bold text-slate-700">D-Day</th>
+                <th className="sticky top-0 z-20 w-[6%] border border-slate-300 bg-slate-100 px-1 py-2 font-bold text-slate-700">변동금액</th>
+                <th className="sticky top-0 z-20 w-[5%] border border-slate-300 bg-slate-100 px-1 py-2 font-bold text-slate-700">변동률</th>
+                <th className="sticky top-0 z-20 w-[7%] border border-slate-300 bg-slate-100 px-1 py-2 font-bold text-slate-700">메모</th>
+                <th className="sticky top-0 z-20 w-[5%] border border-slate-300 bg-slate-100 px-1 py-2 font-bold text-slate-700">History</th>
               </tr>
             </thead>
             <tbody>
@@ -6040,34 +6043,34 @@ function ItemCostStatus({
                 return (
                   <Fragment key={row.itemCode}>
                     <tr className={isDueSoon ? "bg-red-50 hover:bg-red-100" : isUpcoming ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-slate-50"}>
-                      <td className="border border-slate-300 px-3 py-2 text-slate-700">{row.itemCode}</td>
-                      <td className="w-[240px] max-w-[240px] border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap" title={row.itemName}>{row.itemName}</span>
+                      <td className="w-[5%] border border-slate-300 px-2 py-2 text-slate-700">{row.itemCode}</td>
+                      <td className="w-[25%] border border-slate-300 px-1.5 py-2 text-left font-semibold text-slate-900">
+                        <div className="flex min-w-0 items-center gap-1 whitespace-nowrap">
+                          <span className="whitespace-nowrap text-[10px] tracking-[-0.02em]" title={row.itemName}>{row.itemName}</span>
                           {row.isNewItem && (
                             <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">당월 신규</span>
                           )}
                         </div>
                       </td>
-                      <td className="w-[150px] border border-slate-300 px-2 py-2">
+                      <td className="w-[8%] border border-slate-300 px-2 py-2">
                         <input
                           type="text"
                           disabled={!isAdmin}
                           value={row.category}
                           onChange={(e) => updateItemMaster(row, { category: e.target.value || "미지정" })}
-                          className="h-9 w-full min-w-[130px] rounded-lg border border-slate-300 bg-white px-2 text-center text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-700"
+                          className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-center text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-700"
                         />
                       </td>
-                      <td className="w-[150px] border border-slate-300 px-2 py-2">
+                      <td className="w-[8%] border border-slate-300 px-2 py-2">
                         <input
                           type="text"
                           disabled={!isAdmin}
                           value={row.supplier}
                           onChange={(e) => updateItemMaster(row, { supplier: e.target.value || "미지정" })}
-                          className="h-9 w-full min-w-[130px] rounded-lg border border-slate-300 bg-white px-2 text-center text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-700"
+                          className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-center text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-700"
                         />
                       </td>
-                      <td className="w-[105px] border border-slate-300 px-2 py-2">
+                      <td className="w-[6%] border border-slate-300 px-2 py-2">
                         <input
                           type="text"
                           inputMode="numeric"
@@ -6075,10 +6078,10 @@ function ItemCostStatus({
                           value={row.currentCost ? won(row.currentCost) : ""}
                           onChange={(e) => upsertItemCost(row, { currentCost: num(e.target.value) })}
                           placeholder="0"
-                          className="h-9 w-[92px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
-                      <td className="w-[105px] border border-slate-300 px-2 py-2">
+                      <td className="w-[6%] border border-slate-300 px-2 py-2">
                         <input
                           type="text"
                           inputMode="numeric"
@@ -6086,7 +6089,7 @@ function ItemCostStatus({
                           value={row.nextCost ? won(row.nextCost) : ""}
                           onChange={(e) => upsertItemCost(row, { nextCost: num(e.target.value) || undefined })}
                           placeholder="변경 예정가"
-                          className="h-9 w-[92px] rounded-lg border border-orange-300 bg-orange-50 px-3 text-right text-sm font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          className="h-9 w-full rounded-lg border border-orange-300 bg-orange-50 px-3 text-right text-sm font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
                       <td className="border border-slate-300 px-3 py-2">
@@ -6095,7 +6098,7 @@ function ItemCostStatus({
                           disabled={!isAdmin}
                           value={row.effectiveDate}
                           onChange={(e) => upsertItemCost(row, { effectiveDate: e.target.value || undefined })}
-                          className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          className="h-8 w-full rounded-lg border border-slate-300 bg-white px-1 text-[10px] font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
                       <td className="border border-slate-300 px-3 py-2">
@@ -6119,7 +6122,7 @@ function ItemCostStatus({
                           value={row.memo}
                           onChange={(e) => upsertItemCost(row, { memo: e.target.value })}
                           placeholder="예: 공급가 인상, 환율 반영"
-                          className="h-9 w-full min-w-[180px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          className="h-8 w-full rounded-lg border border-slate-300 bg-white px-1.5 text-[10px] outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
                       <td className="border border-slate-300 px-3 py-2">
@@ -8580,27 +8583,27 @@ function ItemShipmentAnalysis({
               </span>
             </div>
           </div>
-          <div className="overflow-x-auto isolate">
-            <div className="min-w-[1740px]">
+          <div className="overflow-x-hidden isolate">
+            <div className="w-full">
               {/* 헤더와 SUBTOTAL은 스크롤 영역 밖에 두어 완전히 고정합니다. */}
               <div className="item-profit-fixed-header-wrap">
               <table className="item-profit-fixed-header w-full table-fixed text-center text-black whitespace-nowrap">
               <colgroup>
-                <col style={{ width: "120px" }} />
-                <col style={{ width: "300px" }} />
-                <col style={{ width: "100px" }} />
-                <col style={{ width: "90px" }} />
-                <col style={{ width: "130px" }} />
-                <col style={{ width: "100px" }} />
-                <col style={{ width: "120px" }} />
-                <col style={{ width: "82px" }} />
-                <col style={{ width: "130px" }} />
-                <col style={{ width: "100px" }} />
-                <col style={{ width: "120px" }} />
-                <col style={{ width: "90px" }} />
-                <col style={{ width: "82px" }} />
-                <col style={{ width: "78px" }} />
-                <col style={{ width: "100px" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "25%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "4%" }} />
+                <col style={{ width: "5%" }} />
               </colgroup>
               <thead>
                 <tr className="bg-slate-100">
@@ -8695,27 +8698,27 @@ function ItemShipmentAnalysis({
               <div className="max-h-[68vh] overflow-y-scroll overflow-x-hidden">
                 <table className="item-profit-fixed-body w-full table-fixed text-center text-black whitespace-nowrap">
               <colgroup>
-                <col style={{ width: "120px" }} />
-                <col style={{ width: "300px" }} />
-                <col style={{ width: "100px" }} />
-                <col style={{ width: "90px" }} />
-                <col style={{ width: "130px" }} />
-                <col style={{ width: "100px" }} />
-                <col style={{ width: "120px" }} />
-                <col style={{ width: "82px" }} />
-                <col style={{ width: "130px" }} />
-                <col style={{ width: "100px" }} />
-                <col style={{ width: "120px" }} />
-                <col style={{ width: "90px" }} />
-                <col style={{ width: "82px" }} />
-                <col style={{ width: "78px" }} />
-                <col style={{ width: "100px" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "25%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "5%" }} />
+                <col style={{ width: "4%" }} />
+                <col style={{ width: "5%" }} />
               </colgroup>
               <tbody>
                 {itemRows.map((r) => (
                   <tr key={`${r.itemCode}-${r.itemName}`} className={r.isNewItem ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-blue-50"}>
                     <td className="border border-slate-300 p-2">{r.itemCode}</td>
-                    <td className="item-name-cell border border-slate-300 p-2 text-left font-semibold" title={r.itemName}>{r.itemName}</td>
+                    <td className="border border-slate-300 px-1 py-2 text-left text-[10px] font-semibold tracking-[-0.02em] whitespace-nowrap" title={r.itemName}>{r.itemName}</td>
                     <td className="border border-slate-300 p-2 font-semibold">{r.category}</td>
                     <td className="border border-slate-300 p-2 text-center">
                       {r.isNewItem ? (
