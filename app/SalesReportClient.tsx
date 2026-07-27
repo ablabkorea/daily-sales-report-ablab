@@ -6043,10 +6043,10 @@ function ItemCostStatus({
                 return (
                   <Fragment key={row.itemCode}>
                     <tr className={isDueSoon ? "bg-red-50 hover:bg-red-100" : isUpcoming ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-slate-50"}>
-                      <td className="w-[5%] border border-slate-300 px-2 py-2 text-slate-700">{row.itemCode}</td>
+                      <td className="w-[5%] border border-slate-300 px-2 py-2 text-[13px] font-bold text-slate-800">{row.itemCode}</td>
                       <td className="w-[25%] border border-slate-300 px-1.5 py-2 text-left font-semibold text-slate-900">
                         <div className="flex min-w-0 items-center gap-1 whitespace-nowrap">
-                          <span className="whitespace-nowrap text-[10px] tracking-[-0.02em]" title={row.itemName}>{row.itemName}</span>
+                          <span className="whitespace-nowrap text-[13px] font-bold tracking-[-0.02em] text-slate-900" title={row.itemName}>{row.itemName}</span>
                           {row.isNewItem && (
                             <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">당월 신규</span>
                           )}
@@ -13384,6 +13384,32 @@ function UploadPage({
     );
   }
 
+  async function resetSalesPeriod(period: PeriodType) {
+    const periodLabel = period === "current" ? "당월" : period === "prevMonth" ? "전월" : "전년동월";
+    const targetRows = sales.filter((row) => row.period === period && row.refMonth === month);
+    if (!targetRows.length) {
+      alert(`${periodLabel} 매출에 리셋할 데이터가 없습니다.`);
+      return;
+    }
+    if (!window.confirm(`${month} ${periodLabel} 매출 ${targetRows.length.toLocaleString("ko-KR")}건을 모두 리셋할까요?\n이 작업은 되돌릴 수 없습니다.`)) return;
+    try {
+      const uploadedDates = period === "current"
+        ? Array.from(new Set(targetRows.map((row) => row.saleDate).filter(Boolean)))
+        : [];
+      await salesActions.replaceUpload({
+        period,
+        refMonth: month,
+        fileName: `${periodLabel} 매출 리셋`,
+        uploadedDates,
+        rows: [],
+      });
+      alert(`${month} ${periodLabel} 매출 데이터를 모두 리셋했습니다.`);
+    } catch (error) {
+      console.error(`${periodLabel} 매출 리셋 실패`, error);
+      alert(`${periodLabel} 매출 리셋에 실패했습니다. 기존 데이터는 유지됩니다.`);
+    }
+  }
+
   async function uploadItems(file: File | null) {
     if (!file) return;
     const rows = await readFileRows(file);
@@ -13488,6 +13514,29 @@ function UploadPage({
             description="최초 기초값용입니다. 품목코드·품목명·품목그룹1명·매입처를 저장하며, 이후 매출 파일의 신규 품목은 자동 추가됩니다."
             onUpload={uploadItems}
           />
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => resetSalesPeriod("current")}
+            className="h-9 rounded-xl border border-red-300 bg-red-50 px-3 text-xs font-extrabold text-red-700 hover:bg-red-100"
+          >
+            당월 매출 전체 리셋
+          </button>
+          <button
+            type="button"
+            onClick={() => resetSalesPeriod("prevMonth")}
+            className="h-9 rounded-xl border border-red-300 bg-red-50 px-3 text-xs font-extrabold text-red-700 hover:bg-red-100"
+          >
+            전월 매출 전체 리셋
+          </button>
+          <button
+            type="button"
+            onClick={() => resetSalesPeriod("prevYear")}
+            className="h-9 rounded-xl border border-red-300 bg-red-50 px-3 text-xs font-extrabold text-red-700 hover:bg-red-100"
+          >
+            전년동월 매출 전체 리셋
+          </button>
         </div>
       </div>
 
