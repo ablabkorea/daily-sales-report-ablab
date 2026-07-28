@@ -5144,6 +5144,29 @@ function EstQuickEntry({
     return map;
   }, [ests, month]);
 
+  useEffect(() => {
+    setEsts((prev) => {
+      const currentMonthKeys = new Set(
+        prev
+          .filter((row) => row.month === month)
+          .map((row) => row.storeCode),
+      );
+      const additions = stores
+        .filter((store) => {
+          const manager = norm(store.manager).toUpperCase();
+          return manager && manager !== "미지정" && !currentMonthKeys.has(store.code);
+        })
+        .map((store) => ({
+          storeCode: store.code,
+          storeName: store.name,
+          month,
+          amount: 0,
+        }));
+
+      return additions.length ? [...prev, ...additions] : prev;
+    });
+  }, [stores, month, setEsts]);
+
   const targetByType = useMemo(() => {
     const totals = { store: 0, nonStore: 0 };
 
@@ -6212,6 +6235,11 @@ function ItemCostStatus({
               )}
             </tbody>
           </table>
+          <div className="flex h-36 items-start justify-center pt-5">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-400">
+              마지막 품목입니다.
+            </span>
+          </div>
         </div>
       </div>
     </div>
