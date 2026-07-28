@@ -11353,6 +11353,7 @@ function MonthStartManagement({
           setItemMasters={setItemMasters}
           ests={ests}
           setEsts={setEsts}
+          codeMappings={codeMappings}
         />
       )}
       {tab === "이익금액 검증표" && (
@@ -13522,6 +13523,7 @@ function UploadPage({
   setItemMasters,
   ests,
   setEsts,
+  codeMappings,
 }: {
   stores: Store[];
   setStores: (v: Store[]) => void;
@@ -13536,6 +13538,7 @@ function UploadPage({
   setItemMasters: (v: ItemMasterRecord[]) => void;
   ests: EstRecord[];
   setEsts: (v: EstRecord[]) => void;
+  codeMappings: StoreCodeMapping[];
 }) {
   const [holidayText, setHolidayText] = useState("");
   const [deleteDate, setDeleteDate] = useState(today());
@@ -13698,51 +13701,99 @@ function UploadPage({
   async function uploadInitialEst(file: File | null) {
     if (!file) return;
     const fileRows = await readFileRows(file);
-    const storeIndex = new Map(
-      stores.map((store) => [
-        `${norm(store.manager).toUpperCase()}__${norm(store.code).toUpperCase()}`,
-        store,
-      ]),
+
+    // 월초관리 → 거래처 리스트 → 총 거래처 리스트를 저장하면 stores에 반영됩니다.
+    // EST 업로드는 이 최종 거래처 목록을 기준으로 거래처코드만 매칭합니다.
+    const storeByCode = new Map(
+      stores.map((store) => [norm(store.code).toUpperCase(), store]),
     );
 
-    const matched: EstRecord[] = [];
+    const mappingByOldCode = new Map<string, StoreCodeMapping[]>();
+    codeMappings.forEach((mapping) => {
+      const oldCode = norm(mapping.oldCode).toUpperCase();
+      if (!oldCode) return;
+      mappingByOldCode.set(oldCode, [
+        ...(mappingByOldCode.get(oldCode) || []),
+        mapping,
+      ]);
+    });
+
+    const matchedByKey = new Map<string, EstRecord>();
     const unmatched: string[] = [];
 
     fileRows.forEach((row, index) => {
-      const manager = norm(row["담당자"] ?? row["담당자명"] ?? row["MANAGER"]);
-      const storeCode = norm(
+      const rawStoreCode = norm(
         row["거래처코드"] ??
           row["거래처 코드"] ??
           row["매장코드"] ??
           row["매장 코드"],
       );
-      const targetMonth = monthText(
-        row["기준월"] ?? row["월"] ?? row["년월"] ?? month,
-      );
-      const amount = num(
-        row["당월 EST"] ?? row["EST"] ?? row["EST 금액"] ?? row["금액"],
-      );
+      const uploadedStoreName = norm(row["거래처명"] ?? row["매장명"]);
 
-      if (!manager && !storeCode && amount === 0) return;
-      const store = storeIndex.get(
-        `${manager.toUpperCase()}__${storeCode.toUpperCase()}`,
+      const estHeader = Object.keys(row).find((key) => {
+        const normalizedKey = norm(key).replace(/\s+/g, " ");
+        return (
+          ["당월 EST", "EST", "EST 금액", "금액"].includes(normalizedKey) ||
+          /^\d{1,2}월\s*EST$/i.test(normalizedKey)
+        );
+      });
+
+      const amount = num(estHeader ? row[estHeader] : undefined);
+      const explicitMonth = monthText(
+        row["기준월"] ?? row["월"] ?? row["년월"],
       );
-      if (!store || !targetMonth) {
-        unmatched.push(`${index + 2}행: ${manager || "담당자 없음"} / ${storeCode || "거래처코드 없음"}`);
+      const monthFromHeader = estHeader?.match(/^(\d{1,2})월\s*EST$/i)?.[1];
+      const targetMonth = explicitMonth ||
+        (monthFromHeader
+          ? `${month.slice(0, 4)}-${String(Number(monthFromHeader)).padStart(2, "0")}`
+          : month);
+
+      if (!rawStoreCode && !uploadedStoreName && amount === 0) return;
+      if (!rawStoreCode) {
+        unmatched.push(`${index + 2}행: 거래처코드 없음 / ${uploadedStoreName || "거래처명 없음"}`);
         return;
       }
 
-      matched.push({
+      const normalizedCode = rawStoreCode.toUpperCase();
+      let store = storeByCode.get(normalizedCode);
+      let mappedCode = rawStoreCode;
+
+      if (!store) {
+        const candidates = mappingByOldCode.get(normalizedCode) || [];
+        const nameMatched = candidates.find(
+          (mapping) =>
+            !mapping.oldName ||
+            !uploadedStoreName ||
+            normalizeStoreNameKey(mapping.oldName) ===
+              normalizeStoreNameKey(uploadedStoreName),
+        );
+        const selectedMapping = nameMatched || candidates[0];
+        if (selectedMapping) {
+          mappedCode = norm(selectedMapping.currentCode) || rawStoreCode;
+          store = storeByCode.get(mappedCode.toUpperCase());
+        }
+      }
+
+      if (!store || !targetMonth) {
+        unmatched.push(
+          `${index + 2}행: ${rawStoreCode}${mappedCode !== rawStoreCode ? ` → ${mappedCode}` : ""} / ${uploadedStoreName || "거래처명 없음"}`,
+        );
+        return;
+      }
+
+      const record: EstRecord = {
         storeCode: store.code,
         storeName: store.name,
         month: targetMonth,
         amount,
-      });
+      };
+      matchedByKey.set(`${record.month}__${record.storeCode}`, record);
     });
 
+    const matched = Array.from(matchedByKey.values());
     if (!matched.length) {
       alert(
-        "담당자와 거래처코드가 모두 일치하는 EST 행을 찾지 못했습니다.\n필수 헤더: 담당자, 거래처코드, 당월 EST",
+        "총 거래처 리스트 또는 거래처코드 매핑과 일치하는 EST 행을 찾지 못했습니다.\n필수 헤더: 거래처코드, 거래처명, 담당자, n월 EST",
       );
       return;
     }
@@ -13757,7 +13808,7 @@ function UploadPage({
 
     const unmatchedPreview = unmatched.slice(0, 10).join("\n");
     alert(
-      `초기 EST ${matched.length.toLocaleString("ko-KR")}건을 반영했습니다.\n매핑 기준: 담당자 + 거래처코드` +
+      `초기 EST ${matched.length.toLocaleString("ko-KR")}건을 반영했습니다.\n매핑 기준: 총 거래처 리스트의 거래처코드 + 거래처코드 매핑` +
         (unmatched.length
           ? `\n\n미반영 ${unmatched.length.toLocaleString("ko-KR")}건\n${unmatchedPreview}${unmatched.length > 10 ? "\n..." : ""}`
           : ""),
@@ -13896,7 +13947,7 @@ function UploadPage({
           />
           <UploadBox
             title="초기 EST 일괄 업로드"
-            description="최초 세팅용입니다. 담당자와 거래처코드가 모두 일치하는 거래처에만 당월 EST를 반영합니다. 자동 이월은 하지 않습니다."
+            description="공유한 양식(거래처코드·거래처명·담당자·n월 EST)을 사용합니다. 총 거래처 리스트의 거래처코드를 우선 확인하고, 기존 코드인 경우 거래처코드 매핑을 적용해 EST를 업데이트합니다. 담당자는 참고용이며 매핑 기준에는 사용하지 않습니다."
             onUpload={uploadInitialEst}
           />
         </div>
