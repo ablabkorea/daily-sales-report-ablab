@@ -5145,17 +5145,32 @@ function EstQuickEntry({
   }, [ests, month]);
 
   useEffect(() => {
+    // 기준월이 바뀌면 모든 거래처의 당월 EST 입력 행을 한 번만 생성합니다.
+    // 전월 EST는 별도 복사하지 않고 직전 월의 월별 기록을 그대로 조회하므로
+    // 여러 담당자가 동시에 접속해도 중복 이월 행이 생기지 않습니다.
     setEsts((prev) => {
-      const currentMonthKeys = new Set(
-        prev
-          .filter((row) => row.month === month)
-          .map((row) => row.storeCode),
-      );
+      const storeByCode = new Map(stores.map((store) => [store.code, store]));
+      const seenCurrentMonth = new Set<string>();
+      let changed = false;
+
+      const normalized = prev.filter((row) => {
+        if (row.month !== month) return true;
+        if (seenCurrentMonth.has(row.storeCode)) {
+          changed = true;
+          return false;
+        }
+        seenCurrentMonth.add(row.storeCode);
+        return true;
+      }).map((row) => {
+        if (row.month !== month) return row;
+        const store = storeByCode.get(row.storeCode);
+        if (!store || row.storeName === store.name) return row;
+        changed = true;
+        return { ...row, storeName: store.name };
+      });
+
       const additions = stores
-        .filter((store) => {
-          const manager = norm(store.manager).toUpperCase();
-          return manager && manager !== "미지정" && !currentMonthKeys.has(store.code);
-        })
+        .filter((store) => !seenCurrentMonth.has(store.code))
         .map((store) => ({
           storeCode: store.code,
           storeName: store.name,
@@ -5163,7 +5178,8 @@ function EstQuickEntry({
           amount: 0,
         }));
 
-      return additions.length ? [...prev, ...additions] : prev;
+      if (additions.length) changed = true;
+      return changed ? [...normalized, ...additions] : prev;
     });
   }, [stores, month, setEsts]);
 
@@ -5363,7 +5379,7 @@ function EstQuickEntry({
   };
 
   const updateEst = (store: Store, amount: number) => {
-    if (!canEdit) return;
+    if (!canEdit || store.status !== "거래중") return;
     setEsts((prev) => {
       const exists = prev.some((row) => row.month === month && row.storeCode === store.code);
       if (exists) {
@@ -5587,6 +5603,13 @@ function EstQuickEntry({
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-[12px] font-semibold text-sky-950">
+          <span>
+            {prevMonth} 당월 EST가 {month}의 전월 EST로 자동 연결됩니다. {month} 당월 EST는 새 입력값으로 별도 저장됩니다.
+          </span>
+          <span className="text-sky-700">월별 기록 유지 · 중복 이월 방지</span>
+        </div>
+
         <div
           className="flex min-h-[440px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
           style={{ height: "clamp(440px, calc(100vh - 340px), 760px)" }}
@@ -5689,11 +5712,16 @@ function EstQuickEntry({
                         <input
                           type="text"
                           inputMode="numeric"
-                          disabled={!canEdit}
+                          disabled={!canEdit || store.status !== "거래중"}
                           value={value ? won(value) : ""}
                           onChange={(e) => updateEst(store, num(e.target.value))}
-                          placeholder="0"
-                          className="h-9 w-full min-w-[150px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          placeholder={store.status === "거래중" ? "0" : "입력 제외"}
+                          title={
+                            store.status === "거래중"
+                              ? `${month} EST 입력`
+                              : "거래중단·거래종료 거래처는 당월 EST를 입력할 수 없습니다."
+                          }
+                          className="h-9 w-full min-w-[150px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-orange-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
                       <td className={`border border-slate-300 px-3 py-2 text-right font-extrabold ${differenceTone}`}>
