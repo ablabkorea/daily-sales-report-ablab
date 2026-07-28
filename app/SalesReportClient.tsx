@@ -11286,7 +11286,7 @@ function MonthStartManagement({
   codeMappings: StoreCodeMapping[];
   setCodeMappings: (v: StoreCodeMapping[]) => void;
   itemMasters: ItemMasterRecord[];
-  setItemMasters: (v: ItemMasterRecord[]) => void;
+  setItemMasters: React.Dispatch<React.SetStateAction<ItemMasterRecord[]>>;
   managerConfigs: ManagerConfig[];
   setManagerConfigs: React.Dispatch<React.SetStateAction<ManagerConfig[]>>;
 }) {
@@ -11334,6 +11334,8 @@ function MonthStartManagement({
           codeMappings={codeMappings}
           managerConfigs={managerConfigs}
           setManagerConfigs={setManagerConfigs}
+          itemMasters={itemMasters}
+          setItemMasters={setItemMasters}
         />
       )}
       {tab === "업로드 관리" && (
@@ -11360,6 +11362,214 @@ function MonthStartManagement({
   );
 }
 
+
+function ItemMasterManagement({
+  sales,
+  itemMasters,
+  setItemMasters,
+  month,
+}: {
+  sales: SalesRecord[];
+  itemMasters: ItemMasterRecord[];
+  setItemMasters?: React.Dispatch<React.SetStateAction<ItemMasterRecord[]>>;
+  month: string;
+}) {
+  const [search, setSearch] = useState("");
+  const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
+  const [bulkCategory, setBulkCategory] = useState("");
+  const [bulkSupplier, setBulkSupplier] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, { category: string; supplier: string }>>({});
+  const normalizedSearch = search.trim().toLowerCase();
+
+  const rows = useMemo(() => {
+    const byCode = new Map<string, ItemMasterRecord>();
+    itemMasters.forEach((item) => {
+      const code = norm(item.itemCode);
+      if (!code) return;
+      byCode.set(code, { ...item, itemCode: code });
+    });
+    sales.forEach((row) => {
+      const code = norm(row.itemCode) || norm(row.itemName);
+      if (!code) return;
+      const existing = byCode.get(code);
+      if (existing) {
+        if ((!existing.itemName || existing.itemName === "미지정") && row.itemName) {
+          byCode.set(code, { ...existing, itemName: row.itemName });
+        }
+        return;
+      }
+      byCode.set(code, {
+        itemCode: code,
+        itemName: row.itemName || code,
+        category: "",
+        supplier: "",
+        source: "sales",
+        firstSeenMonth: row.saleDate?.slice(0, 7) || row.refMonth || month,
+        active: true,
+      });
+    });
+    return Array.from(byCode.values())
+      .filter((item) => {
+        if (!normalizedSearch) return true;
+        return [item.itemCode, item.itemName, item.category, item.supplier]
+          .some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
+      })
+      .sort((a, b) =>
+        a.itemCode.localeCompare(b.itemCode, "ko-KR", { numeric: true }) ||
+        a.itemName.localeCompare(b.itemName, "ko-KR", { numeric: true }),
+      );
+  }, [sales, itemMasters, normalizedSearch, month]);
+
+  useEffect(() => {
+    setDrafts((previous) => {
+      const next = { ...previous };
+      let changed = false;
+      rows.forEach((row) => {
+        if (!next[row.itemCode]) {
+          next[row.itemCode] = {
+            category: row.category || "",
+            supplier: row.supplier || "",
+          };
+          changed = true;
+        }
+      });
+      return changed ? next : previous;
+    });
+  }, [rows]);
+
+  const allVisibleSelected = rows.length > 0 && rows.every((row) => selectedCodes.has(row.itemCode));
+
+  function toggleSelected(itemCode: string) {
+    setSelectedCodes((previous) => {
+      const next = new Set(previous);
+      if (next.has(itemCode)) next.delete(itemCode);
+      else next.add(itemCode);
+      return next;
+    });
+  }
+
+  function toggleVisibleSelection() {
+    setSelectedCodes((previous) => {
+      const next = new Set(previous);
+      if (allVisibleSelected) rows.forEach((row) => next.delete(row.itemCode));
+      else rows.forEach((row) => next.add(row.itemCode));
+      return next;
+    });
+  }
+
+  function updateDraft(itemCode: string, field: "category" | "supplier", value: string) {
+    setDrafts((previous) => ({
+      ...previous,
+      [itemCode]: {
+        category: previous[itemCode]?.category || "",
+        supplier: previous[itemCode]?.supplier || "",
+        [field]: value,
+      },
+    }));
+  }
+
+  function applyBulkInput() {
+    if (!selectedCodes.size) return alert("일괄 입력할 품목을 먼저 선택해주세요.");
+    if (!bulkCategory.trim() && !bulkSupplier.trim()) return alert("카테고리 또는 매입처를 입력해주세요.");
+    setDrafts((previous) => {
+      const next = { ...previous };
+      selectedCodes.forEach((code) => {
+        const current = next[code] || { category: "", supplier: "" };
+        next[code] = {
+          category: bulkCategory.trim() || current.category,
+          supplier: bulkSupplier.trim() || current.supplier,
+        };
+      });
+      return next;
+    });
+  }
+
+  function saveSelected() {
+    if (!setItemMasters) return alert("품목 저장 기능을 사용할 수 없습니다.");
+    if (!selectedCodes.size) return alert("저장할 품목을 먼저 선택해주세요.");
+    const visibleMap = new Map(rows.map((row) => [row.itemCode, row]));
+    setItemMasters((previous) => {
+      const map = new Map(previous.map((item) => [item.itemCode, item]));
+      selectedCodes.forEach((code) => {
+        const row = visibleMap.get(code) || map.get(code);
+        if (!row) return;
+        const draft = drafts[code] || { category: row.category || "", supplier: row.supplier || "" };
+        map.set(code, {
+          ...row,
+          itemCode: code,
+          itemName: row.itemName || code,
+          category: draft.category.trim(),
+          supplier: draft.supplier.trim(),
+          active: row.active ?? true,
+        });
+      });
+      return Array.from(map.values());
+    });
+    alert(`선택한 ${selectedCodes.size.toLocaleString("ko-KR")}개 품목을 저장했습니다.`);
+  }
+
+  return (
+    <main className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden">
+      <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-extrabold text-slate-900">품목 기준정보</h2>
+            <p className="mt-1 text-[11px] font-semibold text-slate-500">품목코드·품목명은 매출 자료에서 자동 표시되며, 카테고리와 매입처만 직접 입력합니다.</p>
+          </div>
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="품목코드/품목명/카테고리/매입처 검색"
+            className="h-8 w-[310px] rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-blue-500"
+          />
+        </div>
+        <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-2">
+          <span className="mr-1 text-[11px] font-semibold text-slate-600">선택 {selectedCodes.size.toLocaleString("ko-KR")}건 / 검색결과 {rows.length.toLocaleString("ko-KR")}건</span>
+          <button type="button" onClick={toggleVisibleSelection} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100">{allVisibleSelected ? "검색결과 선택 해제" : "검색결과 전체 선택"}</button>
+          <button type="button" onClick={() => setSelectedCodes(new Set())} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100">선택 초기화</button>
+          <span className="mx-1 h-5 w-px bg-slate-300" />
+          <label className="text-[11px] font-bold text-slate-600">카테고리<input value={bulkCategory} onChange={(event) => setBulkCategory(event.target.value)} placeholder="일괄 입력" className="ml-2 h-8 w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold" /></label>
+          <label className="text-[11px] font-bold text-slate-600">매입처<input value={bulkSupplier} onChange={(event) => setBulkSupplier(event.target.value)} placeholder="일괄 입력" className="ml-2 h-8 w-[170px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold" /></label>
+          <button type="button" onClick={applyBulkInput} className="h-8 rounded-lg border border-blue-300 bg-blue-50 px-3 text-xs font-bold text-blue-700 hover:bg-blue-100">선택 항목에 적용</button>
+          <button type="button" onClick={saveSelected} className="h-8 rounded-lg bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700">선택 항목 일괄 저장</button>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-slate-300 bg-white shadow-sm">
+        <table className="w-full min-w-[980px] border-collapse text-center text-xs">
+          <thead>
+            <tr className="bg-slate-100 text-slate-700">
+              <th className="sticky top-0 z-20 w-[54px] border border-slate-300 bg-slate-100 px-2 py-2"><input type="checkbox" checked={allVisibleSelected} onChange={toggleVisibleSelection} aria-label="검색 결과 전체 선택" /></th>
+              <th className="sticky top-0 z-20 w-[170px] border border-slate-300 bg-slate-100 px-3 py-2">품목코드</th>
+              <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">품목명</th>
+              <th className="sticky top-0 z-20 w-[220px] border border-slate-300 bg-slate-100 px-3 py-2">품목 카테고리</th>
+              <th className="sticky top-0 z-20 w-[240px] border border-slate-300 bg-slate-100 px-3 py-2">매입처</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const draft = drafts[row.itemCode] || { category: row.category || "", supplier: row.supplier || "" };
+              return (
+                <tr key={row.itemCode} className="hover:bg-blue-50/40">
+                  <td className="border border-slate-300 px-2 py-2"><input type="checkbox" checked={selectedCodes.has(row.itemCode)} onChange={() => toggleSelected(row.itemCode)} aria-label={`${row.itemName} 선택`} /></td>
+                  <td className="border border-slate-300 px-3 py-2 text-left font-bold text-slate-900">{row.itemCode}</td>
+                  <td className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">{row.itemName}</td>
+                  <td className="border border-slate-300 px-2 py-1.5"><input value={draft.category} onChange={(event) => updateDraft(row.itemCode, "category", event.target.value)} placeholder="카테고리 직접 입력" className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold outline-none focus:border-blue-500" /></td>
+                  <td className="border border-slate-300 px-2 py-1.5"><input value={draft.supplier} onChange={(event) => updateDraft(row.itemCode, "supplier", event.target.value)} placeholder="매입처 직접 입력" className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold outline-none focus:border-blue-500" /></td>
+                </tr>
+              );
+            })}
+            {!rows.length && (
+              <tr><td colSpan={5} className="border border-slate-300 p-10 text-center text-slate-500">검색 조건에 해당하는 품목이 없습니다.</td></tr>
+            )}
+          </tbody>
+        </table>
+        <div className="flex h-28 items-start justify-center pt-5 text-xs font-semibold text-slate-400">마지막 품목입니다.</div>
+      </div>
+    </main>
+  );
+}
+
 function StoreListManagement({
   section,
   stores,
@@ -11369,6 +11579,8 @@ function StoreListManagement({
   codeMappings,
   managerConfigs,
   setManagerConfigs,
+  itemMasters,
+  setItemMasters,
 }: {
   section: "list" | "reference";
   stores: Store[];
@@ -11378,11 +11590,13 @@ function StoreListManagement({
   codeMappings: StoreCodeMapping[];
   managerConfigs: ManagerConfig[];
   setManagerConfigs: React.Dispatch<React.SetStateAction<ManagerConfig[]>>;
+  itemMasters?: ItemMasterRecord[];
+  setItemMasters?: React.Dispatch<React.SetStateAction<ItemMasterRecord[]>>;
 }) {
   type ListTab = "기존거래처 리스트" | "전년동월 리스트" | "총 거래처 리스트" | "기타 관리";
   const [listTab, setListTab] = useState<ListTab>("기존거래처 리스트");
   const [search, setSearch] = useState("");
-  const [otherTab, setOtherTab] = useState<"담당자 관리" | "브랜드 관리" | "채널 관리" | "거래상태 관리">("담당자 관리");
+  const [otherTab, setOtherTab] = useState<"담당자 관리" | "브랜드 관리" | "채널 관리" | "거래상태 관리" | "품목 관리">("담당자 관리");
   const [managerSubTab, setManagerSubTab] = useState<"EST 담당자 관리" | "거래처 담당자 관리">("EST 담당자 관리");
   const [channelTab, setChannelTab] = useState<"채널 1" | "채널 2">("채널 1");
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
@@ -11814,6 +12028,41 @@ function StoreListManagement({
     alert(`총 거래처 리스트 ${totalRows.length.toLocaleString("ko-KR")}건을 저장했습니다.`);
   }
 
+  if (section === "reference" && otherTab === "품목 관리") {
+    return (
+      <div className="grid min-h-0 flex-1 gap-3 overflow-hidden pb-5 lg:grid-cols-[150px_minmax(0,1fr)]">
+        <aside className="h-fit rounded-xl border border-slate-300 bg-white p-2 shadow-sm">
+          <div className="px-2 pb-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">기준정보</div>
+          <div className="space-y-1">
+            {(["담당자 관리", "브랜드 관리", "채널 관리", "거래상태 관리", "품목 관리"] as const).map((menu) => (
+              <Fragment key={menu}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setListTab("기타 관리");
+                    setOtherTab(menu);
+                    setSelectedCodes(new Set());
+                    setShowNewOnly(false);
+                    setBrandDrafts({});
+                  }}
+                  className={`w-full rounded-lg border-l-4 px-3 py-2 text-left text-xs font-bold transition ${otherTab === menu ? "border-blue-600 bg-blue-50 text-blue-800" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                >
+                  {menu.replace(" 관리", "")}
+                </button>
+              </Fragment>
+            ))}
+          </div>
+        </aside>
+        <ItemMasterManagement
+          sales={sales}
+          itemMasters={itemMasters || []}
+          setItemMasters={setItemMasters}
+          month={month}
+        />
+      </div>
+    );
+  }
+
   const badgeClass = (label: string) => {
     if (["동일", "일치", "수동 매핑"].includes(label))
       return "bg-emerald-100 text-emerald-800";
@@ -11833,7 +12082,7 @@ function StoreListManagement({
         <div className="space-y-1">
           {(section === "list"
             ? (["기존거래처 리스트", "전년동월 리스트", "총 거래처 리스트"] as const)
-            : (["담당자 관리", "브랜드 관리", "채널 관리", "거래상태 관리"] as const)
+            : (["담당자 관리", "브랜드 관리", "채널 관리", "거래상태 관리", "품목 관리"] as const)
           ).map((menu) => {
             const active = section === "list" ? listTab === menu : otherTab === menu;
             return (
