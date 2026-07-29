@@ -119,6 +119,10 @@ type ItemMasterRecord = {
   itemName: string;
   category: string;
   supplier?: string;
+  specification?: string;
+  packQuantity?: string;
+  stockUnit?: string;
+  storageMethod?: string;
   source?: "initial" | "sales";
   firstSeenMonth?: string;
   active?: boolean;
@@ -8287,7 +8291,7 @@ function ItemAnalysis({
               <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">
                 상세 발주 원본
               </div>
-              <div className="max-h-[68vh] overflow-auto isolate">
+              <div className="h-[clamp(300px,calc(100vh-360px),620px)] overflow-auto pb-20 isolate" style={{ scrollbarGutter: "stable" }}>
                 <table className="w-full min-w-[1100px] connected-two-tier border-separate border-spacing-0 text-center text-[13px] whitespace-nowrap">
                   <thead>
                     <tr>
@@ -8469,7 +8473,9 @@ function ItemShipmentAnalysis({
           current: emptyItemMetric(),
           prevMonth: emptyItemMetric(),
           storeCodes: new Set<string>(),
-          isNewItem: firstSaleMonthByItem.get(key) === month,
+          isNewItem:
+            itemMasterByCode.get(row.itemCode)?.source === "sales" &&
+            itemMasterByCode.get(row.itemCode)?.firstSeenMonth === month,
         });
       }
       return map.get(key)!;
@@ -8753,7 +8759,7 @@ function ItemShipmentAnalysis({
           <div className="overflow-x-hidden isolate">
             <div className="w-full">
               {/* 헤더와 SUBTOTAL은 스크롤 영역 밖에 두어 완전히 고정합니다. */}
-              <div className="item-profit-fixed-header-wrap">
+              <div className="item-profit-fixed-header-wrap pr-[17px]">
               <table className="item-profit-fixed-header w-full table-fixed text-center text-black whitespace-nowrap">
               <colgroup>
                 <col style={{ width: "5%" }} />
@@ -8862,11 +8868,14 @@ function ItemShipmentAnalysis({
               </div>
 
               {/* 품목 데이터 행만 세로로 스크롤됩니다. */}
-              <div className="max-h-[68vh] overflow-y-scroll overflow-x-hidden">
+              <div
+                className="h-[clamp(300px,calc(100vh-430px),600px)] overflow-y-scroll overflow-x-hidden"
+                style={{ scrollbarGutter: "stable" }}
+              >
                 <table className="item-profit-fixed-body w-full table-fixed text-center text-black whitespace-nowrap">
               <colgroup>
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "25%" }} />
+                <col style={{ width: "22%" }} />
                 <col style={{ width: "6%" }} />
                 <col style={{ width: "5%" }} />
                 <col style={{ width: "7%" }} />
@@ -8878,14 +8887,19 @@ function ItemShipmentAnalysis({
                 <col style={{ width: "7%" }} />
                 <col style={{ width: "5%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "4%" }} />
+                <col style={{ width: "7%" }} />
                 <col style={{ width: "5%" }} />
               </colgroup>
               <tbody>
                 {itemRows.map((r) => (
                   <tr key={`${r.itemCode}-${r.itemName}`} className={r.isNewItem ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-blue-50"}>
                     <td className="border border-slate-300 p-2">{r.itemCode}</td>
-                    <td className="border border-slate-300 px-1 py-2 text-left text-[10px] font-semibold tracking-[-0.02em] whitespace-nowrap" title={r.itemName}>{r.itemName}</td>
+                    <td
+                      className="border border-slate-300 px-1.5 py-2 text-left text-[10px] font-semibold leading-tight tracking-[-0.03em] whitespace-nowrap overflow-visible"
+                      title={r.itemName}
+                    >
+                      {r.itemName}
+                    </td>
                     <td className="border border-slate-300 p-2 font-semibold">{r.category}</td>
                     <td className="border border-slate-300 p-2 text-center">
                       {r.isNewItem ? (
@@ -8919,6 +8933,11 @@ function ItemShipmentAnalysis({
                     <td colSpan={15} className="border border-slate-300 p-8 text-center text-black">
                       표시할 품목이 없습니다.
                     </td>
+                  </tr>
+                )}
+                {!!itemRows.length && (
+                  <tr aria-hidden="true">
+                    <td colSpan={15} className="h-20 border-0 bg-white p-0" />
                   </tr>
                 )}
               </tbody>
@@ -13981,25 +14000,28 @@ function UploadPage({
     const rows = await readFileRows(file);
     const parsed = rows
       .map((row) => ({
-        itemCode: norm(
-          row["품목코드"] ?? row["품목 코드"] ?? row["상품코드"],
-        ),
-        itemName: norm(
-          row["품목명"] ?? row["품목명[규격]"] ?? row["상품명"],
-        ),
-        category: norm(
-          row["품목그룹1명"] ?? row["카테고리"] ?? row["품목그룹"] ?? row["분류"],
-        ) || "미지정",
-        supplier: norm(
-          row["매입처"] ?? row["매입처명"] ?? row["주매입처"] ?? row["공급처"],
-        ) || "미지정",
+        // 에이비랩 품목리스트.xlsx의 "품목등록" 양식을 기준으로 읽습니다.
+        itemCode: norm(row["품목코드"] ?? row["품목 코드"] ?? row["상품코드"]),
+        itemName: norm(row["품목명"] ?? row["품목명[규격]"] ?? row["상품명"]),
+        specification: norm(row["규격정보"] ?? row["규격"]),
+        packQuantity: norm(row["입수"] ?? row["박스입수"]),
+        category:
+          norm(
+            row["품목그룹명"] ??
+              row["품목그룹1명"] ??
+              row["카테고리"] ??
+              row["품목그룹"] ??
+              row["분류"],
+          ) || "미지정",
+        stockUnit: norm(row["재고단위"] ?? row["단위"]),
+        storageMethod: norm(row["보관방법명"] ?? row["보관방법"]),
+        supplier:
+          norm(row["매입처"] ?? row["매입처명"] ?? row["주매입처"] ?? row["공급처"]) ||
+          "미지정",
         source: "initial" as const,
         firstSeenMonth: undefined,
-        active:
-          !["중단", "미사용", "N", "FALSE", "0"].includes(
-            norm(row["사용여부"] ?? row["사용 여부"]).toUpperCase(),
-          ),
-        memo: norm(row["메모"] ?? row["비고"]),
+        active: true,
+        memo: norm(row["적요"] ?? row["메모"] ?? row["비고"]),
       }))
       .filter((row) => row.itemCode);
 
@@ -14020,7 +14042,10 @@ function UploadPage({
       });
     });
     setItemMasters(Array.from(map.values()));
-    alert(`기초 품목정보 ${parsed.length}건을 반영했습니다. 품목명·카테고리·매입처가 함께 저장됩니다.`);
+    alert(
+      `기초 품목정보 ${parsed.length}건을 반영했습니다.\n` +
+        `적용 양식: 품목코드, 품목명, 규격정보, 입수, 품목그룹명, 재고단위, 보관방법명, 매입처, 적요`,
+    );
   }
 
   function saveHolidays() {
@@ -14077,7 +14102,7 @@ function UploadPage({
           />
           <UploadBox
             title="품목 정보 업로드"
-            description="최초 기준 품목리스트용입니다. 평소에는 다시 업로드하지 않으며, 이후 당월 매출 파일에서 기준 리스트에 없는 품목코드는 해당 월의 신규품목으로 자동 등록됩니다."
+            description="에이비랩 품목리스트 양식(품목코드·품목명·규격정보·입수·품목그룹명·재고단위·보관방법명·매입처·적요)을 기준으로 최초 등록합니다. 이후 당월 매출에서 이 기준 리스트에 없는 품목코드는 최초 매출월에만 신규품목으로 표시됩니다."
             onUpload={uploadItems}
           />
           <UploadBox
