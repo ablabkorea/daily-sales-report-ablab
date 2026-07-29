@@ -4817,11 +4817,26 @@ export default function SalesReportClient() {
           }
           /* 품목분석 손익요약: 헤더·SUBTOTAL·본문을 하나의 table/colgroup으로 렌더링 */
           .sales-report-root .item-profit-scroll {
+            position: relative;
             height: clamp(300px, calc(100vh - 430px), 600px);
             overflow-y: auto;
             overflow-x: hidden;
             scrollbar-gutter: stable;
             background: #fff;
+            isolation: isolate;
+          }
+          /* 고정 헤더 뒤로 스크롤되는 본문이 비치지 않도록 흰색 차단막을 둔다. */
+          .sales-report-root .item-profit-scroll::before {
+            content: "";
+            position: sticky;
+            top: 0;
+            z-index: 24;
+            display: block;
+            width: 100%;
+            height: 112px;
+            margin-bottom: -112px;
+            background: #fff;
+            pointer-events: none;
           }
           .sales-report-root .item-profit-table {
             width: 100%;
@@ -4838,7 +4853,8 @@ export default function SalesReportClient() {
           }
           .sales-report-root .item-profit-table thead th {
             position: sticky !important;
-            background-clip: padding-box !important;
+            background-clip: border-box !important;
+            opacity: 1 !important;
             overflow: hidden;
           }
           .sales-report-root .item-profit-table thead tr:nth-child(1) th {
@@ -4878,7 +4894,13 @@ export default function SalesReportClient() {
             padding-right: 12px !important;
             text-align: right !important;
           }
+          .sales-report-root .item-profit-table tbody {
+            position: relative;
+            z-index: 1;
+          }
           .sales-report-root .item-profit-table tbody td {
+            position: relative;
+            z-index: 1;
             height: 40px;
             padding: 8px;
             font-size: 12px;
