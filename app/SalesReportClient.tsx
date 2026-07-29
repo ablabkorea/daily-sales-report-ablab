@@ -8772,18 +8772,18 @@ function ItemShipmentAnalysis({
                 <col style={{ width: "5%" }} />
                 <col style={{ width: "20.5%" }} />
                 <col style={{ width: "6%" }} />
-                <col style={{ width: "5%" }} />
+                <col style={{ width: "4%" }} />
+                <col style={{ width: "6.5%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "6.5%" }} />
+                <col style={{ width: "4.5%" }} />
                 <col style={{ width: "6.5%" }} />
                 <col style={{ width: "6%" }} />
                 <col style={{ width: "6.5%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "6.5%" }} />
-                <col style={{ width: "6%" }} />
-                <col style={{ width: "6.5%" }} />
+                <col style={{ width: "4.5%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "5.5%" }} />
-                <col style={{ width: "5%" }} />
+                <col style={{ width: "7.5%" }} />
               </colgroup>
               <thead>
                 <tr className="bg-slate-100">
@@ -8884,18 +8884,18 @@ function ItemShipmentAnalysis({
                 <col style={{ width: "5%" }} />
                 <col style={{ width: "20.5%" }} />
                 <col style={{ width: "6%" }} />
-                <col style={{ width: "5%" }} />
+                <col style={{ width: "4%" }} />
+                <col style={{ width: "6.5%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "6.5%" }} />
+                <col style={{ width: "4.5%" }} />
                 <col style={{ width: "6.5%" }} />
                 <col style={{ width: "6%" }} />
                 <col style={{ width: "6.5%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "6.5%" }} />
-                <col style={{ width: "6%" }} />
-                <col style={{ width: "6.5%" }} />
+                <col style={{ width: "4.5%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "5.5%" }} />
-                <col style={{ width: "5%" }} />
+                <col style={{ width: "7.5%" }} />
               </colgroup>
               <tbody>
                 {itemRows.map((r) => (
@@ -8910,7 +8910,7 @@ function ItemShipmentAnalysis({
                     <td className="border border-slate-300 p-2 font-semibold">{r.category}</td>
                     <td className="border border-slate-300 p-2 text-center">
                       {r.isNewItem ? (
-                        <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">당월 신규</span>
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-amber-100 px-1 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">Y</span>
                       ) : "-"}
                     </td>
                     <td className="item-profit-number-cell sales-value-cell border border-slate-300 p-2 font-bold">{won(r.prevMonth.sales)}</td>
