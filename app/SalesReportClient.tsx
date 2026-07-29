@@ -4815,7 +4815,7 @@ export default function SalesReportClient() {
           .sales-report-root .period-subgroup-start {
             border-left: 2px solid #d7dee8 !important;
           }
-          /* 매출현황: 2단 헤더와 SUBTOTAL은 고정하고 본문만 스크롤 */
+          /* 매출현황: 헤더만 고정하고 본문만 스크롤 */
           .sales-report-root .sales-status-scroll {
             position: relative;
             height: clamp(300px, calc(100vh - 430px), 600px);
@@ -4825,18 +4825,6 @@ export default function SalesReportClient() {
             overscroll-behavior: contain;
             background: #fff;
             isolation: isolate;
-          }
-          .sales-report-root .sales-status-scroll::before {
-            content: "";
-            position: sticky;
-            top: 0;
-            z-index: 59;
-            display: block;
-            width: 100%;
-            height: 96px;
-            margin-bottom: -96px;
-            background: #fff;
-            pointer-events: none;
           }
           .sales-report-root .sales-status-table {
             border-collapse: separate !important;
@@ -4848,18 +4836,7 @@ export default function SalesReportClient() {
             background-clip: border-box !important;
             transform: translateZ(0);
           }
-          .sales-report-root .sales-status-table .sales-status-subtotal > td {
-            position: sticky;
-            top: 62px;
-            z-index: 48;
-            height: 34px;
-            background: #fff8dc !important;
-            border-color: #e5e7eb !important;
-            box-shadow: 0 1px 0 #e5e7eb;
-            transform: translateZ(0);
-            opacity: 1 !important;
-          }
-          .sales-report-root .sales-status-table tbody tr:not(.sales-status-subtotal) > td {
+          .sales-report-root .sales-status-table tbody > tr > td {
             position: relative;
             z-index: 1;
           }
@@ -10175,24 +10152,6 @@ function SalesStatus({
               </tr>
             </thead>
             <tbody>
-              <tr className="sales-status-subtotal font-extrabold text-black">
-                <td
-                  colSpan={1 + (showChannelColumn ? 1 : 0) + (!compact && isStoreListView ? 1 : 0)}
-                  className="border border-gray-200 px-3 py-2 text-left font-extrabold"
-                >
-                  SUBTOTAL
-                </td>
-                <td className="border border-gray-200 px-2 py-2 text-right">{won(filteredPrevYearSales)}</td>
-                <td className="border border-gray-200 px-2 py-2 text-right">{pct(filteredPrevYearTimeGoneGap)}</td>
-                <td className="border border-gray-200 px-2 py-2 text-right">{won(filteredPrevMonthSales)}</td>
-                <td className="border border-gray-200 px-2 py-2 text-right">{pct(filteredPrevMonthTimeGoneGap)}</td>
-                <td className="border border-gray-200 px-2 py-2 text-right">{won(filteredCurrentSales)}</td>
-                <td className="border border-gray-200 px-2 py-2 text-right">{won(filteredFullMonthSales)}</td>
-                <td className="border border-gray-200 px-2 py-2 text-right">{won(filteredEst)}</td>
-                <td className="border border-gray-200 px-2 py-2 text-right">{pct(filteredEstRate)}</td>
-                <td className="border border-gray-200 px-2 py-2 text-right">{won(filteredProfitAmount)}</td>
-                <td className="border border-gray-200 px-2 py-2 text-right">{pct(filteredProfitRate)}</td>
-              </tr>
               {sortedRows.length === 0 ? (
                 <tr>
                   <td
@@ -12628,7 +12587,32 @@ function StoreListManagement({
                         ) : (row.brand || "미지정")}
                       </td>
                       <td className="border border-slate-300 px-3 py-2">{row.channel}</td>
-                      <td className="border border-slate-300 px-3 py-2">{row.storeType}</td>
+                      <td className="border border-slate-300 px-3 py-2">
+                        {otherTab === "채널 관리" && channelTab === "채널 2" ? (
+                          <select
+                            value={row.storeType === "매장" ? "매장" : "비매장"}
+                            onChange={(event) => {
+                              event.stopPropagation();
+                              const nextStoreType = event.target.value as "매장" | "비매장";
+                              setStores(
+                                totalRows.map((store) =>
+                                  store.code === row.code
+                                    ? { ...store, storeType: nextStoreType }
+                                    : store,
+                                ),
+                              );
+                            }}
+                            onClick={(event) => event.stopPropagation()}
+                            className="h-8 min-w-[92px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500"
+                            aria-label={`${row.name} 매장 비매장 선택`}
+                          >
+                            <option value="매장">매장</option>
+                            <option value="비매장">비매장</option>
+                          </select>
+                        ) : (
+                          row.storeType
+                        )}
+                      </td>
                       <td className="border border-slate-300 px-3 py-2">
                         <span className={`rounded-full px-3 py-1 font-bold ${row.status === "거래중" ? "bg-emerald-100 text-emerald-800" : row.status === "거래중단" ? "bg-amber-100 text-amber-900" : "bg-slate-200 text-slate-700"}`}>
                           {row.status}
