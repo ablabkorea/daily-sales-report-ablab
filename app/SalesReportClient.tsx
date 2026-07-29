@@ -4815,6 +4815,54 @@ export default function SalesReportClient() {
           .sales-report-root .period-subgroup-start {
             border-left: 2px solid #d7dee8 !important;
           }
+          /* 매출현황: 2단 헤더와 SUBTOTAL은 고정하고 본문만 스크롤 */
+          .sales-report-root .sales-status-scroll {
+            position: relative;
+            height: clamp(300px, calc(100vh - 430px), 600px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-gutter: stable;
+            overscroll-behavior: contain;
+            background: #fff;
+            isolation: isolate;
+          }
+          .sales-report-root .sales-status-scroll::before {
+            content: "";
+            position: sticky;
+            top: 0;
+            z-index: 59;
+            display: block;
+            width: 100%;
+            height: 96px;
+            margin-bottom: -96px;
+            background: #fff;
+            pointer-events: none;
+          }
+          .sales-report-root .sales-status-table {
+            border-collapse: separate !important;
+            border-spacing: 0 !important;
+            background: #fff;
+          }
+          .sales-report-root .sales-status-table thead th {
+            opacity: 1 !important;
+            background-clip: border-box !important;
+            transform: translateZ(0);
+          }
+          .sales-report-root .sales-status-table .sales-status-subtotal > td {
+            position: sticky;
+            top: 62px;
+            z-index: 48;
+            height: 34px;
+            background: #fff8dc !important;
+            border-color: #e5e7eb !important;
+            box-shadow: 0 1px 0 #e5e7eb;
+            transform: translateZ(0);
+            opacity: 1 !important;
+          }
+          .sales-report-root .sales-status-table tbody tr:not(.sales-status-subtotal) > td {
+            position: relative;
+            z-index: 1;
+          }
           /* 품목분석 손익요약: 헤더·SUBTOTAL·본문을 하나의 table/colgroup으로 렌더링 */
           .sales-report-root .item-profit-scroll {
             position: relative;
@@ -4841,15 +4889,25 @@ export default function SalesReportClient() {
           .sales-report-root .item-profit-table {
             width: 100%;
             table-layout: fixed;
-            border-collapse: collapse;
+            border-collapse: separate;
             border-spacing: 0;
             font-size: 12px;
+            background: #fff;
           }
           .sales-report-root .item-profit-table th,
           .sales-report-root .item-profit-table td {
             box-sizing: border-box;
-            border: 1px solid #cbd5e1 !important;
+            border-right: 1px solid #e5e7eb !important;
+            border-bottom: 1px solid #e5e7eb !important;
+            border-top: 0 !important;
+            border-left: 0 !important;
             vertical-align: middle;
+          }
+          .sales-report-root .item-profit-table tr > :first-child {
+            border-left: 1px solid #e5e7eb !important;
+          }
+          .sales-report-root .item-profit-table thead tr:first-child > th {
+            border-top: 1px solid #e5e7eb !important;
           }
           .sales-report-root .item-profit-table thead th {
             position: sticky !important;
@@ -4859,25 +4917,30 @@ export default function SalesReportClient() {
           }
           .sales-report-root .item-profit-table thead tr:nth-child(1) th {
             top: 0;
-            z-index: 33;
+            z-index: 43;
             height: 34px;
+            transform: translateZ(0);
           }
           .sales-report-root .item-profit-table thead tr:nth-child(2) th {
             top: 34px;
-            z-index: 32;
+            z-index: 42;
             height: 44px;
+            transform: translateZ(0);
           }
           .sales-report-root .item-profit-table thead tr:nth-child(3) th {
             top: 78px;
-            z-index: 31;
+            z-index: 41;
             height: 34px;
             background: #fff8dc !important;
             border-radius: 0 !important;
-            box-shadow: none !important;
+            box-shadow: 0 1px 0 #e5e7eb !important;
+            transform: translateZ(0);
           }
           .sales-report-root .item-profit-table thead th[rowspan="2"] {
             top: 0 !important;
-            z-index: 34;
+            z-index: 44;
+            height: 78px;
+            transform: translateZ(0);
           }
           .sales-report-root .item-profit-table thead th::before,
           .sales-report-root .item-profit-table thead th::after {
@@ -9744,6 +9807,19 @@ function SalesStatus({
     (a, b) => a + b.profitAmount,
     0,
   );
+  const filteredEst = displayRows.reduce((a, b) => a + b.est, 0);
+  const filteredPrevYearRate = filteredPrevYearSales
+    ? ((filteredCurrentSales - filteredPrevYearSales) / filteredPrevYearSales) * 100
+    : 0;
+  const filteredPrevMonthRate = filteredPrevMonthSales
+    ? ((filteredCurrentSales - filteredPrevMonthSales) / filteredPrevMonthSales) * 100
+    : 0;
+  const filteredPrevYearTimeGoneGap = filteredPrevYearRate - timeGone.timeGoneRate;
+  const filteredPrevMonthTimeGoneGap = filteredPrevMonthRate - timeGone.timeGoneRate;
+  const filteredEstRate = filteredEst ? (filteredCurrentSales / filteredEst) * 100 : 0;
+  const filteredProfitRate = filteredCurrentSales
+    ? (filteredProfitAmount / filteredCurrentSales) * 100
+    : 0;
 
   const buildManagerLastOrderRows = (managers: string[]) => {
     const selected = new Set(managers);
@@ -10034,7 +10110,7 @@ function SalesStatus({
           </>
         )}
 
-        <div className="relative h-[clamp(300px,calc(100vh-430px),600px)] overflow-y-scroll overflow-x-hidden bg-white" style={{ scrollbarGutter: "stable" }}>
+        <div className="sales-status-scroll">
           <table
             className={`sales-status-table w-full ${compact ? "min-w-[1360px]" : "min-w-[1180px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[12px] leading-tight`}
           >
@@ -10099,6 +10175,24 @@ function SalesStatus({
               </tr>
             </thead>
             <tbody>
+              <tr className="sales-status-subtotal font-extrabold text-black">
+                <td
+                  colSpan={1 + (showChannelColumn ? 1 : 0) + (!compact && isStoreListView ? 1 : 0)}
+                  className="border border-gray-200 px-3 py-2 text-left font-extrabold"
+                >
+                  SUBTOTAL
+                </td>
+                <td className="border border-gray-200 px-2 py-2 text-right">{won(filteredPrevYearSales)}</td>
+                <td className="border border-gray-200 px-2 py-2 text-right">{pct(filteredPrevYearTimeGoneGap)}</td>
+                <td className="border border-gray-200 px-2 py-2 text-right">{won(filteredPrevMonthSales)}</td>
+                <td className="border border-gray-200 px-2 py-2 text-right">{pct(filteredPrevMonthTimeGoneGap)}</td>
+                <td className="border border-gray-200 px-2 py-2 text-right">{won(filteredCurrentSales)}</td>
+                <td className="border border-gray-200 px-2 py-2 text-right">{won(filteredFullMonthSales)}</td>
+                <td className="border border-gray-200 px-2 py-2 text-right">{won(filteredEst)}</td>
+                <td className="border border-gray-200 px-2 py-2 text-right">{pct(filteredEstRate)}</td>
+                <td className="border border-gray-200 px-2 py-2 text-right">{won(filteredProfitAmount)}</td>
+                <td className="border border-gray-200 px-2 py-2 text-right">{pct(filteredProfitRate)}</td>
+              </tr>
               {sortedRows.length === 0 ? (
                 <tr>
                   <td
