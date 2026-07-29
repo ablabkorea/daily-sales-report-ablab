@@ -5120,7 +5120,11 @@ function EstQuickEntry({
   }, [activeManagers, selectedManager]);
   const [statusView, setStatusView] = useState<"active" | "paused" | "ended">("active");
   const [channelView, setChannelView] = useState<"all" | "store" | "nonStore">("all");
+  const [openBrand, setOpenBrand] = useState("");
+  const [editingStoreCode, setEditingStoreCode] = useState("");
+  const [frozenRowOrder, setFrozenRowOrder] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<
+    | "brand"
     | "name"
     | "manager"
     | "channel"
@@ -5269,6 +5273,8 @@ function EstQuickEntry({
       const est = estMap.get(store.code) || 0;
 
       switch (sortKey) {
+        case "brand":
+          return displayBrand(store.brand);
         case "manager":
           return store.manager || "";
         case "channel":
@@ -5293,7 +5299,7 @@ function EstQuickEntry({
       }
     };
 
-    return stores
+    const filtered = stores
       .filter((store) => {
         if (statusView === "active") return store.status === "거래중";
         if (statusView === "paused") return store.status === "거래중단";
@@ -5304,18 +5310,26 @@ function EstQuickEntry({
         if (channelView === "store") return store.storeType === "매장";
         if (channelView === "nonStore") return store.storeType !== "매장";
         return true;
-      })
-      .sort((a, b) => {
-        const av = getSortValue(a);
-        const bv = getSortValue(b);
-        const direction = sortDirection === "asc" ? 1 : -1;
-
-        if (typeof av === "number" && typeof bv === "number") {
-          return (av - bv) * direction;
-        }
-
-        return String(av).localeCompare(String(bv), "ko-KR", { numeric: true }) * direction;
       });
+
+    const sorted = [...filtered].sort((a, b) => {
+      const av = getSortValue(a);
+      const bv = getSortValue(b);
+      const direction = sortDirection === "asc" ? 1 : -1;
+
+      if (typeof av === "number" && typeof bv === "number") {
+        return (av - bv) * direction;
+      }
+
+      return String(av).localeCompare(String(bv), "ko-KR", { numeric: true }) * direction;
+    });
+
+    if (!editingStoreCode || frozenRowOrder.length === 0) return sorted;
+    const orderMap = new Map<string, number>(frozenRowOrder.map((code, index) => [code, index]));
+    return [...sorted].sort((a, b) =>
+      (orderMap.get(a.code) ?? Number.MAX_SAFE_INTEGER) -
+      (orderMap.get(b.code) ?? Number.MAX_SAFE_INTEGER),
+    );
   }, [
     stores,
     selectedManager,
@@ -5327,7 +5341,17 @@ function EstQuickEntry({
     prevSalesMap,
     prevEstMap,
     estMap,
+    editingStoreCode,
+    frozenRowOrder,
   ]);
+
+  const openBrandStores = useMemo(() => {
+    if (!openBrand) return [];
+    return stores
+      .filter((store) => displayBrand(store.brand) === openBrand)
+      .filter((store) => store.manager.trim().toUpperCase() === selectedManager)
+      .sort((a, b) => a.name.localeCompare(b.name, "ko-KR", { numeric: true }));
+  }, [stores, openBrand, selectedManager]);
 
   const managerInfo = useMemo(() => {
     const managerStores = stores.filter(
@@ -5517,6 +5541,10 @@ function EstQuickEntry({
                     <div className="mt-1 text-[18px] font-black text-slate-900">{won(nonStoreEstTotal)}</div>
                   </div>
                 </div>
+                <div className="flex items-center justify-between border-t border-amber-200 bg-[#FFF9E3] px-4 py-2.5">
+                  <span className="text-[12px] font-extrabold text-slate-700">총 EST 합계</span>
+                  <span className="text-[18px] font-black text-orange-700">{won(totalEst)}</span>
+                </div>
               </div>
 
               {selectedManagerConfig?.canTarget && (
@@ -5619,6 +5647,7 @@ function EstQuickEntry({
               <thead>
                 <tr className="bg-slate-100">
                   {[
+                    ["brand", "브랜드", "bg-slate-100"],
                     ["name", "거래처명", "bg-slate-100"],
                     ["manager", "담당자", "bg-slate-100"],
                     ["channel", "채널", "bg-slate-100"],
@@ -5676,6 +5705,16 @@ function EstQuickEntry({
                       : "text-slate-500 bg-slate-50";
                   return (
                     <tr key={store.code} className="hover:bg-orange-50/60">
+                      <td className="border border-slate-300 px-3 py-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setOpenBrand(displayBrand(store.brand))}
+                          className="max-w-[190px] truncate rounded-lg bg-orange-50 px-2 py-1 font-extrabold text-orange-800 hover:bg-orange-100 hover:underline"
+                          title={`${displayBrand(store.brand)} 거래처별 매출 및 EST 입력`}
+                        >
+                          {displayBrand(store.brand)}
+                        </button>
+                      </td>
                       <td className="border border-slate-300 px-3 py-2 text-center font-semibold text-slate-900">{store.name}</td>
                       <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{store.manager}</td>
                       <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.storeType === "매장" ? "매장" : "비매장"}</td>
@@ -5714,7 +5753,15 @@ function EstQuickEntry({
                           inputMode="numeric"
                           disabled={!canEdit || store.status !== "거래중"}
                           value={value ? won(value) : ""}
+                          onFocus={() => {
+                            setEditingStoreCode(store.code);
+                            setFrozenRowOrder(rows.map((row) => row.code));
+                          }}
                           onChange={(e) => updateEst(store, num(e.target.value))}
+                          onBlur={() => {
+                            setEditingStoreCode("");
+                            setFrozenRowOrder([]);
+                          }}
                           placeholder={store.status === "거래중" ? "0" : "입력 제외"}
                           title={
                             store.status === "거래중"
@@ -5734,7 +5781,7 @@ function EstQuickEntry({
                 })}
                 {!rows.length && (
                   <tr>
-                    <td colSpan={10} className="border border-slate-300 p-8 text-center text-slate-500">
+                    <td colSpan={11} className="border border-slate-300 p-8 text-center text-slate-500">
                       선택한 담당자·채널·거래상태에 해당하는 거래처가 없습니다.
                     </td>
                   </tr>
@@ -5765,6 +5812,58 @@ function EstQuickEntry({
           </div>
         </div>
       </div>
+
+      {openBrand && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/35 p-4" onMouseDown={() => setOpenBrand("")}>
+          <div className="flex max-h-[82vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-200 bg-orange-50 px-5 py-3">
+              <div>
+                <h3 className="text-base font-black text-slate-900">{openBrand}</h3>
+                <p className="mt-0.5 text-xs font-semibold text-slate-500">거래처별 전년동월·전월 매출을 확인하면서 당월 EST를 입력할 수 있습니다.</p>
+              </div>
+              <button type="button" onClick={() => setOpenBrand("")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50">닫기</button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-4">
+              <table className="w-full min-w-[760px] border-separate border-spacing-0 text-center text-[12px]">
+                <thead>
+                  <tr>
+                    <th className="sticky top-0 z-10 border border-slate-300 bg-slate-100 px-3 py-2">거래처명</th>
+                    <th className="sticky top-0 z-10 border border-slate-300 bg-[#F7FCEB] px-3 py-2">전년동월 매출</th>
+                    <th className="sticky top-0 z-10 border border-slate-300 bg-[#F3FAFD] px-3 py-2">전월 매출</th>
+                    <th className="sticky top-0 z-10 border border-slate-300 bg-yellow-100 px-3 py-2">{month} EST 입력</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {openBrandStores.map((store) => {
+                    const value = estMap.get(store.code) || 0;
+                    return (
+                      <tr key={store.code} className="hover:bg-orange-50/50">
+                        <td className="border border-slate-300 px-3 py-2 text-left font-bold text-slate-900">{store.name}</td>
+                        <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(prevYearSalesMap.get(store.code) || 0)}</td>
+                        <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(prevSalesMap.get(store.code) || 0)}</td>
+                        <td className="border border-slate-300 px-3 py-2">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            disabled={!canEdit || store.status !== "거래중"}
+                            value={value ? won(value) : ""}
+                            onChange={(event) => updateEst(store, num(event.target.value))}
+                            placeholder={store.status === "거래중" ? "0" : "입력 제외"}
+                            className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!openBrandStores.length && (
+                    <tr><td colSpan={4} className="border border-slate-300 p-8 text-slate-500">선택한 담당자에게 연결된 브랜드 거래처가 없습니다.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -9013,6 +9112,7 @@ function SalesStatus({
     "all" | "check7" | "no30"
   >("all");
   const [hideEndedStores, setHideEndedStores] = useState(false);
+  const [channelTypeFilter, setChannelTypeFilter] = useState<"all" | "store" | "nonStore">("all");
   const [selectedManagers, setSelectedManagers] = useState<string[]>([]);
 
   const normalizedSearch = search.trim().toLowerCase();
@@ -9425,6 +9525,10 @@ function SalesStatus({
     let nextRows = rows;
     if (hideEndedStores && isStoreListView)
       nextRows = nextRows.filter((row) => !row.isEndedStore);
+    if (channelTypeFilter === "store")
+      nextRows = nextRows.filter((row) => row.channel === "매장");
+    if (channelTypeFilter === "nonStore")
+      nextRows = nextRows.filter((row) => row.channel === "비매장");
     if (view === "담당자별" && selectedManagers.length > 0) {
       const selected = new Set(selectedManagers);
       nextRows = nextRows.filter((row) =>
@@ -9432,7 +9536,7 @@ function SalesStatus({
       );
     }
     return nextRows;
-  }, [rows, hideEndedStores, view, selectedManagers]);
+  }, [rows, hideEndedStores, channelTypeFilter, view, selectedManagers]);
 
   const managerFilterOptions = useMemo(() => {
     if (view !== "담당자별") return [];
@@ -9928,7 +10032,24 @@ function SalesStatus({
                 >
                   {isStoreListView ? "거래처" : view.replace("별", "")}
                 </ThCompactSortable>
-                {showChannelColumn && <ThCompact rowSpan={2} tone="gray" w="w-[7%]">채널</ThCompact>}
+                {showChannelColumn && (
+                  <ThCompact rowSpan={2} tone="gray" w="w-[9%]">
+                    <div className="flex flex-col items-center gap-1">
+                      <span>채널</span>
+                      <select
+                        value={channelTypeFilter}
+                        onChange={(event) => setChannelTypeFilter(event.target.value as "all" | "store" | "nonStore")}
+                        onClick={(event) => event.stopPropagation()}
+                        className="h-7 w-full min-w-[74px] rounded-md border border-slate-300 bg-white px-1 text-[11px] font-bold text-slate-700 outline-none"
+                        aria-label="매출현황 매장 비매장 필터"
+                      >
+                        <option value="all">전체</option>
+                        <option value="store">매장</option>
+                        <option value="nonStore">비매장</option>
+                      </select>
+                    </div>
+                  </ThCompact>
+                )}
                 {!compact && isStoreListView && (
                   <ThCompactSortable
                     rowSpan={2}
