@@ -7904,7 +7904,7 @@ function ItemAnalysis({
           <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">
             브랜드별 요약
           </div>
-          <div className="max-h-[74vh] overflow-auto isolate">
+          <div className="h-[clamp(300px,calc(100vh-430px),600px)] overflow-y-scroll overflow-x-hidden isolate" style={{ scrollbarGutter: "stable" }}>
             <table className="w-full min-w-[1100px] connected-two-tier border-separate border-spacing-0 text-center text-[15px] leading-none whitespace-nowrap">
               <thead>
                 <tr>
@@ -7978,7 +7978,7 @@ function ItemAnalysis({
               </button>
             )}
           </div>
-          <div className="max-h-[74vh] overflow-auto isolate">
+          <div className="h-[clamp(300px,calc(100vh-430px),600px)] overflow-y-scroll overflow-x-hidden isolate" style={{ scrollbarGutter: "stable" }}>
             <table className="w-full min-w-[900px] connected-two-tier border-separate border-spacing-0 text-center text-[12px] text-slate-900 whitespace-nowrap">
               {mode === "매장별" && !selectedBrand ? (
                 <>
@@ -8101,7 +8101,7 @@ function ItemAnalysis({
               </button>
             </div>
           </div>
-          <div className="max-h-[74vh] overflow-auto isolate">
+          <div className="h-[clamp(300px,calc(100vh-430px),600px)] overflow-y-scroll overflow-x-hidden isolate" style={{ scrollbarGutter: "stable" }}>
             <table className="w-full min-w-[820px] connected-two-tier border-separate border-spacing-0 text-center text-[13px] whitespace-nowrap">
               <thead>
                 <tr>
@@ -8782,8 +8782,8 @@ function ItemShipmentAnalysis({
                 <col style={{ width: "6.5%" }} />
                 <col style={{ width: "5%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "6.5%" }} />
-                <col style={{ width: "4%" }} />
+                <col style={{ width: "5.5%" }} />
+                <col style={{ width: "5%" }} />
               </colgroup>
               <thead>
                 <tr className="bg-slate-100">
@@ -8894,8 +8894,8 @@ function ItemShipmentAnalysis({
                 <col style={{ width: "6.5%" }} />
                 <col style={{ width: "5%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "6.5%" }} />
-                <col style={{ width: "4%" }} />
+                <col style={{ width: "5.5%" }} />
+                <col style={{ width: "5%" }} />
               </colgroup>
               <tbody>
                 {itemRows.map((r) => (
@@ -10055,7 +10055,7 @@ function SalesStatus({
           </>
         )}
 
-        <div className="relative max-h-[62vh] overflow-auto bg-white">
+        <div className="relative h-[clamp(300px,calc(100vh-430px),600px)] overflow-y-scroll overflow-x-hidden bg-white" style={{ scrollbarGutter: "stable" }}>
           <table
             className={`sales-status-table w-full ${compact ? "min-w-[1360px]" : "min-w-[1180px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[12px] leading-tight`}
           >
