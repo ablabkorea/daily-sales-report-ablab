@@ -4815,95 +4815,81 @@ export default function SalesReportClient() {
           .sales-report-root .period-subgroup-start {
             border-left: 2px solid #d7dee8 !important;
           }
-          /* 품목분석 손익요약: 헤더·SUBTOTAL과 본문 스크롤 영역을 완전히 분리 */
-          .sales-report-root .item-profit-fixed-header,
-          .sales-report-root .item-profit-fixed-body {
+          /* 품목분석 손익요약: 헤더·SUBTOTAL·본문을 하나의 table/colgroup으로 렌더링 */
+          .sales-report-root .item-profit-scroll {
+            height: clamp(300px, calc(100vh - 430px), 600px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-gutter: stable;
+            background: #fff;
+          }
+          .sales-report-root .item-profit-table {
+            width: 100%;
             table-layout: fixed;
             border-collapse: collapse;
             border-spacing: 0;
             font-size: 12px;
           }
-          .sales-report-root .item-profit-fixed-header-wrap {
-            padding-right: 17px;
-            background: #fff;
+          .sales-report-root .item-profit-table th,
+          .sales-report-root .item-profit-table td {
+            box-sizing: border-box;
+            border: 1px solid #cbd5e1 !important;
+            vertical-align: middle;
           }
-          .sales-report-root .item-profit-fixed-header {
-            position: relative;
-            z-index: 30;
-            background: #fff;
+          .sales-report-root .item-profit-table thead th {
+            position: sticky !important;
+            background-clip: padding-box !important;
+            overflow: hidden;
           }
-          .sales-report-root .item-profit-fixed-header thead tr:first-child {
+          .sales-report-root .item-profit-table thead tr:nth-child(1) th {
+            top: 0;
+            z-index: 33;
             height: 34px;
           }
-          .sales-report-root .item-profit-fixed-header thead tr:nth-child(2) {
+          .sales-report-root .item-profit-table thead tr:nth-child(2) th {
+            top: 34px;
+            z-index: 32;
             height: 44px;
           }
-          .sales-report-root .item-profit-fixed-header thead tr:nth-child(3) {
+          .sales-report-root .item-profit-table thead tr:nth-child(3) th {
+            top: 78px;
+            z-index: 31;
             height: 34px;
-          }
-          .sales-report-root .item-profit-fixed-header thead,
-          .sales-report-root .item-profit-fixed-header thead tr {
-            position: static !important;
-            top: auto !important;
-          }
-          .sales-report-root .item-profit-fixed-header thead th {
-            position: relative !important;
-            top: auto !important;
-            z-index: 1 !important;
-            overflow: hidden;
-            background-clip: border-box !important;
-          }
-          /* 공통 sticky 헤더용 가상 배경이 분리형 헤더 전체를 덮지 않도록 차단 */
-          .sales-report-root .item-profit-fixed-header thead th::before,
-          .sales-report-root .item-profit-fixed-header thead th::after,
-          .sales-report-root .item-profit-fixed-header .item-profit-subtotal th::before,
-          .sales-report-root .item-profit-fixed-header .item-profit-subtotal th::after {
-            display: none !important;
-            content: none !important;
-          }
-          .sales-report-root .item-profit-fixed-header .item-profit-subtotal th {
-            position: relative !important;
-            top: auto !important;
-            z-index: 2 !important;
             background: #fff8dc !important;
-            border: 1px solid #cbd5e1 !important;
             border-radius: 0 !important;
             box-shadow: none !important;
           }
-          .sales-report-root .item-profit-fixed-header .item-profit-subtotal .subtotal-label {
+          .sales-report-root .item-profit-table thead th[rowspan="2"] {
+            top: 0 !important;
+            z-index: 34;
+          }
+          .sales-report-root .item-profit-table thead th::before,
+          .sales-report-root .item-profit-table thead th::after {
+            display: none !important;
+            content: none !important;
+          }
+          .sales-report-root .item-profit-table .subtotal-label {
             padding-left: 16px !important;
             text-align: left !important;
             letter-spacing: 0.01em;
           }
-          .sales-report-root .item-profit-fixed-header .item-profit-subtotal .subtotal-number {
+          .sales-report-root .item-profit-table .subtotal-number,
+          .sales-report-root .item-profit-table .item-profit-number-cell {
             padding-right: 12px !important;
             text-align: right !important;
           }
-          .sales-report-root .item-profit-fixed-body .item-profit-number-cell {
-            padding-right: 12px !important;
-            text-align: right !important;
-          }
-          .sales-report-root .item-profit-fixed-body tbody {
-            position: static !important;
-          }
-          .sales-report-root .item-profit-fixed-body td {
-            min-height: 40px;
+          .sales-report-root .item-profit-table tbody td {
+            height: 40px;
             padding: 8px;
             font-size: 12px;
-            vertical-align: middle;
           }
-          .sales-report-root .item-profit-fixed-header th,
-          .sales-report-root .item-profit-fixed-body td {
-            box-sizing: border-box;
-            border-width: 1px !important;
-            border-style: solid !important;
-            border-color: #cbd5e1 !important;
+          .sales-report-root .item-profit-table .item-profit-category-cell {
+            padding-left: 4px !important;
+            padding-right: 4px !important;
+            font-size: 11px !important;
+            letter-spacing: -0.02em;
           }
-          .sales-report-root .item-profit-fixed-header-wrap,
-          .sales-report-root .item-profit-fixed-body {
-            width: 100%;
-          }
-          .sales-report-root .item-profit-fixed-body .item-name-cell {
+          .sales-report-root .item-profit-table .item-name-cell {
             overflow: visible;
             text-overflow: clip;
             white-space: nowrap;
@@ -8764,192 +8750,163 @@ function ItemShipmentAnalysis({
             </div>
           </div>
           <div className="overflow-x-hidden isolate">
-            <div className="w-full">
-              {/* 헤더와 SUBTOTAL은 스크롤 영역 밖에 두어 완전히 고정합니다. */}
-              <div className="item-profit-fixed-header-wrap pr-[17px]">
-              <table className="item-profit-fixed-header w-full table-fixed text-center text-black whitespace-nowrap">
-              <colgroup>
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "20.5%" }} />
-                <col style={{ width: "6%" }} />
-                <col style={{ width: "4%" }} />
-                <col style={{ width: "6.5%" }} />
-                <col style={{ width: "6%" }} />
-                <col style={{ width: "6.5%" }} />
-                <col style={{ width: "4.5%" }} />
-                <col style={{ width: "6.5%" }} />
-                <col style={{ width: "6%" }} />
-                <col style={{ width: "6.5%" }} />
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "4.5%" }} />
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "7.5%" }} />
-              </colgroup>
-              <thead>
-                <tr className="bg-slate-100">
-                  <th rowSpan={2} className="border border-slate-300 bg-white px-2 py-2 font-bold text-black">품목코드</th>
-                  <th rowSpan={2} className="border border-slate-300 bg-white px-3 py-2 font-bold text-black">품목명</th>
-                  <th rowSpan={2} className="border border-slate-300 bg-white px-1 py-2 font-bold text-black">
-                    <div className="flex w-full flex-col items-center gap-1">
-                      <span>카테고리</span>
-                      <select
-                        value={categoryFilter}
-                        onChange={(e) => {
-                          setCategoryFilter(e.target.value);
-                          setSelectedItemCode("");
-                        }}
-                        className="w-full rounded border border-slate-300 bg-white px-1 font-semibold text-black"
-                      >
-                        {categoryOptions.map((category) => (
-                          <option key={category} value={category}>{category}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </th>
-                  <th rowSpan={2} className="border border-slate-300 bg-amber-50 px-1 py-2 font-bold text-amber-900">
-                    <div className="flex w-full flex-col items-center gap-1">
-                      <span>신규여부</span>
-                      <select
-                        value={newItemFilter}
-                        onChange={(e) => {
-                          setNewItemFilter(e.target.value as "전체" | "당월 신규");
-                          setSelectedItemCode("");
-                        }}
-                        className="w-full rounded border border-amber-300 bg-white px-1 font-semibold text-black"
-                      >
-                        <option value="전체">전체</option>
-                        <option value="당월 신규">당월 신규</option>
-                      </select>
-                    </div>
-                  </th>
-                  <th colSpan={4} className="border border-slate-300 bg-[#F3FAFD] px-3 py-1 text-[15px] font-extrabold text-black">전월</th>
-                  <th colSpan={4} className="border border-slate-300 bg-[#FFF7FA] px-3 py-1 text-[15px] font-extrabold text-black">당월</th>
-                  <th rowSpan={2} className="border border-slate-300 bg-[#FFF9F3] px-1 py-2 font-bold text-black">이익률변동</th>
-                  <th rowSpan={2} className="border border-slate-300 bg-white px-1 py-2 font-bold text-black">사용 거래처 수</th>
-                  <th rowSpan={2} className="border border-slate-300 bg-white px-2 py-2 font-bold text-black">상세</th>
-                </tr>
-                <tr>
-                  <th className="border border-slate-300 bg-[#F3FAFD] px-2 py-2 font-bold text-black">매출</th>
-                  <th className="border border-slate-300 bg-[#F3FAFD] px-2 py-2 font-bold text-black">매입단가</th>
-                  <th className="border border-slate-300 bg-[#F3FAFD] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
-                  <th className="border border-slate-300 bg-[#F3FAFD] px-1 py-2 font-bold text-black">이익률</th>
-                  <th className="border border-slate-300 bg-[#FFF7FA] px-2 py-2 font-bold text-black">매출</th>
-                  <th className="border border-slate-300 bg-[#FFF7FA] px-2 py-2 font-bold text-black">매입단가</th>
-                  <th className="border border-slate-300 bg-[#FFF7FA] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
-                  <th className="border border-slate-300 bg-[#FFF7FA] px-1 py-1 font-bold text-black">
-                    <div className="flex w-full flex-col items-center gap-1">
-                      <span>이익률</span>
-                      <select
-                        value={profitRateFilter}
-                        onChange={(e) => {
-                          setProfitRateFilter(e.target.value);
-                          setSelectedItemCode("");
-                        }}
-                        className="w-full rounded border border-slate-300 bg-white px-1 font-semibold text-black"
-                      >
-                        {["전체", "30% 미만", "30~40%", "40% 이상", "상승", "하락"].map((value) => (
-                          <option key={value} value={value}>{value}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </th>
-                </tr>
-                <tr className="item-profit-subtotal font-extrabold text-black">
-                  <th colSpan={4} className="subtotal-label border border-slate-400 font-extrabold">SUBTOTAL</th>
-                  <th className="subtotal-number sales-value-cell border border-slate-400 font-extrabold">{won(subtotal.prevMonth.sales)}</th>
-                  <th className="subtotal-number border border-slate-400">{won(subtotal.prevMonthUnitCost)}</th>
-                  <th className="subtotal-number border border-slate-400">{won(subtotal.prevMonth.profit)}</th>
-                  <th className="subtotal-number border border-slate-400">{pct(subtotal.prevRate)}</th>
-                  <th className="subtotal-number sales-value-cell border border-slate-400 font-extrabold">{won(subtotal.current.sales)}</th>
-                  <th className="subtotal-number border border-slate-400">{won(subtotal.currentUnitCost)}</th>
-                  <th className="subtotal-number border border-slate-400">{won(subtotal.current.profit)}</th>
-                  <th className="subtotal-number border border-slate-400">{pct(subtotal.currentRate)}</th>
-                  <th className={`subtotal-number border border-slate-400 ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
-                    {itemSignedPct(subtotal.rateChange)}
-                  </th>
-                  <th className="border border-slate-400 text-center">{subtotal.storeCount.toLocaleString("ko-KR")}</th>
-                  <th className="border border-slate-400" />
-                </tr>
-              </thead>
-              </table>
-              </div>
-
-              {/* 품목 데이터 행만 세로로 스크롤됩니다. */}
-              <div
-                className="h-[clamp(300px,calc(100vh-430px),600px)] overflow-y-scroll overflow-x-hidden"
-                style={{ scrollbarGutter: "stable" }}
-              >
-                <table className="item-profit-fixed-body w-full table-fixed text-center text-black whitespace-nowrap">
-              <colgroup>
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "20.5%" }} />
-                <col style={{ width: "6%" }} />
-                <col style={{ width: "4%" }} />
-                <col style={{ width: "6.5%" }} />
-                <col style={{ width: "6%" }} />
-                <col style={{ width: "6.5%" }} />
-                <col style={{ width: "4.5%" }} />
-                <col style={{ width: "6.5%" }} />
-                <col style={{ width: "6%" }} />
-                <col style={{ width: "6.5%" }} />
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "4.5%" }} />
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "7.5%" }} />
-              </colgroup>
-              <tbody>
-                {itemRows.map((r) => (
-                  <tr key={`${r.itemCode}-${r.itemName}`} className={r.isNewItem ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-blue-50"}>
-                    <td className="border border-slate-300 p-2">{r.itemCode}</td>
-                    <td
-                      className="border border-slate-300 px-1.5 py-2 text-left text-[10px] font-semibold leading-tight tracking-[-0.03em] whitespace-nowrap overflow-visible"
-                      title={r.itemName}
-                    >
-                      {r.itemName}
-                    </td>
-                    <td className="border border-slate-300 p-2 font-semibold">{r.category}</td>
-                    <td className="border border-slate-300 p-2 text-center">
-                      {r.isNewItem ? (
-                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-amber-100 px-1 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">Y</span>
-                      ) : "-"}
-                    </td>
-                    <td className="item-profit-number-cell sales-value-cell border border-slate-300 p-2 font-bold">{won(r.prevMonth.sales)}</td>
-                    <td className="item-profit-number-cell border border-slate-300 p-2">{won(r.prevMonthUnitCost)}</td>
-                    <td className="item-profit-number-cell border border-slate-300 p-2">{won(r.prevMonth.profit)}</td>
-                    <td className="item-profit-number-cell border border-slate-300 p-2 font-bold">{pct(r.prevMonthProfitRate)}</td>
-                    <td className="item-profit-number-cell sales-value-cell border border-slate-300 p-2 font-extrabold">{won(r.current.sales)}</td>
-                    <td className="item-profit-number-cell border border-slate-300 p-2">{won(r.currentUnitCost)}</td>
-                    <td className="item-profit-number-cell border border-slate-300 p-2 font-bold">{won(r.current.profit)}</td>
-                    <td className="item-profit-number-cell border border-slate-300 p-2 font-extrabold">{pct(r.currentProfitRate)}</td>
-                    <td className={`item-profit-number-cell border border-slate-300 p-2 font-extrabold ${r.profitRateChange > 0 ? "text-emerald-700" : r.profitRateChange < 0 ? "text-red-600" : "text-black"}`}>
-                      {itemSignedPct(r.profitRateChange)}
-                    </td>
-                    <td className="border border-slate-300 p-2 text-center font-extrabold">{r.storeCodes.size.toLocaleString("ko-KR")}</td>
-                    <td className="border border-slate-300 p-2">
-                      <button
-                        onClick={() => setSelectedItemCode(r.itemCode)}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-black hover:border-blue-300 hover:bg-blue-50"
-                      >
-                        거래처 보기
-                      </button>
-                    </td>
+            <div className="item-profit-scroll">
+              <table className="item-profit-table text-center text-black whitespace-nowrap">
+                <colgroup>
+                  <col style={{ width: "5%" }} />
+                  <col style={{ width: "20.5%" }} />
+                  <col style={{ width: "6%" }} />
+                  <col style={{ width: "4%" }} />
+                  <col style={{ width: "6.5%" }} />
+                  <col style={{ width: "6%" }} />
+                  <col style={{ width: "6.5%" }} />
+                  <col style={{ width: "4.5%" }} />
+                  <col style={{ width: "6.5%" }} />
+                  <col style={{ width: "6%" }} />
+                  <col style={{ width: "6.5%" }} />
+                  <col style={{ width: "5%" }} />
+                  <col style={{ width: "4.5%" }} />
+                  <col style={{ width: "5%" }} />
+                  <col style={{ width: "7.5%" }} />
+                </colgroup>
+                <thead>
+                  <tr className="bg-slate-100">
+                    <th rowSpan={2} className="bg-white px-2 py-2 font-bold text-black">품목코드</th>
+                    <th rowSpan={2} className="bg-white px-3 py-2 font-bold text-black">품목명</th>
+                    <th rowSpan={2} className="bg-white px-1 py-2 text-[11px] font-bold text-black">
+                      <div className="flex w-full flex-col items-center gap-1">
+                        <span>카테고리</span>
+                        <select
+                          value={categoryFilter}
+                          onChange={(e) => {
+                            setCategoryFilter(e.target.value);
+                            setSelectedItemCode("");
+                          }}
+                          className="w-full rounded border border-slate-300 bg-white px-1 text-[11px] font-semibold text-black"
+                        >
+                          {categoryOptions.map((category) => (
+                            <option key={category} value={category}>{category}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </th>
+                    <th rowSpan={2} className="bg-amber-50 px-1 py-2 font-bold text-amber-900">
+                      <div className="flex w-full flex-col items-center gap-1">
+                        <span>신규여부</span>
+                        <select
+                          value={newItemFilter}
+                          onChange={(e) => {
+                            setNewItemFilter(e.target.value as "전체" | "당월 신규");
+                            setSelectedItemCode("");
+                          }}
+                          className="w-full rounded border border-amber-300 bg-white px-1 font-semibold text-black"
+                        >
+                          <option value="전체">전체</option>
+                          <option value="당월 신규">당월 신규</option>
+                        </select>
+                      </div>
+                    </th>
+                    <th colSpan={4} className="bg-[#F3FAFD] px-3 py-1 text-[15px] font-extrabold text-black">전월</th>
+                    <th colSpan={4} className="bg-[#FFF7FA] px-3 py-1 text-[15px] font-extrabold text-black">당월</th>
+                    <th rowSpan={2} className="bg-[#FFF9F3] px-1 py-2 font-bold text-black">이익률변동</th>
+                    <th rowSpan={2} className="bg-white px-1 py-2 font-bold text-black">사용 거래처 수</th>
+                    <th rowSpan={2} className="bg-white px-2 py-2 font-bold text-black">상세</th>
                   </tr>
-                ))}
-                {!itemRows.length && (
                   <tr>
-                    <td colSpan={15} className="border border-slate-300 p-8 text-center text-black">
-                      표시할 품목이 없습니다.
-                    </td>
+                    <th className="bg-[#F3FAFD] px-2 py-2 font-bold text-black">매출</th>
+                    <th className="bg-[#F3FAFD] px-2 py-2 font-bold text-black">매입단가</th>
+                    <th className="bg-[#F3FAFD] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
+                    <th className="bg-[#F3FAFD] px-1 py-2 font-bold text-black">이익률</th>
+                    <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-black">매출</th>
+                    <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-black">매입단가</th>
+                    <th className="bg-[#FFF7FA] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
+                    <th className="bg-[#FFF7FA] px-1 py-1 font-bold text-black">
+                      <div className="flex w-full flex-col items-center gap-1">
+                        <span>이익률</span>
+                        <select
+                          value={profitRateFilter}
+                          onChange={(e) => {
+                            setProfitRateFilter(e.target.value);
+                            setSelectedItemCode("");
+                          }}
+                          className="w-full rounded border border-slate-300 bg-white px-1 font-semibold text-black"
+                        >
+                          {["전체", "30% 미만", "30~40%", "40% 이상", "상승", "하락"].map((value) => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </th>
                   </tr>
-                )}
-                {!!itemRows.length && (
-                  <tr aria-hidden="true">
-                    <td colSpan={15} className="h-20 border-0 bg-white p-0" />
+                  <tr className="item-profit-subtotal font-extrabold text-black">
+                    <th colSpan={4} className="subtotal-label font-extrabold">SUBTOTAL</th>
+                    <th className="subtotal-number sales-value-cell font-extrabold">{won(subtotal.prevMonth.sales)}</th>
+                    <th className="subtotal-number">{won(subtotal.prevMonthUnitCost)}</th>
+                    <th className="subtotal-number">{won(subtotal.prevMonth.profit)}</th>
+                    <th className="subtotal-number">{pct(subtotal.prevRate)}</th>
+                    <th className="subtotal-number sales-value-cell font-extrabold">{won(subtotal.current.sales)}</th>
+                    <th className="subtotal-number">{won(subtotal.currentUnitCost)}</th>
+                    <th className="subtotal-number">{won(subtotal.current.profit)}</th>
+                    <th className="subtotal-number">{pct(subtotal.currentRate)}</th>
+                    <th className={`subtotal-number ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
+                      {itemSignedPct(subtotal.rateChange)}
+                    </th>
+                    <th className="text-center">{subtotal.storeCount.toLocaleString("ko-KR")}</th>
+                    <th />
                   </tr>
-                )}
-              </tbody>
-                </table>
-              </div>
+                </thead>
+                <tbody>
+                  {itemRows.map((r) => (
+                    <tr key={`${r.itemCode}-${r.itemName}`} className={r.isNewItem ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-blue-50"}>
+                      <td className="p-2">{r.itemCode}</td>
+                      <td
+                        className="item-name-cell px-1.5 py-2 text-left text-[10px] font-semibold leading-tight tracking-[-0.03em]"
+                        title={r.itemName}
+                      >
+                        {r.itemName}
+                      </td>
+                      <td className="item-profit-category-cell font-semibold">{r.category}</td>
+                      <td className="p-2 text-center">
+                        {r.isNewItem ? (
+                          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-amber-100 px-1 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">Y</span>
+                        ) : "-"}
+                      </td>
+                      <td className="item-profit-number-cell sales-value-cell p-2 font-bold">{won(r.prevMonth.sales)}</td>
+                      <td className="item-profit-number-cell p-2">{won(r.prevMonthUnitCost)}</td>
+                      <td className="item-profit-number-cell p-2">{won(r.prevMonth.profit)}</td>
+                      <td className="item-profit-number-cell p-2 font-bold">{pct(r.prevMonthProfitRate)}</td>
+                      <td className="item-profit-number-cell sales-value-cell p-2 font-extrabold">{won(r.current.sales)}</td>
+                      <td className="item-profit-number-cell p-2">{won(r.currentUnitCost)}</td>
+                      <td className="item-profit-number-cell p-2 font-bold">{won(r.current.profit)}</td>
+                      <td className="item-profit-number-cell p-2 font-extrabold">{pct(r.currentProfitRate)}</td>
+                      <td className={`item-profit-number-cell p-2 font-extrabold ${r.profitRateChange > 0 ? "text-emerald-700" : r.profitRateChange < 0 ? "text-red-600" : "text-black"}`}>
+                        {itemSignedPct(r.profitRateChange)}
+                      </td>
+                      <td className="p-2 text-center font-extrabold">{r.storeCodes.size.toLocaleString("ko-KR")}</td>
+                      <td className="p-2">
+                        <button
+                          onClick={() => setSelectedItemCode(r.itemCode)}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-black hover:border-blue-300 hover:bg-blue-50"
+                        >
+                          거래처 보기
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {!itemRows.length && (
+                    <tr>
+                      <td colSpan={15} className="p-8 text-center text-black">
+                        표시할 품목이 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                  {!!itemRows.length && (
+                    <tr aria-hidden="true">
+                      <td colSpan={15} className="h-20 border-0 bg-white p-0" />
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
