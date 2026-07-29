@@ -4647,7 +4647,7 @@ export default function SalesReportClient() {
         </div>
       </header>
 
-      <section className="flex h-[calc(100vh-69px)] min-w-0 flex-col overflow-hidden p-4 lg:p-5">
+      <section className="flex h-[calc(100vh-69px)] min-w-0 flex-col overflow-hidden p-4 pb-10 lg:p-5 lg:pb-10">
         <style jsx global>{`
           .sales-report-root table th,
           .sales-report-root table td,
@@ -5578,6 +5578,10 @@ function EstQuickEntry({
                       />
                     </label>
                   </div>
+                  <div className="flex items-center justify-between border-t border-violet-200 bg-[#F1ECFF] px-4 py-2.5">
+                    <span className="text-[12px] font-extrabold text-violet-950">총 Target 합계</span>
+                    <span className="text-[18px] font-black text-violet-800">{won(targetByType.store + targetByType.nonStore)}</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -5998,6 +6002,11 @@ function ItemCostStatus({
     [itemCosts],
   );
 
+  const newItemCount = useMemo(
+    () => itemBaseRows.filter((row) => row.isNewItem).length,
+    [itemBaseRows],
+  );
+
   const rows = useMemo(() => {
     return itemBaseRows
       .map((base) => {
@@ -6135,8 +6144,11 @@ function ItemCostStatus({
     <div className="flex min-h-0 flex-1 flex-col space-y-3">
       <div className="bg-white py-1">
         <div className="flex flex-wrap items-end justify-end gap-3">
-          <div>
+          <div className="flex items-center gap-2">
             <div className="text-base font-extrabold text-slate-900">매입가 정보</div>
+            <span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ring-1 ${newItemCount > 0 ? "bg-amber-100 text-amber-800 ring-amber-300" : "bg-slate-100 text-slate-500 ring-slate-200"}`}>
+              신규품목 {newItemCount.toLocaleString("ko-KR")}건
+            </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -6192,7 +6204,7 @@ function ItemCostStatus({
                 const diffTone = row.diff > 0 ? "text-red-600" : row.diff < 0 ? "text-blue-600" : "text-slate-500";
                 return (
                   <Fragment key={row.itemCode}>
-                    <tr className={isDueSoon ? "bg-red-50 hover:bg-red-100" : isUpcoming ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-slate-50"}>
+                    <tr className={row.isNewItem ? "bg-amber-50 hover:bg-amber-100" : isDueSoon ? "bg-red-50 hover:bg-red-100" : isUpcoming ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-slate-50"}>
                       <td className="w-[5%] border border-slate-300 px-2 py-2 text-[13px] font-bold text-slate-800">{row.itemCode}</td>
                       <td className="w-[25%] border border-slate-300 px-1.5 py-2 text-left font-semibold text-slate-900">
                         <div className="flex min-w-0 items-center gap-1 whitespace-nowrap">
@@ -8745,7 +8757,7 @@ function ItemShipmentAnalysis({
               <table className="item-profit-fixed-header w-full table-fixed text-center text-black whitespace-nowrap">
               <colgroup>
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "25%" }} />
+                <col style={{ width: "22%" }} />
                 <col style={{ width: "6%" }} />
                 <col style={{ width: "5%" }} />
                 <col style={{ width: "7%" }} />
@@ -8757,7 +8769,7 @@ function ItemShipmentAnalysis({
                 <col style={{ width: "7%" }} />
                 <col style={{ width: "5%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "4%" }} />
+                <col style={{ width: "7%" }} />
                 <col style={{ width: "5%" }} />
               </colgroup>
               <thead>
@@ -11636,7 +11648,7 @@ function ItemMasterManagement({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-sm font-extrabold text-slate-900">품목 기준정보</h2>
-            <p className="mt-1 text-[11px] font-semibold text-slate-500">품목코드·품목명은 매출 자료에서 자동 표시되며, 카테고리와 매입처만 직접 입력합니다.</p>
+            <p className="mt-1 text-[11px] font-semibold text-slate-500">품목코드·품목명은 기준 품목리스트와 당월 매출 자료에서 자동 표시됩니다. 관리자는 카테고리와 매입처만 수정할 수 있으며, 신규품목 표시는 최초 매출 발생월에만 나타납니다.</p>
           </div>
           <input
             value={search}
@@ -13790,23 +13802,25 @@ function UploadPage({
         console.warn("Sales V3 SQL이 아직 적용되지 않아 기존 저장 방식을 사용했습니다.");
       }
 
-      const itemMasterMap = new Map(itemMasters.map((item) => [item.itemCode, item]));
-      let addedItemCount = 0;
-      parsed.forEach((row) => {
-        if (!row.itemCode || itemMasterMap.has(row.itemCode)) return;
-        itemMasterMap.set(row.itemCode, {
-          itemCode: row.itemCode,
-          itemName: row.itemName || row.itemCode,
-          category: "미지정",
-          supplier: "미지정",
-          source: "sales",
-          firstSeenMonth: month,
-          active: true,
-          memo: "매출 로우 파일에서 자동 추가",
+      if (period === "current") {
+        const itemMasterMap = new Map(itemMasters.map((item) => [item.itemCode, item]));
+        let addedItemCount = 0;
+        parsed.forEach((row) => {
+          if (!row.itemCode || itemMasterMap.has(row.itemCode)) return;
+          itemMasterMap.set(row.itemCode, {
+            itemCode: row.itemCode,
+            itemName: row.itemName || row.itemCode,
+            category: "미지정",
+            supplier: "미지정",
+            source: "sales",
+            firstSeenMonth: month,
+            active: true,
+            memo: "당월 매출 로우 파일에서 자동 추가",
+          });
+          addedItemCount += 1;
         });
-        addedItemCount += 1;
-      });
-      if (addedItemCount > 0) setItemMasters(Array.from(itemMasterMap.values()));
+        if (addedItemCount > 0) setItemMasters(Array.from(itemMasterMap.values()));
+      }
     } catch (error) {
       console.error("매출 업로드 저장 실패", error);
       alert("매출 저장에 실패했습니다. 기존 데이터는 그대로 유지됩니다. Cloudflare D1 연결 상태를 확인해 주세요.");
@@ -14063,7 +14077,7 @@ function UploadPage({
           />
           <UploadBox
             title="품목 정보 업로드"
-            description="최초 기초값용입니다. 품목코드·품목명·품목그룹1명·매입처를 저장하며, 이후 매출 파일의 신규 품목은 자동 추가됩니다."
+            description="최초 기준 품목리스트용입니다. 평소에는 다시 업로드하지 않으며, 이후 당월 매출 파일에서 기준 리스트에 없는 품목코드는 해당 월의 신규품목으로 자동 등록됩니다."
             onUpload={uploadItems}
           />
           <UploadBox
