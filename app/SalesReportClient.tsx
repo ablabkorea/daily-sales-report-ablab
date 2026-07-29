@@ -4866,9 +4866,9 @@ export default function SalesReportClient() {
             top: auto !important;
             z-index: 2 !important;
             background: #fff8dc !important;
-            border: 1px solid #e5e7eb !important;
-            border-radius: 7px;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
           }
           .sales-report-root .item-profit-fixed-header .item-profit-subtotal .subtotal-label {
             padding-left: 16px !important;
@@ -4895,6 +4895,13 @@ export default function SalesReportClient() {
           .sales-report-root .item-profit-fixed-header th,
           .sales-report-root .item-profit-fixed-body td {
             box-sizing: border-box;
+            border-width: 1px !important;
+            border-style: solid !important;
+            border-color: #cbd5e1 !important;
+          }
+          .sales-report-root .item-profit-fixed-header-wrap,
+          .sales-report-root .item-profit-fixed-body {
+            width: 100%;
           }
           .sales-report-root .item-profit-fixed-body .item-name-cell {
             overflow: visible;
@@ -5647,10 +5654,10 @@ function EstQuickEntry({
         </div>
 
         <div
-          className="flex min-h-[440px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
-          style={{ height: "clamp(440px, calc(100vh - 340px), 760px)" }}
+          className="flex min-h-[360px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
+          style={{ height: "clamp(360px, calc(100vh - 430px), 600px)" }}
         >
-          <div className="isolate min-h-0 flex-1 overflow-auto pb-5 pr-2">
+          <div className="isolate min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 pr-2">
             <table className="w-full min-w-[1580px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-100">
@@ -8763,20 +8770,20 @@ function ItemShipmentAnalysis({
               <table className="item-profit-fixed-header w-full table-fixed text-center text-black whitespace-nowrap">
               <colgroup>
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "22%" }} />
+                <col style={{ width: "20.5%" }} />
                 <col style={{ width: "6%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "7%" }} />
+                <col style={{ width: "6.5%" }} />
                 <col style={{ width: "6%" }} />
-                <col style={{ width: "7%" }} />
+                <col style={{ width: "6.5%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "7%" }} />
+                <col style={{ width: "6.5%" }} />
                 <col style={{ width: "6%" }} />
-                <col style={{ width: "7%" }} />
+                <col style={{ width: "6.5%" }} />
                 <col style={{ width: "5%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "7%" }} />
-                <col style={{ width: "5%" }} />
+                <col style={{ width: "6.5%" }} />
+                <col style={{ width: "4%" }} />
               </colgroup>
               <thead>
                 <tr className="bg-slate-100">
@@ -8875,20 +8882,20 @@ function ItemShipmentAnalysis({
                 <table className="item-profit-fixed-body w-full table-fixed text-center text-black whitespace-nowrap">
               <colgroup>
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "22%" }} />
+                <col style={{ width: "20.5%" }} />
                 <col style={{ width: "6%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "7%" }} />
+                <col style={{ width: "6.5%" }} />
                 <col style={{ width: "6%" }} />
-                <col style={{ width: "7%" }} />
+                <col style={{ width: "6.5%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "7%" }} />
+                <col style={{ width: "6.5%" }} />
                 <col style={{ width: "6%" }} />
-                <col style={{ width: "7%" }} />
+                <col style={{ width: "6.5%" }} />
                 <col style={{ width: "5%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "7%" }} />
-                <col style={{ width: "5%" }} />
+                <col style={{ width: "6.5%" }} />
+                <col style={{ width: "4%" }} />
               </colgroup>
               <tbody>
                 {itemRows.map((r) => (
