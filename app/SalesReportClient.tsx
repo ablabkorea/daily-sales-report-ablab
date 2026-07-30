@@ -4523,7 +4523,7 @@ function isEstEntryPeriodToday() {
 }
 
 export default function SalesReportClient() {
-  const [active, setActive] = useState("대시보드");
+  const [active, setActive] = useState("EST 입력");
   const [isAdmin, setIsAdmin] = useState(false);
   const [dashMonth, setDashMonth] = useState(thisMonth());
   const [dashDate, setDashDate] = useState(today());
@@ -4566,27 +4566,28 @@ export default function SalesReportClient() {
     if (!dashDate.startsWith(dashMonth)) setDashDate(monthEnd(dashMonth));
   }, [dashMonth, dashDate]);
 
-  const isEstEntryOpen = isEstEntryPeriodToday();
-  const canAccessEstEntry = isAdmin || isEstEntryOpen;
+  // 비관리자에게는 EST 입력만 공개하고, 관리자 로그인 시 전체 메뉴를 엽니다.
+  const canAccessEstEntry = true;
 
   useEffect(() => {
-    if (!isAdmin && active === "월초관리") setActive("대시보드");
-    if (!canAccessEstEntry && active === "EST 입력") setActive("대시보드");
-  }, [isAdmin, active, canAccessEstEntry]);
+    if (!isAdmin && active !== "EST 입력") setActive("EST 입력");
+  }, [isAdmin, active]);
 
   const tg = useMemo(
     () => getTimeGone(dashMonth, dashDate, timeConfigs),
     [dashMonth, dashDate, timeConfigs],
   );
-  const menus = [
-    ...(canAccessEstEntry ? [{ label: "EST 입력", order: "0" }] : []),
-    { label: "대시보드", order: "1" },
-    { label: "매출현황", order: "2" },
-    { label: "거래처별 상세", order: "3" },
-    { label: "품목분석", order: "4" },
-    { label: "매입가 정보", order: "5" },
-    ...(isAdmin ? [{ label: "월초관리", order: "6" }] : []),
-  ];
+  const menus = isAdmin
+    ? [
+        { label: "EST 입력", order: "0" },
+        { label: "대시보드", order: "1" },
+        { label: "매출현황", order: "2" },
+        { label: "거래처별 상세", order: "3" },
+        { label: "품목분석", order: "4" },
+        { label: "매입가 정보", order: "5" },
+        { label: "월초관리", order: "6" },
+      ]
+    : [{ label: "EST 입력", order: "0" }];
 
   function adminLogin() {
     const password = window.prompt("관리자 비밀번호를 입력하세요.");
@@ -4632,7 +4633,7 @@ export default function SalesReportClient() {
                 type="button"
                 onClick={() => {
                   setIsAdmin(false);
-                  setActive("대시보드");
+                  setActive("EST 입력");
                 }}
                 className="rounded-xl bg-orange-100 px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-200"
               >
@@ -5046,7 +5047,7 @@ export default function SalesReportClient() {
             targets={targets}
             setTargets={setTargets}
             month={dashMonth}
-            canEdit={isAdmin || isEstEntryOpen}
+            canEdit={true}
             isAdmin={isAdmin}
             managerConfigs={managerConfigs}
           />
