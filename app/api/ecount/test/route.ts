@@ -8,29 +8,12 @@ type EcountRequest = {
   userId?: string;
   apiCertKey?: string;
   prodCode?: string;
-  syncToDailySales?: boolean;
 };
 
 type JsonRecord = Record<string, unknown>;
 
-type ItemMasterRecord = {
-  itemCode: string;
-  itemName: string;
-  category: string;
-  supplier?: string;
-  specification?: string;
-  packQuantity?: string;
-  stockUnit?: string;
-  storageMethod?: string;
-  source?: "initial" | "sales";
-  firstSeenMonth?: string;
-  active?: boolean;
-  memo?: string;
-};
-
-const TEST_API_BASE = "https://sboapi.ecount.com";
-const TEST_ZONE_URL = `${TEST_API_BASE}/OAPI/V2/Zone`;
-const ITEM_MASTER_KEY = "ablab_item_masters_v1";
+// 테스트 인증키는 운영용 oapi가 아니라 사전테스트용 sboapi 주소를 사용해야 합니다.
+const TEST_ZONE_URL = "https://sboapi.ecount.com/OAPI/V2/Zone";
 
 function asRecord(value: unknown): JsonRecord | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -86,134 +69,6 @@ function getEcountMessage(value: unknown): string {
   return "";
 }
 
-function textValue(record: JsonRecord, keys: string[]): string {
-  for (const key of keys) {
-    const value = record[key];
-    if (value !== null && value !== undefined && String(value).trim()) {
-      return String(value).trim();
-    }
-  }
-  return "";
-}
-
-function normalizeItem(value: unknown): ItemMasterRecord | null {
-  const row = asRecord(value);
-  if (!row) return null;
-
-  const itemCode = textValue(row, ["PROD_CD", "PROD_CODE", "ITEM_CD", "ITEM_CODE", "prodCd", "itemCode"]);
-  if (!itemCode) return null;
-
-  return {
-    itemCode,
-    itemName: textValue(row, ["PROD_DES", "PROD_NM", "PROD_NAME", "ITEM_NM", "ITEM_NAME", "prodDes", "itemName"]) || itemCode,
-    category: textValue(row, ["PROD_GROUP_DES", "PROD_GROUP_NAME", "GROUP_DES", "GROUP_NAME", "CATEGORY", "CATEGORY_NAME"]) || "미지정",
-    supplier: textValue(row, ["CUST_DES", "CUST_NAME", "SUPPLIER_DES", "SUPPLIER_NAME", "PUR_CUST_DES", "PUR_CUST_NAME", "VENDOR_NAME"]) || "미지정",
-    specification: textValue(row, ["SIZE_DES", "SPEC", "SPECIFICATION", "PROD_SIZE", "SIZE"]),
-    packQuantity: textValue(row, ["IN_QTY", "PACK_QTY", "BOX_QTY", "UNIT_QTY"]),
-    stockUnit: textValue(row, ["UNIT", "UNIT_NM", "STOCK_UNIT", "INVEN_UNIT"]),
-    storageMethod: textValue(row, ["WH_DES", "STORAGE_METHOD", "STORAGE_METHOD_NAME", "KEEP_TYPE_DES"]),
-    source: "initial",
-    active: textValue(row, ["USE_YN", "ACTIVE_YN", "IS_ACTIVE"]).toUpperCase() !== "N",
-    memo: textValue(row, ["REMARKS", "REMARK", "MEMO", "CONTENTS"]),
-  };
-}
-
-function extractItemArray(itemJson: unknown): unknown[] {
-  const data = getNestedRecord(itemJson, "Data");
-  if (!data) return [];
-
-  const candidates = [data.Result, data.Datas, data.RESULT, data.DATA];
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) return candidate;
-    const record = asRecord(candidate);
-    if (record) {
-      for (const key of ["Result", "Datas", "List", "Items", "ITEMS"]) {
-        if (Array.isArray(record[key])) return record[key] as unknown[];
-      }
-    }
-  }
-  return [];
-}
-
-function workerConfig() {
-  const url = process.env.D1_WORKER_URL?.trim().replace(/\/$/, "");
-  const apiKey = process.env.D1_API_KEY?.trim();
-  if (!url || !apiKey) return null;
-  return { url, apiKey };
-}
-
-async function loadExistingItemMasters(): Promise<ItemMasterRecord[]> {
-  const config = workerConfig();
-  if (!config) throw new Error("D1_WORKER_URL 또는 D1_API_KEY 환경변수가 없습니다.");
-
-  const response = await fetch(`${config.url}/settings/${encodeURIComponent(ITEM_MASTER_KEY)}`, {
-    method: "GET",
-    headers: { "X-ABL-API-Key": config.apiKey },
-    cache: "no-store",
-  });
-
-  if (response.status === 404) return [];
-  if (!response.ok) throw new Error(`기존 품목기준정보 조회 실패 (${response.status})`);
-
-  const json = (await response.json()) as { data?: unknown };
-  return Array.isArray(json.data) ? (json.data as ItemMasterRecord[]) : [];
-}
-
-async function saveItemMasters(items: ItemMasterRecord[]) {
-  const config = workerConfig();
-  if (!config) throw new Error("D1_WORKER_URL 또는 D1_API_KEY 환경변수가 없습니다.");
-
-  const response = await fetch(`${config.url}/settings/${encodeURIComponent(ITEM_MASTER_KEY)}`, {
-    method: "PUT",
-    headers: {
-      "X-ABL-API-Key": config.apiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ data: items }),
-    cache: "no-store",
-  });
-
-  const body = await response.text();
-  if (!response.ok) throw new Error(`품목기준정보 저장 실패 (${response.status}) ${body.slice(0, 200)}`);
-  try {
-    return JSON.parse(body) as { updated_at?: string };
-  } catch {
-    return {};
-  }
-}
-
-function mergeItemMasters(existing: ItemMasterRecord[], incoming: ItemMasterRecord[]) {
-  const map = new Map(existing.map((item) => [item.itemCode, item]));
-  let added = 0;
-  let updated = 0;
-
-  for (const item of incoming) {
-    const previous = map.get(item.itemCode);
-    if (!previous) {
-      map.set(item.itemCode, item);
-      added += 1;
-      continue;
-    }
-
-    map.set(item.itemCode, {
-      ...previous,
-      ...item,
-      itemName: item.itemName || previous.itemName,
-      category: item.category !== "미지정" ? item.category : previous.category || "미지정",
-      supplier: item.supplier !== "미지정" ? item.supplier : previous.supplier || "미지정",
-      specification: item.specification || previous.specification,
-      packQuantity: item.packQuantity || previous.packQuantity,
-      stockUnit: item.stockUnit || previous.stockUnit,
-      storageMethod: item.storageMethod || previous.storageMethod,
-      memo: item.memo || previous.memo,
-      source: previous.source || "initial",
-    });
-    updated += 1;
-  }
-
-  return { merged: Array.from(map.values()), added, updated };
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as EcountRequest;
@@ -221,7 +76,6 @@ export async function POST(request: NextRequest) {
     const userId = body.userId?.trim();
     const apiCertKey = body.apiCertKey?.trim();
     const prodCode = body.prodCode?.trim() ?? "";
-    const syncToDailySales = body.syncToDailySales === true;
 
     if (!comCode || !userId || !apiCertKey) {
       return NextResponse.json(
@@ -250,6 +104,7 @@ export async function POST(request: NextRequest) {
           step: "zone",
           message: getEcountMessage(zoneJson) || "테스트 Zone 확인에 실패했습니다.",
           environment: "test",
+          zoneUrl: TEST_ZONE_URL,
           zoneHttpStatus: zoneResponse.status,
           zoneResponse: zoneJson,
         },
@@ -282,6 +137,8 @@ export async function POST(request: NextRequest) {
           message: getEcountMessage(loginJson) || "테스트 로그인 또는 SESSION_ID 발급에 실패했습니다.",
           environment: "test",
           zone: { zone, domain },
+          zoneUrl: TEST_ZONE_URL,
+          loginUrl,
           loginHttpStatus: loginResponse.status,
           loginResponse: safeLoginResult(loginJson),
         },
@@ -289,7 +146,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const itemUrl = `${TEST_API_BASE}/OAPI/V2/InventoryBasic/GetBasicProductList?SESSION_ID=${encodeURIComponent(sessionId)}`;
+    const itemUrl = `https://sboapi${zone}.${domain}/OAPI/V2/InventoryBasic/GetBasicProductsList?SESSION_ID=${encodeURIComponent(sessionId)}`;
     const itemResponse = await fetch(itemUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -297,11 +154,10 @@ export async function POST(request: NextRequest) {
       cache: "no-store",
     });
     const itemJson = await readJsonResponse(itemResponse);
-    const rawItems = extractItemArray(itemJson);
-    const normalizedItems = rawItems.map(normalizeItem).filter((item): item is ItemMasterRecord => Boolean(item));
     const itemData = getNestedRecord(itemJson, "Data");
-    const totalCountRaw = itemData?.TotalCnt ?? itemData?.TOTAL_CNT ?? itemData?.TotalCount;
-    const totalCount = Number.isFinite(Number(totalCountRaw)) ? Number(totalCountRaw) : normalizedItems.length;
+    const resultValue = itemData?.Result;
+    const items = Array.isArray(resultValue) ? resultValue : [];
+    const totalCount = typeof itemData?.TotalCnt === "number" ? itemData.TotalCnt : items.length;
 
     if (!itemResponse.ok) {
       return NextResponse.json(
@@ -312,7 +168,6 @@ export async function POST(request: NextRequest) {
           environment: "test",
           zone: { zone, domain },
           login: { sessionIssued: true, maskedSessionId: maskSessionId(sessionId) },
-          itemUrl,
           itemHttpStatus: itemResponse.status,
           itemResponse: itemJson,
         },
@@ -320,51 +175,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let sync: Record<string, unknown> | undefined;
-    if (syncToDailySales) {
-      if (normalizedItems.length === 0) {
-        return NextResponse.json(
-          {
-            ok: false,
-            step: "sync",
-            message: "품목조회 응답은 성공했지만 저장할 품목이 없습니다. 원본 응답을 확인해 주세요.",
-            zone: { zone, domain },
-            login: { sessionIssued: true, maskedSessionId: maskSessionId(sessionId) },
-            items: { totalCount, returnedCount: 0, preview: [] },
-            raw: { items: itemJson },
-          },
-          { status: 502 },
-        );
-      }
-
-      const existing = await loadExistingItemMasters();
-      const mergedResult = mergeItemMasters(existing, normalizedItems);
-      const saved = await saveItemMasters(mergedResult.merged);
-      sync = {
-        saved: true,
-        key: ITEM_MASTER_KEY,
-        addedCount: mergedResult.added,
-        updatedCount: mergedResult.updated,
-        totalSavedCount: mergedResult.merged.length,
-        updatedAt: saved.updated_at || new Date().toISOString(),
-      };
-    }
-
     return NextResponse.json({
       ok: true,
-      message: syncToDailySales
-        ? "이카운트 품목을 Daily Sales 품목기준정보에 반영했습니다."
-        : "테스트 로그인과 품목조회에 성공했습니다.",
+      message: "테스트 로그인과 품목조회에 성공했습니다.",
       environment: "test",
       zone: { zone, domain },
-      login: { sessionIssued: true, maskedSessionId: maskSessionId(sessionId) },
+      login: {
+        sessionIssued: true,
+        maskedSessionId: maskSessionId(sessionId),
+      },
       items: {
         requestedProdCode: prodCode,
         totalCount,
-        returnedCount: normalizedItems.length,
-        preview: normalizedItems.slice(0, 50),
+        returnedCount: items.length,
+        preview: items.slice(0, 20),
       },
-      sync,
       raw: {
         zone: zoneJson,
         login: safeLoginResult(loginJson),
