@@ -30,24 +30,15 @@
   },
   "include": [
     "next-env.d.ts",
-    "app/**/*.ts",
-    "app/**/*.tsx",
+    "**/*.ts",
+    "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
   "exclude": [
     "node_modules",
-    ".next",
     "cloudflare-worker",
-    "cloudflare-worker/**",
-    "**/cloudflare-worker/**",
-    "store-dashboard",
-    "store-dashboard/**",
-    "**/store-dashboard/**",
-    "app - 복사본",
-    "app - 복사본/**",
-    "복사본",
-    "복사본/**"
+    "store-dashboard"
   ]
 }

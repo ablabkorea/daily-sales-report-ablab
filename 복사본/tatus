@@ -1,0 +1,25 @@
+[33m1406254[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m fix profit amount upload rows
+[33mfbb758c[m fix weighted profit rate build error
+[33mb1d5831[m fix profit validation display
+[33mfc63a90[m fix profit amount parsing
+[33ma3a0f73[m fix profit rate validation build error
+[33ma07b337[m update profit validation by month and to-date
+[33mcfe0d6b[m update month start management and add profit validation
+[33m529296e[m update profit amount and profit rate upload logic
+[33m312c066[m hide time gone and keep inactive items only
+[33m4e830ab[m update mapping modal last order filter
+[33m83a73c6[m fix mapping filter and hide time gone
+[33m7a7f247[m 거래처 매핑관리 UI 수정
+[33me8f3550[m update prev year mapping rule
+[33m8f2f834[m fix supabase upload sync
+[33m810f6a1[m apply v12 supabase shared version
+[33m8de6a90[m apply supabase shared version
+[33m509bd34[m connect shared supabase storage
+[33m5955e23[m fix vercel static generation
+[33m130972f[m fix vercel build
+[33m66c6916[m fix vercel build
+[33mc9f5867[m sales dashboard update
+[33m9b7c53d[m Merge GitHub repository
+[33m0dd6f21[m Initial sales dashboard
+[33md33911c[m Add initial HTML structure for ABLAB website
+[33md008484[m Initial commit
