@@ -5448,6 +5448,74 @@ function EstQuickEntry({
   const selectedManagerConfig = activeManagers.find((config) => config.name === selectedManager);
   const canEditTarget = canEdit && Boolean(selectedManagerConfig?.canTarget);
 
+  const selectedManagerStoreCodes = useMemo(
+    () =>
+      new Set(
+        stores
+          .filter(
+            (store) =>
+              store.manager.trim().toUpperCase() === selectedManager,
+          )
+          .map((store) => store.code),
+      ),
+    [stores, selectedManager],
+  );
+
+  const selectedManagerEstInputCount = useMemo(
+    () =>
+      ests.filter(
+        (row) =>
+          row.month === month &&
+          selectedManagerStoreCodes.has(row.storeCode) &&
+          Number(row.amount || 0) !== 0,
+      ).length,
+    [ests, month, selectedManagerStoreCodes],
+  );
+
+  const openBrandEstTotal = useMemo(
+    () =>
+      openBrandStores.reduce(
+        (total, store) => total + Number(estMap.get(store.code) || 0),
+        0,
+      ),
+    [openBrandStores, estMap],
+  );
+
+  const openBrandEnteredCount = useMemo(
+    () =>
+      openBrandStores.filter(
+        (store) => Number(estMap.get(store.code) || 0) !== 0,
+      ).length,
+    [openBrandStores, estMap],
+  );
+
+  const resetSelectedManagerEst = () => {
+    if (!canEdit || !selectedManager) return;
+
+    if (selectedManagerEstInputCount === 0) {
+      alert(`${selectedManager} 담당자의 ${month} 당월 EST 입력값이 없습니다.`);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `${selectedManager} 담당자의 ${month} 당월 EST ${selectedManagerEstInputCount}건을 모두 0으로 초기화하시겠습니까?\n\n전월 EST, Target, 거래처 정보는 유지됩니다.`,
+    );
+
+    if (!confirmed) return;
+
+    setEsts((prev) =>
+      prev.map((row) =>
+        row.month === month && selectedManagerStoreCodes.has(row.storeCode)
+          ? { ...row, amount: 0 }
+          : row,
+      ),
+    );
+
+    alert(
+      `${selectedManager} 담당자의 ${month} 당월 EST ${selectedManagerEstInputCount}건을 초기화했습니다.`,
+    );
+  };
+
   const handleSort = (key: typeof sortKey) => {
     if (sortKey === key) {
       setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
@@ -5544,6 +5612,24 @@ function EstQuickEntry({
             </div>
           )}
         </div>
+
+        {activeManagers.length > 0 && (
+          <div className="border-t border-slate-200 bg-rose-50/70 p-3">
+            <button
+              type="button"
+              onClick={resetSelectedManagerEst}
+              disabled={!canEdit || selectedManagerEstInputCount === 0}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-2 text-[11px] font-extrabold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+              title={`${selectedManager} 담당자의 ${month} 당월 EST만 초기화합니다.`}
+            >
+              <span>당월 EST 초기화</span>
+              <span>({selectedManagerEstInputCount}건)</span>
+            </button>
+            <p className="mt-1.5 text-center text-[10px] font-semibold leading-4 text-slate-500">
+              {selectedManager} 담당자만 초기화 · 전월 EST와 Target 유지
+            </p>
+          </div>
+        )}
 
         <div className="border-t border-slate-200 bg-slate-50/70 p-3">
           <div className="mb-2 flex items-center justify-between">
@@ -5887,6 +5973,22 @@ function EstQuickEntry({
               </div>
               <button type="button" onClick={() => setOpenBrand("")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50">닫기</button>
             </div>
+            <div className="border-b border-amber-200 bg-[#FFFDF2] px-4 py-3">
+              <div className="grid gap-2 sm:grid-cols-3">
+                <div className="rounded-xl border border-amber-200 bg-white px-4 py-2.5 text-center shadow-sm">
+                  <div className="text-[11px] font-bold text-slate-500">브랜드 거래처</div>
+                  <div className="mt-1 text-base font-black text-slate-900">{won(openBrandStores.length)}개</div>
+                </div>
+                <div className="rounded-xl border border-amber-200 bg-white px-4 py-2.5 text-center shadow-sm">
+                  <div className="text-[11px] font-bold text-slate-500">EST 입력 거래처</div>
+                  <div className="mt-1 text-base font-black text-slate-900">{won(openBrandEnteredCount)}개</div>
+                </div>
+                <div className="rounded-xl border border-orange-300 bg-orange-50 px-4 py-2.5 text-center shadow-sm">
+                  <div className="text-[11px] font-extrabold text-orange-800">{month} 입력 EST 총합계</div>
+                  <div className="mt-1 text-xl font-black text-orange-700">{won(openBrandEstTotal)}원</div>
+                </div>
+              </div>
+            </div>
             <div className="min-h-0 flex-1 overflow-auto p-4">
               <table className="w-full min-w-[760px] border-separate border-spacing-0 text-center text-[12px]">
                 <thead>
@@ -5924,6 +6026,14 @@ function EstQuickEntry({
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-amber-200 bg-[#FFF9E3] px-5 py-3">
+              <span className="text-xs font-bold text-slate-600">
+                입력 {won(openBrandEnteredCount)}개 / 전체 {won(openBrandStores.length)}개
+              </span>
+              <span className="rounded-xl border border-orange-300 bg-white px-4 py-2 text-sm font-black text-orange-700 shadow-sm">
+                브랜드 EST 총합계&nbsp; {won(openBrandEstTotal)}원
+              </span>
             </div>
           </div>
         </div>
