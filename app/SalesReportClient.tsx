@@ -3301,58 +3301,16 @@ const initialStores: Store[] = [
   },
 ];
 
-const initialTargets: TargetRecord[] = [
-  { storeType: "매장", month: thisMonth(), amount: 20000000 },
-  { storeType: "비매장", month: thisMonth(), amount: 15000000 },
-];
+// 공유 저장소를 불러오기 전에는 빈 값으로 시작합니다.
+// 예시 데이터가 D1의 실제 데이터를 덮어쓰는 사고를 막기 위해
+// 운영 데이터의 초기값에는 샘플 거래처/금액을 절대 넣지 않습니다.
+const initialTargets: TargetRecord[] = [];
 
-const initialEsts: EstRecord[] = [
-  {
-    storeCode: "A001",
-    storeName: "강남점",
-    month: thisMonth(),
-    amount: 18000000,
-  },
-  {
-    storeCode: "A002",
-    storeName: "홍대점",
-    month: thisMonth(),
-    amount: 14000000,
-  },
-];
+const initialEsts: EstRecord[] = [];
 
 const initialItemCosts: ItemCostRecord[] = [];
 
-const initialSales: SalesRecord[] = [
-  makeSale(
-    "current",
-    thisMonth(),
-    `${thisMonth()}-17`,
-    "A001",
-    "강남점",
-    "P001",
-    "샘플상품",
-    1,
-    12500000,
-    8000000,
-    4500000,
-    initialStores,
-  ),
-  makeSale(
-    "current",
-    thisMonth(),
-    `${thisMonth()}-17`,
-    "A002",
-    "홍대점",
-    "P001",
-    "샘플상품",
-    1,
-    5300000,
-    3500000,
-    1800000,
-    initialStores,
-  ),
-];
+const initialSales: SalesRecord[] = [];
 
 const initialTimeConfigs: TimeConfig[] = [{ month: thisMonth(), holidays: [] }];
 
@@ -3783,6 +3741,7 @@ function useLocal<T>(key: string, initial: T) {
   const isReloadingRemoteRef = useRef(false);
   const alertOpenRef = useRef(false);
   const lastRemoteCheckAtRef = useRef(0);
+  const loadedRef = useRef(false);
 
   useEffect(() => {
     keyRef.current = key;
@@ -3820,6 +3779,9 @@ function useLocal<T>(key: string, initial: T) {
 
   const persistNow = (nextValue: T) => {
     if (typeof window === "undefined") return;
+    // D1 조회가 끝나기 전 발생한 화면 초기화/자동 보정은 저장하지 않습니다.
+    // 이 시점의 값은 샘플 또는 빈 초기값일 수 있으므로 원격값을 덮어쓰면 안 됩니다.
+    if (!loadedRef.current) return;
 
     const editedAt = Date.now();
     valueRef.current = nextValue;
@@ -3848,6 +3810,9 @@ function useLocal<T>(key: string, initial: T) {
 
   const setValue: React.Dispatch<React.SetStateAction<T>> = (next) => {
     rawSetValue((prev) => {
+      // 각 화면의 초기 useEffect가 원격 hydrate보다 먼저 실행될 수 있습니다.
+      // 로딩 중 상태 변경 자체를 무시해 원격 데이터가 항상 먼저 기준이 되게 합니다.
+      if (!loadedRef.current) return prev;
       const resolved =
         typeof next === "function" ? (next as (prev: T) => T)(prev) : next;
       valueRef.current = resolved;
@@ -3924,7 +3889,14 @@ function useLocal<T>(key: string, initial: T) {
           }
         }
       } finally {
-        if (!cancelled) setLoaded(true);
+        if (!cancelled) {
+          // 이전 버전이 남긴 pending 표시는 자동 재저장하지 않습니다.
+          // 이후 사용자가 실제로 수정할 때만 새로운 pending 저장이 만들어집니다.
+          const currentMeta = getLocalMeta(key);
+          setLocalMeta(key, { editedAt: currentMeta.editedAt, pending: false });
+          loadedRef.current = true;
+          setLoaded(true);
+        }
       }
     }
 
@@ -3938,21 +3910,6 @@ function useLocal<T>(key: string, initial: T) {
 
   useEffect(() => {
     if (!loaded || typeof window === "undefined") return;
-
-    const retryPendingSave = async () => {
-      try {
-        const meta = getLocalMeta(key);
-        if (!meta.pending) return;
-        const localSaved = safeGetLocalStorage(key);
-        if (!localSaved) return;
-        const parsed = JSON.parse(localSaved) as T;
-        const savedUpdatedAt = await saveSharedState(key, parsed);
-        if (savedUpdatedAt) lastRemoteUpdatedAtRef.current = savedUpdatedAt;
-        setLocalMeta(key, { editedAt: meta.editedAt, pending: false });
-      } catch (error) {
-        console.warn("공유 데이터 저장 재시도 실패", error);
-      }
-    };
 
     const safeCheckRemoteUpdate = () => {
       checkRemoteUpdate().catch((error) =>
@@ -3970,7 +3927,6 @@ function useLocal<T>(key: string, initial: T) {
     };
 
     const interval = window.setInterval(() => {
-      retryPendingSave();
       safeCheckRemoteUpdate();
     }, STATIC_SYNC_INTERVAL_MS);
     window.addEventListener("focus", refreshIfStale);
@@ -5207,45 +5163,6 @@ function EstQuickEntry({
       .forEach((e) => map.set(e.storeCode, Number(e.amount || 0)));
     return map;
   }, [ests, month]);
-
-  useEffect(() => {
-    // 기준월이 바뀌면 모든 거래처의 당월 EST 입력 행을 한 번만 생성합니다.
-    // 전월 EST는 별도 복사하지 않고 직전 월의 월별 기록을 그대로 조회하므로
-    // 여러 담당자가 동시에 접속해도 중복 이월 행이 생기지 않습니다.
-    setEsts((prev) => {
-      const storeByCode = new Map(stores.map((store) => [store.code, store]));
-      const seenCurrentMonth = new Set<string>();
-      let changed = false;
-
-      const normalized = prev.filter((row) => {
-        if (row.month !== month) return true;
-        if (seenCurrentMonth.has(row.storeCode)) {
-          changed = true;
-          return false;
-        }
-        seenCurrentMonth.add(row.storeCode);
-        return true;
-      }).map((row) => {
-        if (row.month !== month) return row;
-        const store = storeByCode.get(row.storeCode);
-        if (!store || row.storeName === store.name) return row;
-        changed = true;
-        return { ...row, storeName: store.name };
-      });
-
-      const additions = stores
-        .filter((store) => !seenCurrentMonth.has(store.code))
-        .map((store) => ({
-          storeCode: store.code,
-          storeName: store.name,
-          month,
-          amount: 0,
-        }));
-
-      if (additions.length) changed = true;
-      return changed ? [...normalized, ...additions] : prev;
-    });
-  }, [stores, month, setEsts]);
 
   const targetByType = useMemo(() => {
     const totals = { store: 0, nonStore: 0 };
