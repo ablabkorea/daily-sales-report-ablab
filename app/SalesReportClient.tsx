@@ -6765,6 +6765,7 @@ function KpiGroup({
     color?: string;
     format?: "won" | "percent" | "number";
     highlightClass?: string;
+    separatorBefore?: boolean;
   }[];
   className?: string;
 }) {
@@ -6785,7 +6786,7 @@ function KpiGroup({
           return (
             <div
               key={item.title}
-              className={`flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 rounded-lg px-1.5 py-0.5 first:pt-0 last:pb-0 ${item.highlightClass || ""}`}
+              className={`flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 rounded-lg px-1.5 py-0.5 first:pt-0 last:pb-0 ${item.separatorBefore ? "mt-1 border-t-4 border-double border-slate-400 pt-1.5" : ""} ${item.highlightClass || ""}`}
             >
               <p className="shrink-0 break-keep text-[12px] font-semibold text-black">
                 {item.title}
@@ -7052,8 +7053,14 @@ function DashboardTopKpis({
             format: "won",
             color: "text-slate-900",
           },
-          { title: "당일까지 매출", value: currentSales, format: "won" },
-          { title: "당월 전체 매출", value: fullMonthSales, format: "won" },
+          { title: "당일까지 매출", value: currentSales, format: "won", separatorBefore: true },
+          {
+            title: "당월 전체 매출",
+            value: fullMonthSales,
+            format: "won",
+            color: "text-blue-800",
+            highlightClass: "bg-blue-50 ring-1 ring-blue-200",
+          },
         ]}
       />
       <KpiGroup
@@ -7230,30 +7237,29 @@ function Dashboard({
     const managerEst = ests
       .filter((e) => e.month === month && managerOfEst(e) === manager)
       .reduce((total, row) => total + Number(row.amount || 0), 0);
-    const brandProgressMap = new Map<string, { est: number; sales: number }>();
-    const ensureBrand = (brand: string) => {
-      const key = displayBrand(brand) || "미지정";
-      if (!brandProgressMap.has(key)) brandProgressMap.set(key, { est: 0, sales: 0 });
-      return brandProgressMap.get(key)!;
+    const storeTypeProgressMap = new Map<string, { est: number; sales: number }>([
+      ["매장", { est: 0, sales: 0 }],
+      ["비매장", { est: 0, sales: 0 }],
+    ]);
+    const ensureStoreType = (storeCode: string, fallbackType?: string, fallbackChannel?: string) => {
+      const store = stMap.get(storeCode);
+      const type = normalizeStoreType(store?.storeType || fallbackType, store?.channel || fallbackChannel) === "매장" ? "매장" : "비매장";
+      return storeTypeProgressMap.get(type)!;
     };
     currentRows.forEach((sale) => {
-      const store = stMap.get(sale.storeCode);
-      ensureBrand(store?.brand || sale.brand).sales += Number(sale.salesAmount || 0);
+      ensureStoreType(sale.storeCode, sale.storeType, sale.channel).sales += Number(sale.salesAmount || 0);
     });
     ests
       .filter((e) => e.month === month && managerOfEst(e) === manager)
       .forEach((est) => {
-        const store = stMap.get(est.storeCode);
-        ensureBrand(store?.brand || "미지정").est += Number(est.amount || 0);
+        ensureStoreType(est.storeCode).est += Number(est.amount || 0);
       });
-    const brandProgress = Array.from(brandProgressMap.entries())
+    const brandProgress = Array.from(storeTypeProgressMap.entries())
       .map(([brand, value]) => ({
         brand,
         ...value,
         rate: value.est ? (value.sales / value.est) * 100 : 0,
-      }))
-      .filter((item) => item.est || item.sales)
-      .sort((a, b) => b.est - a.est || b.sales - a.sales);
+      }));
     const currentSales = sum(currentRows, "salesAmount");
     const prevMonthSales = sum(prevMonthRows, "salesAmount");
     const prevYearSales = sum(prevYearRows, "salesAmount");
@@ -7339,8 +7345,7 @@ function Dashboard({
 
   const dashboardManagerExcelRows = rows.map((r) => ({
     담당자: r.manager,
-    거래중단수: r.pausedCount,
-    전월신규수: r.newStoreCount,
+    신규수: r.newStoreCount,
     전년동월: r.prevYearSales,
     전년대비: pct(r.prevYearRate),
     전월: r.prevMonthSales,
@@ -7452,8 +7457,7 @@ function Dashboard({
             <thead>
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-10 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">담당자</th>
-                <th className="sticky top-0 z-10 border border-slate-300 bg-amber-50 px-3 py-2 font-bold text-amber-900">거래중단</th>
-                <th className="sticky top-0 z-10 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-900">전월 신규 수</th>
+                <th className="sticky top-0 z-10 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-900">신규 수</th>
                 <th className="sticky top-0 z-10 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">전년동월</th>
                 <th className="sticky top-0 z-10 border border-slate-300 bg-[#F7FCEB] px-3 py-2 font-bold text-black">전년대비</th>
                 <th className="sticky top-0 z-10 border border-slate-300 bg-[#F3FAFD] px-3 py-2 font-bold text-black">전월</th>
@@ -7462,7 +7466,7 @@ function Dashboard({
                 <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF7FA] px-3 py-2 font-bold text-black">당월 전체 매출</th>
                 <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFFDF2] px-3 py-2 font-bold text-black">EST</th>
                 <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFFDF2] px-3 py-2 font-bold text-black">EST 달성률</th>
-                <th className="sticky top-0 z-10 min-w-[250px] border border-slate-300 bg-amber-50 px-3 py-2 font-bold text-black">브랜드별 EST 진척률</th>
+                <th className="sticky top-0 z-10 min-w-[250px] border border-slate-300 bg-amber-50 px-3 py-2 font-bold text-black">매장/비매장 EST 진척률</th>
                 <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF9F3] px-3 py-2 font-bold text-black">이익금액</th>
                 <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF9F3] px-3 py-2 font-bold text-black">이익률</th>
               </tr>
@@ -7471,9 +7475,6 @@ function Dashboard({
               {rows.map((r) => (
                 <tr key={r.manager} className="hover:bg-slate-50">
                   <td className="border border-slate-300 px-3 py-2 text-center text-sm font-extrabold text-slate-900">{r.manager}</td>
-                  <td className="border border-slate-300 px-3 py-2 text-center">
-                    <button type="button" disabled={!r.pausedCount} onClick={() => setDetailModal({ kind: "paused", manager: r.manager })} className={`min-w-[44px] rounded-full px-3 py-1 font-extrabold ${r.pausedCount ? "bg-amber-100 text-amber-900 hover:bg-amber-200" : "bg-slate-100 text-slate-400"}`}>{won(r.pausedCount)}</button>
-                  </td>
                   <td className="border border-slate-300 px-3 py-2 text-center">
                     <button type="button" disabled={!r.newStoreCount} onClick={() => setDetailModal({ kind: "new", manager: r.manager })} className={`min-w-[44px] rounded-full px-3 py-1 font-extrabold ${r.newStoreCount ? "bg-blue-100 text-blue-800 hover:bg-blue-200" : "bg-slate-100 text-slate-400"}`}>{won(r.newStoreCount)}</button>
                   </td>
@@ -7505,7 +7506,6 @@ function Dashboard({
               ))}
               <tr className="bg-slate-100 font-extrabold">
                 <td className="border border-slate-300 px-3 py-2 text-center">합계</td>
-                <td className="border border-slate-300 px-3 py-2 text-center">{won(total.pausedCount)}</td>
                 <td className="border border-slate-300 px-3 py-2 text-center">{won(total.newStoreCount)}</td>
                 <td className="border border-slate-300 px-3 py-2 text-right">{won(total.prevYearSales)}</td>
                 <td className="border border-slate-300 px-3 py-2 text-right">{pct(total.prevYearSales ? ((total.currentSales - total.prevYearSales) / total.prevYearSales) * 100 : 0)}</td>
