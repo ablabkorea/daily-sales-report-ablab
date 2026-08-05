@@ -4512,7 +4512,15 @@ function orderRowsForExcel(rows: SalesRecord[]) {
   }));
 }
 
-const ADMIN_PASSWORD = "ablab2026";
+const DEFAULT_ADMIN_PASSWORD_HASH = "766d98069ffd0f229ef8ab8b135d35bb7a7d1eae6cafc4bf909315ea5f7bb625";
+
+async function hashAdminPassword(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 function isEstEntryPeriodToday() {
   return Number(today().slice(8, 10)) <= 4;
@@ -4521,6 +4529,10 @@ function isEstEntryPeriodToday() {
 export default function SalesReportClient() {
   const [active, setActive] = useState("EST 입력");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminPasswordHash, setAdminPasswordHash] = useLocal<string>(
+    "ablab_admin_password_hash_v1",
+    DEFAULT_ADMIN_PASSWORD_HASH,
+  );
   const [dashMonth, setDashMonth] = useState(thisMonth());
   const [dashDate, setDashDate] = useState(today());
   const [stores, setStores] = useLocal<Store[]>(
@@ -4585,14 +4597,37 @@ export default function SalesReportClient() {
       ]
     : [{ label: "EST 입력", order: "0" }];
 
-  function adminLogin() {
+  async function adminLogin() {
     const password = window.prompt("관리자 비밀번호를 입력하세요.");
-    if (password === ADMIN_PASSWORD) {
+    if (password !== null && await hashAdminPassword(password) === adminPasswordHash) {
       setIsAdmin(true);
       alert("관리자 모드로 전환되었습니다.");
     } else if (password !== null) {
       alert("비밀번호가 올바르지 않습니다.");
     }
+  }
+
+  async function changeAdminPassword() {
+    const currentPassword = window.prompt("현재 관리자 비밀번호를 입력하세요.");
+    if (currentPassword === null) return;
+    if (await hashAdminPassword(currentPassword) !== adminPasswordHash) {
+      alert("현재 비밀번호가 올바르지 않습니다.");
+      return;
+    }
+    const nextPassword = window.prompt("새 관리자 비밀번호를 입력하세요. (6자 이상)");
+    if (nextPassword === null) return;
+    if (nextPassword.length < 6) {
+      alert("새 비밀번호는 6자 이상으로 입력해주세요.");
+      return;
+    }
+    const confirmedPassword = window.prompt("새 관리자 비밀번호를 한 번 더 입력하세요.");
+    if (confirmedPassword === null) return;
+    if (nextPassword !== confirmedPassword) {
+      alert("새 비밀번호가 서로 일치하지 않습니다.");
+      return;
+    }
+    setAdminPasswordHash(await hashAdminPassword(nextPassword));
+    alert("관리자 비밀번호가 변경되었습니다.");
   }
 
   return (
@@ -4623,18 +4658,27 @@ export default function SalesReportClient() {
               ))}
             </nav>
           </div>
-          <div>
+          <div className="flex items-center gap-2">
             {isAdmin ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAdmin(false);
-                  setActive("EST 입력");
-                }}
-                className="rounded-xl bg-orange-100 px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-200"
-              >
-                관리자 모드 해제
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={changeAdminPassword}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                >
+                  비밀번호 변경
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAdmin(false);
+                    setActive("EST 입력");
+                  }}
+                  className="rounded-xl bg-orange-100 px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-200"
+                >
+                  관리자 모드 해제
+                </button>
+              </>
             ) : (
               <button
                 type="button"
@@ -5129,6 +5173,117 @@ export default function SalesReportClient() {
   );
 }
 
+
+function BrandEstProgress({
+  stores,
+  sales,
+  ests,
+  month,
+  date,
+  compact = false,
+}: {
+  stores: Store[];
+  sales: SalesRecord[];
+  ests: EstRecord[];
+  month: string;
+  date?: string;
+  compact?: boolean;
+}) {
+  const rows = useMemo(() => {
+    const storesByCode = storeMap(stores);
+    const byBrand = new Map<string, { est: number; sales: number; stores: Set<string> }>();
+    const ensure = (brand: string) => {
+      const key = displayBrand(brand) || "미지정";
+      if (!byBrand.has(key)) byBrand.set(key, { est: 0, sales: 0, stores: new Set<string>() });
+      return byBrand.get(key)!;
+    };
+
+    ests.filter((row) => row.month === month).forEach((row) => {
+      const store = storesByCode.get(row.storeCode);
+      if (!store || store.status !== "거래중") return;
+      const item = ensure(store.brand);
+      item.est += Number(row.amount || 0);
+      item.stores.add(row.storeCode);
+    });
+    sales.filter((row) =>
+      row.period === "current" &&
+      inRange(row.saleDate, monthStart(month), date && date.startsWith(month) ? date : monthEnd(month))
+    ).forEach((row) => {
+      const store = storesByCode.get(row.storeCode);
+      const item = ensure(store?.brand || row.brand);
+      item.sales += Number(row.salesAmount || 0);
+      item.stores.add(row.storeCode);
+    });
+
+    return Array.from(byBrand.entries())
+      .map(([brand, value]) => ({
+        brand,
+        ...value,
+        rate: value.est ? (value.sales / value.est) * 100 : 0,
+      }))
+      .filter((row) => row.est || row.sales)
+      .sort((a, b) => b.rate - a.rate || b.sales - a.sales);
+  }, [stores, sales, ests, month, date]);
+
+  const totalEst = rows.reduce((total, row) => total + row.est, 0);
+  const totalSales = rows.reduce((total, row) => total + row.sales, 0);
+  const totalRate = totalEst ? (totalSales / totalEst) * 100 : 0;
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-[#FFFDF2] px-4 py-3">
+        <div>
+          <div className="text-sm font-extrabold text-slate-900">브랜드별 EST 진척률</div>
+          <div className="mt-0.5 text-[11px] font-semibold text-slate-500">당일까지 매출 ÷ 당월 EST</div>
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-extrabold text-orange-700">
+          전체 {pct(totalRate)}
+        </div>
+      </div>
+      <div className={`overflow-auto ${compact ? "max-h-[270px]" : "max-h-[340px]"}`}>
+        <table className="w-full min-w-[700px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
+          <thead>
+            <tr>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-amber-50 px-3 py-2">브랜드</th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-amber-50 px-3 py-2">거래처 수</th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFFDF2] px-3 py-2">당월 EST</th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF7FA] px-3 py-2">당일까지 매출</th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-amber-50 px-3 py-2">EST 진척률</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.brand} className="hover:bg-amber-50/40">
+                <td className="border border-slate-300 px-3 py-2 text-left font-extrabold">{row.brand}</td>
+                <td className="border border-slate-300 px-3 py-2">{won(row.stores.size)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.est)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right font-extrabold text-blue-700">{won(row.sales)}</td>
+                <td className="border border-slate-300 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                      <div className={`h-full rounded-full ${row.rate >= 100 ? "bg-emerald-500" : row.rate >= 70 ? "bg-amber-400" : "bg-orange-400"}`} style={{ width: `${Math.min(100, Math.max(0, row.rate))}%` }} />
+                    </div>
+                    <span className={`w-16 text-right font-extrabold ${row.rate >= 100 ? "text-emerald-700" : "text-orange-700"}`}>{pct(row.rate)}</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {!rows.length && <tr><td colSpan={5} className="border border-slate-300 p-8 text-slate-500">표시할 브랜드 EST가 없습니다.</td></tr>}
+          </tbody>
+          <tfoot>
+            <tr className="bg-slate-100 font-extrabold">
+              <td className="border border-slate-300 px-3 py-2 text-left">합계</td>
+              <td className="border border-slate-300 px-3 py-2">-</td>
+              <td className="border border-slate-300 px-3 py-2 text-right">{won(totalEst)}</td>
+              <td className="border border-slate-300 px-3 py-2 text-right text-blue-700">{won(totalSales)}</td>
+              <td className="border border-slate-300 px-3 py-2 text-right text-orange-700">{pct(totalRate)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function EstQuickEntry({
   stores,
@@ -5744,6 +5899,8 @@ function EstQuickEntry({
           </span>
           <span className="text-sky-700">월별 기록 유지 · 중복 이월 방지</span>
         </div>
+
+        <BrandEstProgress stores={stores} sales={sales} ests={ests} month={month} compact />
 
         <div
           className="flex min-h-[360px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
@@ -7175,6 +7332,8 @@ function Dashboard({
 
   return (
     <>
+      <BrandEstProgress stores={stores} sales={sales} ests={ests} month={month} date={date} />
+
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-300 px-4 py-3">
           <div className="text-base font-extrabold text-slate-900">담당자별 매출 요약</div>
@@ -11552,7 +11711,7 @@ function MonthStartManagement({
   const [tab, setTab] = useState<MonthStartTab>("거래처 리스트");
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col space-y-3 overflow-hidden pb-5">
+    <div className="flex min-h-0 flex-1 flex-col space-y-3 overflow-hidden pb-12">
       <div className="shrink-0 border-b border-slate-300 bg-white px-2">
         <div className="flex min-w-max gap-1 overflow-x-auto">
           {MONTH_TABS.map((t) => (
@@ -11572,51 +11731,59 @@ function MonthStartManagement({
       </div>
 
       {tab === "거래처 리스트" && (
-        <StoreListManagement
-          section="list"
-          stores={stores}
-          setStores={setStores}
-          sales={sales}
-          month={month}
-          codeMappings={codeMappings}
-          managerConfigs={managerConfigs}
-          setManagerConfigs={setManagerConfigs}
-        />
+        <div className="min-h-0 flex-1 overflow-auto pb-24 pr-2">
+          <StoreListManagement
+            section="list"
+            stores={stores}
+            setStores={setStores}
+            sales={sales}
+            month={month}
+            codeMappings={codeMappings}
+            managerConfigs={managerConfigs}
+            setManagerConfigs={setManagerConfigs}
+          />
+        </div>
       )}
       {tab === "기준정보" && (
-        <StoreListManagement
-          section="reference"
-          stores={stores}
-          setStores={setStores}
-          sales={sales}
-          month={month}
-          codeMappings={codeMappings}
-          managerConfigs={managerConfigs}
-          setManagerConfigs={setManagerConfigs}
-          itemMasters={itemMasters}
-          setItemMasters={setItemMasters}
-        />
+        <div className="min-h-0 flex-1 overflow-auto pb-24 pr-2">
+          <StoreListManagement
+            section="reference"
+            stores={stores}
+            setStores={setStores}
+            sales={sales}
+            month={month}
+            codeMappings={codeMappings}
+            managerConfigs={managerConfigs}
+            setManagerConfigs={setManagerConfigs}
+            itemMasters={itemMasters}
+            setItemMasters={setItemMasters}
+          />
+        </div>
       )}
       {tab === "업로드 관리" && (
-        <UploadPage
-          stores={stores}
-          setStores={setStores}
-          sales={sales}
-          setSales={setSales}
-          salesActions={salesActions}
-          month={month}
-          date={date}
-          timeConfigs={timeConfigs}
-          setTimeConfigs={setTimeConfigs}
-          itemMasters={itemMasters}
-          setItemMasters={setItemMasters}
-          ests={ests}
-          setEsts={setEsts}
-          codeMappings={codeMappings}
-        />
+        <div className="min-h-0 flex-1 overflow-auto pb-24 pr-2">
+          <UploadPage
+            stores={stores}
+            setStores={setStores}
+            sales={sales}
+            setSales={setSales}
+            salesActions={salesActions}
+            month={month}
+            date={date}
+            timeConfigs={timeConfigs}
+            setTimeConfigs={setTimeConfigs}
+            itemMasters={itemMasters}
+            setItemMasters={setItemMasters}
+            ests={ests}
+            setEsts={setEsts}
+            codeMappings={codeMappings}
+          />
+        </div>
       )}
       {tab === "이익금액 검증표" && (
-        <ProfitValidationPanel sales={sales} month={month} date={date} />
+        <div className="min-h-0 flex-1 overflow-auto pb-24 pr-2">
+          <ProfitValidationPanel sales={sales} month={month} date={date} />
+        </div>
       )}
     </div>
   );
