@@ -5319,6 +5319,12 @@ function EstQuickEntry({
     [managerConfigs],
   );
   const [selectedManager, setSelectedManager] = useState<Manager>("");
+  const firstWeekDefault = () => {
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    return month === currentMonth && now.getDate() <= 7;
+  };
+  const [showEstSummary, setShowEstSummary] = useState(firstWeekDefault);
 
   useEffect(() => {
     if (!activeManagers.length) {
@@ -5329,6 +5335,9 @@ function EstQuickEntry({
       setSelectedManager(activeManagers[0].name);
     }
   }, [activeManagers, selectedManager]);
+  useEffect(() => {
+    setShowEstSummary(firstWeekDefault());
+  }, [month]);
   const [statusView, setStatusView] = useState<"active" | "paused" | "ended">("active");
   const [channelView, setChannelView] = useState<"all" | "store" | "nonStore">("all");
   const [openBrand, setOpenBrand] = useState("");
@@ -5553,10 +5562,18 @@ function EstQuickEntry({
   const nonStoreEstTotal = rows
     .filter((store) => store.storeType !== "매장")
     .reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0);
-  const monthlyEstSummary = useMemo(
-    () => metricsByStoreType(stores, targets, ests, month),
-    [stores, targets, ests, month],
-  );
+  const monthlyEstSummary = useMemo(() => {
+    const managerStores = stores.filter(
+      (store) => store.manager.trim().toUpperCase() === selectedManager,
+    );
+    const managerCodes = new Set(managerStores.map((store) => store.code));
+    return metricsByStoreType(
+      managerStores,
+      targets,
+      ests.filter((row) => managerCodes.has(row.storeCode)),
+      month,
+    );
+  }, [stores, targets, ests, month, selectedManager]);
   const monthlyEstTotal =
     monthlyEstSummary.storeEst +
     monthlyEstSummary.nonStoreEst +
@@ -5821,11 +5838,20 @@ function EstQuickEntry({
 
       <div className="min-w-0 flex-1 space-y-4">
         <div className="rounded-2xl border border-slate-300 bg-white p-3 shadow-sm">
+          <div className="mb-2 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setShowEstSummary((previous) => !previous)}
+              className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-[11px] font-extrabold text-slate-600 hover:bg-slate-50"
+            >
+              {showEstSummary ? "EST 합계 · Target 숨기기" : "EST 합계 · Target 펼치기"}
+            </button>
+          </div>
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-            <div className="flex flex-wrap items-stretch gap-3">
+            {showEstSummary && <div className="flex flex-wrap items-stretch gap-3">
               <div className="min-w-[310px] overflow-hidden rounded-xl border border-amber-200 bg-[#FFFDF2] shadow-sm">
                 <div className="border-b border-amber-200 bg-[#FFF8D9] px-4 py-2 text-center text-[13px] font-extrabold text-slate-900">
-                  EST 입력 합계
+                  {selectedManager} EST 입력 합계
                 </div>
                 <div className="grid grid-cols-2 divide-x divide-amber-200">
                   <div className="px-4 py-2.5 text-center">
@@ -5886,7 +5912,7 @@ function EstQuickEntry({
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
 
             <div className="flex flex-wrap items-end gap-x-5 gap-y-3 xl:justify-end">
               <label className="flex items-center gap-2">
@@ -6784,9 +6810,12 @@ function KpiGroup({
                     ? String(item.value)
                     : item.value.toFixed(1);
           return (
+            <Fragment key={item.title}>
+            {item.separatorBefore && (
+              <div aria-hidden="true" className="my-1 border-t-4 border-double border-slate-400" />
+            )}
             <div
-              key={item.title}
-              className={`flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 rounded-lg px-1.5 py-0.5 first:pt-0 last:pb-0 ${item.separatorBefore ? "mt-1 border-t-4 border-double border-slate-400 pt-1.5" : ""} ${item.highlightClass || ""}`}
+              className={`flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 rounded-lg px-1.5 py-0.5 first:pt-0 last:pb-0 ${item.highlightClass || ""}`}
             >
               <p className="shrink-0 break-keep text-[12px] font-semibold text-black">
                 {item.title}
@@ -6797,6 +6826,7 @@ function KpiGroup({
                 {value}
               </p>
             </div>
+            </Fragment>
           );
         })}
       </div>
@@ -8825,6 +8855,13 @@ function ItemShipmentAnalysis({
   const [categoryFilter, setCategoryFilter] = useState("전체");
   const [profitRateFilter, setProfitRateFilter] = useState("전체");
   const [newItemFilter, setNewItemFilter] = useState<"전체" | "당월 신규">("전체");
+  type ItemAmountSortKey =
+    | "prevSales" | "prevUnitCost" | "prevProfit" | "prevProfitRate"
+    | "currentSales" | "currentUnitCost" | "currentProfit" | "currentProfitRate";
+  const [amountSort, setAmountSort] = useState<{ key: ItemAmountSortKey; direction: SortDirection }>({
+    key: "currentSales",
+    direction: "desc",
+  });
 
   useEffect(() => {
     setAnalysisStart(monthStart(month));
@@ -8959,7 +8996,20 @@ function ItemShipmentAnalysis({
         if (profitRateFilter === "상승") return r.profitRateChange > 0;
         return true;
       })
-      .sort((a, b) => b.current.sales - a.current.sales);
+      .sort((a, b) => {
+        const value = (row: typeof a) => {
+          if (amountSort.key === "prevSales") return row.prevMonth.sales;
+          if (amountSort.key === "prevUnitCost") return row.prevMonthUnitCost;
+          if (amountSort.key === "prevProfit") return row.prevMonth.profit;
+          if (amountSort.key === "prevProfitRate") return row.prevMonthProfitRate;
+          if (amountSort.key === "currentUnitCost") return row.currentUnitCost;
+          if (amountSort.key === "currentProfit") return row.current.profit;
+          if (amountSort.key === "currentProfitRate") return row.currentProfitRate;
+          return row.current.sales;
+        };
+        const direction = amountSort.direction === "asc" ? 1 : -1;
+        return (value(a) - value(b)) * direction || a.itemName.localeCompare(b.itemName, "ko-KR", { numeric: true });
+      });
   }, [
     sales,
     storeByCode,
@@ -8974,7 +9024,17 @@ function ItemShipmentAnalysis({
     itemMasterByCode,
     firstSaleMonthByItem,
     month,
+    amountSort,
   ]);
+
+  const toggleAmountSort = (key: ItemAmountSortKey) => {
+    setAmountSort((previous) => ({
+      key,
+      direction: previous.key === key && previous.direction === "desc" ? "asc" : "desc",
+    }));
+  };
+  const amountSortMark = (key: ItemAmountSortKey) =>
+    amountSort.key === key ? (amountSort.direction === "asc" ? "↑" : "↓") : "↕";
 
   const categoryOptions = useMemo(() => {
     const categories = new Set<string>();
@@ -9232,16 +9292,16 @@ function ItemShipmentAnalysis({
                     <th rowSpan={2} className="bg-white px-2 py-2 font-bold text-black">상세</th>
                   </tr>
                   <tr>
-                    <th className="bg-[#F3FAFD] px-2 py-2 font-bold text-black">매출</th>
-                    <th className="bg-[#F3FAFD] px-2 py-2 font-bold text-black">매입단가</th>
-                    <th className="bg-[#F3FAFD] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
-                    <th className="bg-[#F3FAFD] px-1 py-2 font-bold text-black">이익률</th>
-                    <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-black">매출</th>
-                    <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-black">매입단가</th>
-                    <th className="bg-[#FFF7FA] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
+                    <th className="bg-[#F3FAFD] px-2 py-2 font-bold text-black"><button type="button" onClick={() => toggleAmountSort("prevSales")} className="w-full">매출 {amountSortMark("prevSales")}</button></th>
+                    <th className="bg-[#F3FAFD] px-2 py-2 font-bold text-black"><button type="button" onClick={() => toggleAmountSort("prevUnitCost")} className="w-full">매입단가 {amountSortMark("prevUnitCost")}</button></th>
+                    <th className="bg-[#F3FAFD] px-2 py-2 text-[14px] font-bold text-black"><button type="button" onClick={() => toggleAmountSort("prevProfit")} className="w-full">이익금액 {amountSortMark("prevProfit")}</button></th>
+                    <th className="bg-[#F3FAFD] px-1 py-2 font-bold text-black"><button type="button" onClick={() => toggleAmountSort("prevProfitRate")} className="w-full">이익률 {amountSortMark("prevProfitRate")}</button></th>
+                    <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-black"><button type="button" onClick={() => toggleAmountSort("currentSales")} className="w-full">매출 {amountSortMark("currentSales")}</button></th>
+                    <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-black"><button type="button" onClick={() => toggleAmountSort("currentUnitCost")} className="w-full">매입단가 {amountSortMark("currentUnitCost")}</button></th>
+                    <th className="bg-[#FFF7FA] px-2 py-2 text-[14px] font-bold text-black"><button type="button" onClick={() => toggleAmountSort("currentProfit")} className="w-full">이익금액 {amountSortMark("currentProfit")}</button></th>
                     <th className="bg-[#FFF7FA] px-1 py-1 font-bold text-black">
                       <div className="flex w-full flex-col items-center gap-1">
-                        <span>이익률</span>
+                        <button type="button" onClick={() => toggleAmountSort("currentProfitRate")} className="w-full">이익률 {amountSortMark("currentProfitRate")}</button>
                         <select
                           value={profitRateFilter}
                           onChange={(e) => {
@@ -12243,6 +12303,19 @@ function StoreListManagement({
     [sales, stores, month],
   );
 
+  const priorHistoryRows = useMemo(
+    () =>
+      summarize(
+        sales.filter(
+          (row) =>
+            row.period === "current" &&
+            Boolean(row.saleDate) &&
+            row.saleDate < monthStart(month),
+        ),
+      ),
+    [sales, stores, month],
+  );
+
   const existingRows = useMemo(() => {
     const currentByCode = new Map(currentRows.map((row) => [norm(row.code), row]));
     const currentByName = new Map(
@@ -12252,9 +12325,14 @@ function StoreListManagement({
     const prevByName = new Map(
       prevMonthRows.map((row) => [normalizeStoreNameKey(row.name), row]),
     );
-    const keys = new Set<string>();
-    currentRows.forEach((row) => keys.add(`C|${row.code}|${row.name}`));
-    prevMonthRows.forEach((row) => keys.add(`P|${row.code}|${row.name}`));
+    const historyByCode = new Map(priorHistoryRows.map((row) => [norm(row.code), row]));
+    const historyByName = new Map(
+      priorHistoryRows.map((row) => [normalizeStoreNameKey(row.name), row]),
+    );
+    const prevYearByCode = new Map(prevYearRows.map((row) => [norm(row.code), row]));
+    const prevYearByName = new Map(
+      prevYearRows.map((row) => [normalizeStoreNameKey(row.name), row]),
+    );
 
     const result = new Map<string, SalesStoreSummary & {
       currentAmount: number;
@@ -12263,33 +12341,42 @@ function StoreListManagement({
       note: string;
     }>();
 
-    [...currentRows, ...prevMonthRows].forEach((source) => {
+    [...currentRows, ...priorHistoryRows].forEach((source) => {
       const currentBySameCode = currentByCode.get(norm(source.code));
       const currentBySameName = currentByName.get(normalizeStoreNameKey(source.name));
       const prevBySameCode = prevByCode.get(norm(source.code));
       const prevBySameName = prevByName.get(normalizeStoreNameKey(source.name));
+      const historyBySameCode = historyByCode.get(norm(source.code));
+      const historyBySameName = historyByName.get(normalizeStoreNameKey(source.name));
+      const prevYearBySameCode = prevYearByCode.get(norm(source.code));
+      const prevYearBySameName = prevYearByName.get(normalizeStoreNameKey(source.name));
       const current = currentBySameCode || currentBySameName;
       const prev = prevBySameCode || prevBySameName;
-      const canonical = current || prev || source;
-      const key = current?.code || prev?.code || source.code || source.name;
+      const history = historyBySameCode || historyBySameName;
+      const prevYear = prevYearBySameCode || prevYearBySameName;
+      const canonical = current || history || prev || source;
+      const key = current?.code || history?.code || prev?.code || source.code || source.name;
 
       let statusLabel = "동일";
-      let note = "당월과 전월의 사업자번호와 거래처명이 같습니다.";
-      if (current && !prev) {
+      let note = "당월 이전 매출 이력이 있는 기존 거래처입니다.";
+      if (current && !history && !prevYear) {
         statusLabel = "당월 신규";
-        note = "당월에만 존재하는 거래처입니다.";
-      } else if (!current && prev) {
+        note = "당월 이전 전체 매출 이력과 전년동월에 모두 없는 거래처입니다.";
+      } else if (current && !history && prevYear) {
+        statusLabel = "전년 기존";
+        note = "최근 매출 이력은 없지만 전년동월에 존재한 거래처입니다.";
+      } else if (!current && history) {
         statusLabel = "당월 미거래";
-        note = "전월에는 있었지만 당월 매출에는 없습니다.";
-      } else if (current && prev) {
-        if (norm(current.code) !== norm(prev.code)) {
+        note = "당월 이전 매출 이력은 있으나 당월 매출에는 없습니다.";
+      } else if (current && history) {
+        if (norm(current.code) !== norm(history.code)) {
           statusLabel = "사업자번호 변경";
-          note = `전월 ${prev.code} → 당월 ${current.code}`;
+          note = `기존 ${history.code} → 당월 ${current.code}`;
         } else if (
-          normalizeStoreNameKey(current.name) !== normalizeStoreNameKey(prev.name)
+          normalizeStoreNameKey(current.name) !== normalizeStoreNameKey(history.name)
         ) {
           statusLabel = "거래처명 변경";
-          note = `전월 ${prev.name} → 당월 ${current.name}`;
+          note = `기존 ${history.name} → 당월 ${current.name}`;
         }
       }
 
@@ -12305,7 +12392,7 @@ function StoreListManagement({
     return Array.from(result.values()).sort((a, b) =>
       a.name.localeCompare(b.name, "ko-KR", { numeric: true }),
     );
-  }, [currentRows, prevMonthRows]);
+  }, [currentRows, prevMonthRows, priorHistoryRows, prevYearRows]);
 
   const prevYearCompareRows = useMemo(() => {
     const existingByCode = new Map(existingRows.map((row) => [norm(row.code), row]));
