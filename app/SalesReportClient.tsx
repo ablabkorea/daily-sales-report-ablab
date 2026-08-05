@@ -14300,10 +14300,10 @@ function UploadPage({
             .map((r) => ({
               code: r.storeCode,
               name: r.storeName || r.storeCode,
-              channel: "매장" as Channel,
+              channel: "미지정" as Channel,
               manager: "" as Manager,
-              storeType: "매장" as StoreType,
-              brand: displayBrand(r.brand),
+              storeType: "미지정" as StoreType,
+              brand: "당월 신규 거래처",
               status: "거래중" as const,
             }))
         : [];
@@ -14362,7 +14362,10 @@ function UploadPage({
       return;
     }
 
-    const closedMessage = "";
+    const uniqueMissingStoreCount = new Set(missingStores.map((store) => store.code)).size;
+    const closedMessage = uniqueMissingStoreCount
+      ? `\n신규 거래처 ${uniqueMissingStoreCount.toLocaleString("ko-KR")}건을 생성했습니다. 월초관리 → 기준정보에서 브랜드·담당자·매장/비매장을 확인해 주세요.`
+      : "";
     alert(
       `${period === "current" ? "당월" : period === "prevMonth" ? "전월" : "전년동월"} 매출 ${parsed.length}건을 반영했습니다.\n반영 날짜: ${uploadedDates.join(", ")}${closedMessage}`,
     );
@@ -14389,6 +14392,9 @@ function UploadPage({
     });
 
     const matchedByKey = new Map<string, EstRecord>();
+    const matchedManagerByKey = new Map<string, string>();
+    const managerScopesByMonth = new Map<string, Set<string>>();
+    const storeManagerUpdates = new Map<string, string>();
     const unmatched: string[] = [];
 
     fileRows.forEach((row, index) => {
@@ -14399,6 +14405,9 @@ function UploadPage({
           row["매장 코드"],
       );
       const uploadedStoreName = norm(row["거래처명"] ?? row["매장명"]);
+      const uploadedManager = norm(
+        row["담당자"] ?? row["담당자명"] ?? row["영업담당자"],
+      ).toUpperCase();
 
       const estHeader = Object.keys(row).find((key) => {
         const normalizedKey = norm(key).replace(/\s+/g, " ");
@@ -14457,7 +14466,24 @@ function UploadPage({
         month: targetMonth,
         amount,
       };
-      matchedByKey.set(`${record.month}__${record.storeCode}`, record);
+      const effectiveManager = uploadedManager || norm(store.manager).toUpperCase();
+      if (!effectiveManager) {
+        unmatched.push(
+          `${index + 2}행: ${rawStoreCode} / 담당자 없음 (엑셀 담당자 또는 기준정보 담당자 필요)`,
+        );
+        return;
+      }
+
+      const recordKey = `${record.month}__${record.storeCode}`;
+      matchedByKey.set(recordKey, record);
+      matchedManagerByKey.set(recordKey, effectiveManager);
+      managerScopesByMonth.set(
+        record.month,
+        new Set([...(managerScopesByMonth.get(record.month) || []), effectiveManager]),
+      );
+      if (uploadedManager && norm(store.manager).toUpperCase() !== uploadedManager) {
+        storeManagerUpdates.set(store.code, uploadedManager);
+      }
     });
 
     const matched = Array.from(matchedByKey.values());
@@ -14468,17 +14494,47 @@ function UploadPage({
       return;
     }
 
-    const keyOf = (row: EstRecord) => `${row.month}__${row.storeCode}`;
-    const uploadKeys = new Set(matched.map(keyOf));
+    const updatedStores = stores.map((store) => {
+      const uploadedManager = storeManagerUpdates.get(store.code);
+      return uploadedManager ? { ...store, manager: uploadedManager } : store;
+    });
+    if (storeManagerUpdates.size) setStores(updatedStores);
+
+    const managerByStoreCode = new Map(
+      updatedStores.map((store) => [store.code, norm(store.manager).toUpperCase()]),
+    );
+    let replacedCount = 0;
+    const preserved = ests.filter((row) => {
+      const managerScopes = managerScopesByMonth.get(row.month);
+      if (!managerScopes) return true;
+      const owner = managerByStoreCode.get(row.storeCode) || "";
+      const shouldReplace = Boolean(owner && managerScopes.has(owner));
+      if (shouldReplace) replacedCount += 1;
+      return !shouldReplace;
+    });
     const next = [
-      ...ests.filter((row) => !uploadKeys.has(keyOf(row))),
+      ...preserved,
       ...matched,
     ];
     setEsts(next);
 
     const unmatchedPreview = unmatched.slice(0, 10).join("\n");
+    const managerSummary = Array.from(managerScopesByMonth.entries())
+      .flatMap(([targetMonth, managers]) =>
+        Array.from(managers).map((manager) => {
+          const count = Array.from(matchedByKey.keys()).filter(
+            (key) => key.startsWith(`${targetMonth}__`) && matchedManagerByKey.get(key) === manager,
+          ).length;
+          return `${targetMonth} ${manager}: ${count.toLocaleString("ko-KR")}건`;
+        }),
+      )
+      .join("\n");
     alert(
-      `초기 EST ${matched.length.toLocaleString("ko-KR")}건을 반영했습니다.\n매핑 기준: 총 거래처 리스트의 거래처코드 + 거래처코드 매핑` +
+      `초기 EST ${matched.length.toLocaleString("ko-KR")}건을 반영했습니다.\n기존 대상 담당자 EST ${replacedCount.toLocaleString("ko-KR")}건을 엑셀 내용으로 교체했고, 다른 담당자 자료는 유지했습니다.` +
+        `\n\n담당자별 반영\n${managerSummary}` +
+        (storeManagerUpdates.size
+          ? `\n\n엑셀 담당자를 우선 적용해 거래처 담당자 ${storeManagerUpdates.size.toLocaleString("ko-KR")}건을 갱신했습니다.`
+          : "") +
         (unmatched.length
           ? `\n\n미반영 ${unmatched.length.toLocaleString("ko-KR")}건\n${unmatchedPreview}${unmatched.length > 10 ? "\n..." : ""}`
           : ""),
@@ -14623,7 +14679,7 @@ function UploadPage({
           />
           <UploadBox
             title="초기 EST 일괄 업로드"
-            description="공유한 양식(거래처코드·거래처명·담당자·n월 EST)을 사용합니다. 총 거래처 리스트의 거래처코드를 우선 확인하고, 기존 코드인 경우 거래처코드 매핑을 적용해 EST를 업데이트합니다. 담당자는 참고용이며 매핑 기준에는 사용하지 않습니다."
+            description="공유한 양식(거래처코드·거래처명·담당자·n월 EST)을 사용합니다. 엑셀의 담당자와 금액을 우선 적용하며, 해당 월·해당 담당자 EST만 파일 내용으로 교체합니다. 다른 담당자 자료는 유지됩니다."
             onUpload={uploadInitialEst}
           />
         </div>
