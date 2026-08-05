@@ -4086,6 +4086,22 @@ async function loadV3SalesForMonth(month: string): Promise<{
   };
 }
 
+function asPreviousMonthSales(rows: SalesRecord[], targetMonth: string) {
+  const sourceMonth = previousMonth(targetMonth);
+  return rows
+    .filter((row) => {
+      if (row.period !== "current") return false;
+      const rowMonth = row.refMonth || row.saleDate.slice(0, 7);
+      return rowMonth === sourceMonth;
+    })
+    .map((row) => ({
+      ...row,
+      id: `prev-month-fallback:${targetMonth}:${row.id}`,
+      period: "prevMonth" as PeriodType,
+      refMonth: targetMonth,
+    }));
+}
+
 async function replaceV3SalesBatch(request: SalesUploadRequest) {
   const api = d1SalesEndpoint("sales/replace");
   const response = await fetch(api.url, {
@@ -4159,7 +4175,31 @@ function useChunkedSales(
     const legacy = await loadLegacyMonthChunks(targetMonth);
     const v3Periods = v3.periodsWithBatch;
     const legacyForUnmigratedPeriods = legacy.filter((row) => !v3Periods.has(row.period));
-    return dedupeSales([...legacyForUnmigratedPeriods, ...v3.records]);
+    let previousMonthFallback: SalesRecord[] = [];
+
+    // 선택 월에 전월 업로드가 따로 없으면, D1에 보존된 직전 월의 당월 매출을
+    // 전월 매출로 연결합니다. 별도 전월 업로드가 존재할 때는 그 값을 우선합니다.
+    const alreadyHasPreviousMonth =
+      v3Periods.has("prevMonth") ||
+      legacyForUnmigratedPeriods.some(
+        (row) => row.period === "prevMonth" && row.refMonth === targetMonth,
+      );
+    if (!alreadyHasPreviousMonth) {
+      try {
+        const previousV3 = await loadV3SalesForMonth(previousMonth(targetMonth));
+        if (previousV3.available) {
+          previousMonthFallback = asPreviousMonthSales(previousV3.records, targetMonth);
+        }
+      } catch (error) {
+        console.warn("직전 월 매출 자동 연결 실패", error);
+      }
+    }
+
+    return dedupeSales([
+      ...legacyForUnmigratedPeriods,
+      ...v3.records,
+      ...previousMonthFallback,
+    ]);
   };
 
   const persistLegacyNow = (nextValue: SalesRecord[]) => {
