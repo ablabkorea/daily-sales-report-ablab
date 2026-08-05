@@ -5541,7 +5541,7 @@ function EstQuickEntry({
     };
   }, [stores, selectedManager]);
 
-  const totalEst = rows.reduce(
+  const filteredEstTotal = rows.reduce(
     (total, store) => total + Number(estMap.get(store.code) || 0),
     0,
   );
@@ -5553,6 +5553,44 @@ function EstQuickEntry({
   const nonStoreEstTotal = rows
     .filter((store) => store.storeType !== "매장")
     .reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0);
+  const monthlyEstSummary = useMemo(
+    () => metricsByStoreType(stores, targets, ests, month),
+    [stores, targets, ests, month],
+  );
+  const monthlyEstTotal =
+    monthlyEstSummary.storeEst +
+    monthlyEstSummary.nonStoreEst +
+    monthlyEstSummary.unregisteredEst;
+
+  const currentSalesByBrand = useMemo(() => {
+    const map = new Map<string, number>();
+    const storesByCode = storeMap(stores);
+    sales
+      .filter(
+        (row) =>
+          row.period === "current" &&
+          inRange(row.saleDate, monthStart(month), monthEnd(month)),
+      )
+      .forEach((row) => {
+        const brand = displayBrand(storesByCode.get(row.storeCode)?.brand || row.brand) || "미지정";
+        map.set(brand, (map.get(brand) || 0) + Number(row.salesAmount || 0));
+      });
+    return map;
+  }, [stores, sales, month]);
+
+  const estByBrand = useMemo(() => {
+    const map = new Map<string, number>();
+    const storesByCode = storeMap(stores);
+    ests
+      .filter((row) => row.month === month)
+      .forEach((row) => {
+        const store = storesByCode.get(row.storeCode);
+        if (!store) return;
+        const brand = displayBrand(store.brand) || "미지정";
+        map.set(brand, (map.get(brand) || 0) + Number(row.amount || 0));
+      });
+    return map;
+  }, [stores, ests, month]);
   const selectedChannelLabel =
     channelView === "store" ? "매장" : channelView === "nonStore" ? "비매장" : "전체 채널";
   const selectedStatusLabel =
@@ -5792,16 +5830,22 @@ function EstQuickEntry({
                 <div className="grid grid-cols-2 divide-x divide-amber-200">
                   <div className="px-4 py-2.5 text-center">
                     <div className="text-[12px] font-bold text-slate-600">매장 EST</div>
-                    <div className="mt-1 text-[18px] font-black text-slate-900">{won(storeEstTotal)}</div>
+                    <div className="mt-1 text-[18px] font-black text-slate-900">{won(monthlyEstSummary.storeEst)}</div>
                   </div>
                   <div className="px-4 py-2.5 text-center">
                     <div className="text-[12px] font-bold text-slate-600">비매장 EST</div>
-                    <div className="mt-1 text-[18px] font-black text-slate-900">{won(nonStoreEstTotal)}</div>
+                    <div className="mt-1 text-[18px] font-black text-slate-900">{won(monthlyEstSummary.nonStoreEst)}</div>
                   </div>
                 </div>
+                {monthlyEstSummary.unregisteredEst !== 0 && (
+                  <div className="flex items-center justify-between border-t border-rose-200 bg-rose-50 px-4 py-2 text-[11px] font-extrabold text-rose-700">
+                    <span>미등록 거래처 EST</span>
+                    <span>{won(monthlyEstSummary.unregisteredEst)}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between border-t border-amber-200 bg-[#FFF9E3] px-4 py-2.5">
                   <span className="text-[12px] font-extrabold text-slate-700">총 EST 합계</span>
-                  <span className="text-[18px] font-black text-orange-700">{won(totalEst)}</span>
+                  <span className="text-[18px] font-black text-orange-700">{won(monthlyEstTotal)}</span>
                 </div>
               </div>
 
@@ -5900,14 +5944,12 @@ function EstQuickEntry({
           <span className="text-sky-700">월별 기록 유지 · 중복 이월 방지</span>
         </div>
 
-        <BrandEstProgress stores={stores} sales={sales} ests={ests} month={month} compact />
-
         <div
           className="flex min-h-[360px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
           style={{ height: "clamp(360px, calc(100vh - 430px), 600px)" }}
         >
           <div className="isolate min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 pr-2">
-            <table className="w-full min-w-[1580px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+            <table className="w-full min-w-[1770px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-100">
                   {[
@@ -5921,6 +5963,7 @@ function EstQuickEntry({
                     ["prevEst", "전월 EST", "bg-[#F3FAFD]"],
                     ["prevEstRate", "전월 EST 달성률", "bg-[#F3FAFD]"],
                     ["est", `${month} EST 입력`, "bg-yellow-100"],
+                    ["brandEstProgress", "브랜드 EST 진척률", "bg-amber-50"],
                     ["estDifference", "전월 EST 대비 차이", "bg-yellow-100"],
                   ].map(([key, label, background]) => (
                     <th
@@ -5929,7 +5972,7 @@ function EstQuickEntry({
                     >
                       <button
                         type="button"
-                        onClick={() => handleSort(key as typeof sortKey)}
+                        onClick={() => key !== "brandEstProgress" && handleSort(key as typeof sortKey)}
                         className="inline-flex w-full items-center justify-center gap-1.5 whitespace-nowrap hover:text-orange-700"
                         title={`${label} 정렬`}
                       >
@@ -5937,7 +5980,7 @@ function EstQuickEntry({
                           {label}
                         </span>
                         <span className={`text-[11px] ${sortKey === key ? "text-orange-600" : "text-slate-400"}`}>
-                          {sortMark(key as typeof sortKey)}
+                          {key === "brandEstProgress" ? "" : sortMark(key as typeof sortKey)}
                         </span>
                       </button>
                     </th>
@@ -5952,6 +5995,10 @@ function EstQuickEntry({
                   const prevEst = prevEstMap.get(store.code) || 0;
                   const prevEstRate = prevEst ? (prevSales / prevEst) * 100 : 0;
                   const estDifference = Number(value || 0) - Number(prevEst || 0);
+                  const brandName = displayBrand(store.brand) || "미지정";
+                  const brandEst = estByBrand.get(brandName) || 0;
+                  const brandSales = currentSalesByBrand.get(brandName) || 0;
+                  const brandEstRate = brandEst ? (brandSales / brandEst) * 100 : 0;
                   const isCriticalRate = Boolean(prevEst && prevEstRate < 30);
                   const rateTone = !prevEst
                     ? "bg-slate-100 text-slate-500 ring-slate-200"
@@ -6035,6 +6082,19 @@ function EstQuickEntry({
                           className="h-9 w-full min-w-[150px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-orange-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
+                      <td className="min-w-[190px] border border-slate-300 px-3 py-2">
+                        <div className="flex items-center gap-2" title={`${brandName}: 매출 ${won(brandSales)} / EST ${won(brandEst)}`}>
+                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                            <div
+                              className={`h-full rounded-full ${brandEstRate >= 100 ? "bg-emerald-500" : brandEstRate >= 70 ? "bg-amber-400" : "bg-orange-400"}`}
+                              style={{ width: `${Math.min(100, Math.max(0, brandEstRate))}%` }}
+                            />
+                          </div>
+                          <span className={`w-14 text-right font-extrabold ${brandEstRate >= 100 ? "text-emerald-700" : "text-orange-700"}`}>
+                            {brandEst ? pct(brandEstRate) : "-"}
+                          </span>
+                        </div>
+                      </td>
                       <td className={`border border-slate-300 px-3 py-2 text-right font-extrabold ${differenceTone}`}>
                         {value || prevEst
                           ? `${estDifference > 0 ? "+" : ""}${won(estDifference)}`
@@ -6045,7 +6105,7 @@ function EstQuickEntry({
                 })}
                 {!rows.length && (
                   <tr>
-                    <td colSpan={11} className="border border-slate-300 p-8 text-center text-slate-500">
+                    <td colSpan={12} className="border border-slate-300 p-8 text-center text-slate-500">
                       선택한 담당자·채널·거래상태에 해당하는 거래처가 없습니다.
                     </td>
                   </tr>
@@ -6070,7 +6130,7 @@ function EstQuickEntry({
               <span>매장 EST <strong className="text-slate-900">{won(storeEstTotal)}</strong></span>
               <span>비매장 EST <strong className="text-slate-900">{won(nonStoreEstTotal)}</strong></span>
               <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-slate-900">
-                필터 EST 합계 <strong className="text-orange-700">{won(totalEst)}</strong>
+                필터 EST 합계 <strong className="text-orange-700">{won(filteredEstTotal)}</strong>
               </span>
             </div>
           </div>
@@ -6749,9 +6809,8 @@ function metricsByStoreType(
   ests: EstRecord[],
   month: string,
 ) {
-  const storeCodes = new Set(
-    stores.filter((s) => s.storeType === "매장").map((s) => s.code),
-  );
+  const storesByCode = storeMap(stores);
+  const storeCodes = new Set(stores.filter((s) => s.storeType === "매장").map((s) => s.code));
 
   const targetTypeOf = (t: TargetRecord) => {
     if (t.storeType === "매장" || t.storeType === "비매장") return t.storeType;
@@ -6766,12 +6825,15 @@ function metricsByStoreType(
     .filter((t) => t.month === month && targetTypeOf(t) !== "매장")
     .reduce((a, b) => a + b.amount, 0);
   const storeEst = ests
-    .filter((e) => e.month === month && storeCodes.has(e.storeCode))
+    .filter((e) => e.month === month && storesByCode.has(e.storeCode) && storeCodes.has(e.storeCode))
     .reduce((a, b) => a + b.amount, 0);
   const nonStoreEst = ests
-    .filter((e) => e.month === month && !storeCodes.has(e.storeCode))
+    .filter((e) => e.month === month && storesByCode.has(e.storeCode) && !storeCodes.has(e.storeCode))
     .reduce((a, b) => a + b.amount, 0);
-  return { storeTarget, nonStoreTarget, storeEst, nonStoreEst };
+  const unregisteredEst = ests
+    .filter((e) => e.month === month && !storesByCode.has(e.storeCode))
+    .reduce((a, b) => a + b.amount, 0);
+  return { storeTarget, nonStoreTarget, storeEst, nonStoreEst, unregisteredEst };
 }
 
 function SalesTargetHeaderKpi({
@@ -6877,10 +6939,10 @@ function DashboardTopKpis({
   const fullMonthSales = sum(currentFullMonth, "salesAmount");
   const profitAmount = sum(current, "profitAmount");
   const profitRate = weightedProfitRate(current);
-  const { storeTarget, nonStoreTarget, storeEst, nonStoreEst } =
+  const { storeTarget, nonStoreTarget, storeEst, nonStoreEst, unregisteredEst } =
     metricsByStoreType(stores, targets, ests, month);
   const targetTotal = storeTarget + nonStoreTarget;
-  const estTotal = storeEst + nonStoreEst;
+  const estTotal = storeEst + nonStoreEst + unregisteredEst;
 
   const scheduledCostItems = itemCosts.filter(
     (item) => item.effectiveDate && Number(item.nextCost || 0) > 0,
@@ -6961,6 +7023,7 @@ function DashboardTopKpis({
         items={[
           { title: "매장 EST", value: storeEst, format: "won" },
           { title: "비매장 EST", value: nonStoreEst, format: "won" },
+          { title: "미등록 거래처 EST", value: unregisteredEst, format: "won", color: unregisteredEst ? "text-rose-700" : "text-slate-500" },
           {
             title: "총 EST",
             value: estTotal,
@@ -7167,6 +7230,30 @@ function Dashboard({
     const managerEst = ests
       .filter((e) => e.month === month && managerOfEst(e) === manager)
       .reduce((total, row) => total + Number(row.amount || 0), 0);
+    const brandProgressMap = new Map<string, { est: number; sales: number }>();
+    const ensureBrand = (brand: string) => {
+      const key = displayBrand(brand) || "미지정";
+      if (!brandProgressMap.has(key)) brandProgressMap.set(key, { est: 0, sales: 0 });
+      return brandProgressMap.get(key)!;
+    };
+    currentRows.forEach((sale) => {
+      const store = stMap.get(sale.storeCode);
+      ensureBrand(store?.brand || sale.brand).sales += Number(sale.salesAmount || 0);
+    });
+    ests
+      .filter((e) => e.month === month && managerOfEst(e) === manager)
+      .forEach((est) => {
+        const store = stMap.get(est.storeCode);
+        ensureBrand(store?.brand || "미지정").est += Number(est.amount || 0);
+      });
+    const brandProgress = Array.from(brandProgressMap.entries())
+      .map(([brand, value]) => ({
+        brand,
+        ...value,
+        rate: value.est ? (value.sales / value.est) * 100 : 0,
+      }))
+      .filter((item) => item.est || item.sales)
+      .sort((a, b) => b.est - a.est || b.sales - a.sales);
     const currentSales = sum(currentRows, "salesAmount");
     const prevMonthSales = sum(prevMonthRows, "salesAmount");
     const prevYearSales = sum(prevYearRows, "salesAmount");
@@ -7203,6 +7290,7 @@ function Dashboard({
         : 0,
       est: managerEst,
       estRate: managerEst ? (currentSales / managerEst) * 100 : 0,
+      brandProgress,
       profitAmount,
       profitRate: weightedProfitRate(currentRows),
       pausedCount,
@@ -7232,6 +7320,22 @@ function Dashboard({
       newStoreCount: 0,
     },
   );
+
+  const totalBrandProgress = (() => {
+    const map = new Map<string, { est: number; sales: number }>();
+    rows.forEach((row) =>
+      row.brandProgress.forEach((item) => {
+        const currentValue = map.get(item.brand) || { est: 0, sales: 0 };
+        currentValue.est += item.est;
+        currentValue.sales += item.sales;
+        map.set(item.brand, currentValue);
+      }),
+    );
+    return Array.from(map.entries())
+      .map(([brand, value]) => ({ brand, ...value, rate: value.est ? (value.sales / value.est) * 100 : 0 }))
+      .filter((item) => item.est || item.sales)
+      .sort((a, b) => b.est - a.est || b.sales - a.sales);
+  })();
 
   const dashboardManagerExcelRows = rows.map((r) => ({
     담당자: r.manager,
@@ -7332,8 +7436,6 @@ function Dashboard({
 
   return (
     <>
-      <BrandEstProgress stores={stores} sales={sales} ests={ests} month={month} date={date} />
-
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-300 px-4 py-3">
           <div className="text-base font-extrabold text-slate-900">담당자별 매출 요약</div>
@@ -7346,7 +7448,7 @@ function Dashboard({
           </button>
         </div>
         <div className="overflow-auto pb-4">
-          <table className="w-full min-w-[1320px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+          <table className="w-full min-w-[1580px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100">
                 <th className="sticky top-0 z-10 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">담당자</th>
@@ -7360,6 +7462,7 @@ function Dashboard({
                 <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF7FA] px-3 py-2 font-bold text-black">당월 전체 매출</th>
                 <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFFDF2] px-3 py-2 font-bold text-black">EST</th>
                 <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFFDF2] px-3 py-2 font-bold text-black">EST 달성률</th>
+                <th className="sticky top-0 z-10 min-w-[250px] border border-slate-300 bg-amber-50 px-3 py-2 font-bold text-black">브랜드별 EST 진척률</th>
                 <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF9F3] px-3 py-2 font-bold text-black">이익금액</th>
                 <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF9F3] px-3 py-2 font-bold text-black">이익률</th>
               </tr>
@@ -7382,6 +7485,20 @@ function Dashboard({
                   <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(r.fullMonthSales)}</td>
                   <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(r.est)}</td>
                   <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{pct(r.estRate)}</td>
+                  <td className="border border-slate-300 px-3 py-2 text-left">
+                    <div className="max-h-24 min-w-[230px] space-y-1.5 overflow-y-auto pr-1">
+                      {r.brandProgress.map((item) => (
+                        <div key={`${r.manager}-${item.brand}`} className="grid grid-cols-[76px_1fr_48px] items-center gap-2" title={`${item.brand}: 매출 ${won(item.sales)} / EST ${won(item.est)}`}>
+                          <span className="truncate font-bold text-slate-700">{item.brand}</span>
+                          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                            <div className={`h-full rounded-full ${item.rate >= 100 ? "bg-emerald-500" : item.rate >= 70 ? "bg-amber-400" : "bg-orange-400"}`} style={{ width: `${Math.min(100, Math.max(0, item.rate))}%` }} />
+                          </div>
+                          <span className={`text-right font-extrabold ${item.rate >= 100 ? "text-emerald-700" : "text-orange-700"}`}>{item.est ? pct(item.rate) : "-"}</span>
+                        </div>
+                      ))}
+                      {!r.brandProgress.length && <span className="text-slate-400">-</span>}
+                    </div>
+                  </td>
                   <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(r.profitAmount)}</td>
                   <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{pct(r.profitRate)}</td>
                 </tr>
@@ -7398,6 +7515,19 @@ function Dashboard({
                 <td className="border border-slate-300 px-3 py-2 text-right">{won(total.fullMonthSales)}</td>
                 <td className="border border-slate-300 px-3 py-2 text-right">{won(total.est)}</td>
                 <td className="border border-slate-300 px-3 py-2 text-right">{pct(total.est ? (total.currentSales / total.est) * 100 : 0)}</td>
+                <td className="border border-slate-300 px-3 py-2 text-left">
+                  <div className="max-h-28 min-w-[230px] space-y-1.5 overflow-y-auto pr-1">
+                    {totalBrandProgress.map((item) => (
+                      <div key={`total-${item.brand}`} className="grid grid-cols-[76px_1fr_48px] items-center gap-2" title={`${item.brand}: 매출 ${won(item.sales)} / EST ${won(item.est)}`}>
+                        <span className="truncate font-bold text-slate-700">{item.brand}</span>
+                        <div className="h-2 overflow-hidden rounded-full bg-white">
+                          <div className={`h-full rounded-full ${item.rate >= 100 ? "bg-emerald-500" : item.rate >= 70 ? "bg-amber-400" : "bg-orange-400"}`} style={{ width: `${Math.min(100, Math.max(0, item.rate))}%` }} />
+                        </div>
+                        <span className={`text-right font-extrabold ${item.rate >= 100 ? "text-emerald-700" : "text-orange-700"}`}>{item.est ? pct(item.rate) : "-"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </td>
                 <td className="border border-slate-300 px-3 py-2 text-right">{won(total.profitAmount)}</td>
                 <td className="border border-slate-300 px-3 py-2 text-right">{pct(total.currentSales ? (total.profitAmount / total.currentSales) * 100 : 0)}</td>
               </tr>
