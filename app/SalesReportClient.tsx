@@ -44,6 +44,7 @@ type Store = {
   storeType: StoreType;
   brand: string;
   status: "거래중" | "거래중단" | "거래종료";
+  estInputMode?: "store" | "brand";
 };
 
 type StoreCodeMapping = {
@@ -103,6 +104,7 @@ type EstRecord = {
   storeName: string;
   month: string;
   amount: number;
+  brand?: string;
 };
 
 type ItemCostHistory = {
@@ -5201,7 +5203,7 @@ function BrandEstProgress({
     ests.filter((row) => row.month === month).forEach((row) => {
       const store = storesByCode.get(row.storeCode);
       if (!store || store.status !== "거래중") return;
-      const item = ensure(store.brand);
+      const item = ensure(row.brand || store.brand);
       item.est += Number(row.amount || 0);
       item.stores.add(row.storeCode);
     });
@@ -5341,6 +5343,7 @@ function EstQuickEntry({
   const [statusView, setStatusView] = useState<"active" | "paused" | "ended">("active");
   const [channelView, setChannelView] = useState<"all" | "store" | "nonStore">("all");
   const [openBrand, setOpenBrand] = useState("");
+  const [brandEstStoreCode, setBrandEstStoreCode] = useState("");
   const [editingStoreCode, setEditingStoreCode] = useState("");
   const [frozenRowOrder, setFrozenRowOrder] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<
@@ -5364,7 +5367,7 @@ function EstQuickEntry({
     const map = new Map<string, number>();
     ests
       .filter((e) => e.month === month)
-      .forEach((e) => map.set(e.storeCode, Number(e.amount || 0)));
+      .forEach((e) => map.set(e.storeCode, (map.get(e.storeCode) || 0) + Number(e.amount || 0)));
     return map;
   }, [ests, month]);
 
@@ -5386,7 +5389,7 @@ function EstQuickEntry({
     const map = new Map<string, number>();
     ests
       .filter((e) => e.month === prevMonth)
-      .forEach((e) => map.set(e.storeCode, Number(e.amount || 0)));
+      .forEach((e) => map.set(e.storeCode, (map.get(e.storeCode) || 0) + Number(e.amount || 0)));
     return map;
   }, [ests, prevMonth]);
 
@@ -5589,7 +5592,7 @@ function EstQuickEntry({
           inRange(row.saleDate, monthStart(month), monthEnd(month)),
       )
       .forEach((row) => {
-        const brand = displayBrand(storesByCode.get(row.storeCode)?.brand || row.brand) || "미지정";
+        const brand = displayBrand(row.brand || storesByCode.get(row.storeCode)?.brand) || "미지정";
         map.set(brand, (map.get(brand) || 0) + Number(row.salesAmount || 0));
       });
     return map;
@@ -5603,7 +5606,7 @@ function EstQuickEntry({
       .forEach((row) => {
         const store = storesByCode.get(row.storeCode);
         if (!store) return;
-        const brand = displayBrand(store.brand) || "미지정";
+        const brand = displayBrand(row.brand || store.brand) || "미지정";
         map.set(brand, (map.get(brand) || 0) + Number(row.amount || 0));
       });
     return map;
@@ -5613,7 +5616,11 @@ function EstQuickEntry({
   const selectedStatusLabel =
     statusView === "active" ? "거래중" : statusView === "paused" ? "거래중지" : "거래종료";
   const selectedManagerConfig = activeManagers.find((config) => config.name === selectedManager);
-  const canEditTarget = canEdit && Boolean(selectedManagerConfig?.canTarget);
+  const now = new Date();
+  const currentCalendarMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const withinEstEntryPeriod = month === currentCalendarMonth && now.getDate() <= 5;
+  const canEditEst = canEdit && (isAdmin || withinEstEntryPeriod);
+  const canEditTarget = canEditEst && Boolean(selectedManagerConfig?.canTarget);
 
   const selectedManagerStoreCodes = useMemo(
     () =>
@@ -5657,7 +5664,7 @@ function EstQuickEntry({
   );
 
   const resetSelectedManagerEst = () => {
-    if (!canEdit || !selectedManager) return;
+    if (!canEditEst || !selectedManager) return;
 
     if (selectedManagerEstInputCount === 0) {
       alert(`${selectedManager} 담당자의 ${month} 당월 EST 입력값이 없습니다.`);
@@ -5698,17 +5705,58 @@ function EstQuickEntry({
   };
 
   const updateEst = (store: Store, amount: number) => {
-    if (!canEdit || store.status !== "거래중") return;
+    if (!canEditEst || store.status !== "거래중" || store.estInputMode === "brand") return;
     setEsts((prev) => {
-      const exists = prev.some((row) => row.month === month && row.storeCode === store.code);
+      const cleaned = prev.filter(
+        (row) => !(row.month === month && row.storeCode === store.code && Boolean(row.brand)),
+      );
+      const exists = cleaned.some((row) => row.month === month && row.storeCode === store.code && !row.brand);
       if (exists) {
-        return prev.map((row) =>
-          row.month === month && row.storeCode === store.code
+        return cleaned.map((row) =>
+          row.month === month && row.storeCode === store.code && !row.brand
             ? { ...row, storeName: store.name, amount }
             : row,
         );
       }
-      return [...prev, { storeCode: store.code, storeName: store.name, month, amount }];
+      return [...cleaned, { storeCode: store.code, storeName: store.name, month, amount }];
+    });
+  };
+
+  const brandEstStore = stores.find((store) => store.code === brandEstStoreCode);
+  const brandEstNames = useMemo(() => {
+    if (!brandEstStore) return [];
+    const values = new Set<string>();
+    sales
+      .filter((row) => row.storeCode === brandEstStore.code)
+      .forEach((row) => {
+        const brand = displayBrand(row.brand).trim();
+        if (brand) values.add(brand);
+      });
+    ests
+      .filter((row) => row.storeCode === brandEstStore.code && Boolean(row.brand))
+      .forEach((row) => values.add(displayBrand(row.brand || "")));
+    const fallback = displayBrand(brandEstStore.brand).trim();
+    if (fallback) values.add(fallback);
+    return Array.from(values).sort((a, b) => a.localeCompare(b, "ko-KR", { numeric: true }));
+  }, [brandEstStore, sales, ests]);
+
+  const updateBrandEst = (store: Store, brand: string, amount: number) => {
+    if (!canEditEst || store.status !== "거래중") return;
+    setEsts((previous) => {
+      const cleaned = previous.filter(
+        (row) => !(row.month === month && row.storeCode === store.code && !row.brand),
+      );
+      const exists = cleaned.some(
+        (row) => row.month === month && row.storeCode === store.code && row.brand === brand,
+      );
+      if (exists) {
+        return cleaned.map((row) =>
+          row.month === month && row.storeCode === store.code && row.brand === brand
+            ? { ...row, storeName: store.name, amount }
+            : row,
+        );
+      }
+      return [...cleaned, { storeCode: store.code, storeName: store.name, month, brand, amount }];
     });
   };
 
@@ -5785,7 +5833,7 @@ function EstQuickEntry({
             <button
               type="button"
               onClick={resetSelectedManagerEst}
-              disabled={!canEdit || selectedManagerEstInputCount === 0}
+              disabled={!canEditEst || selectedManagerEstInputCount === 0}
               className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-2 text-[11px] font-extrabold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
               title={`${selectedManager} 담당자의 ${month} 당월 EST만 초기화합니다.`}
             >
@@ -5969,6 +6017,9 @@ function EstQuickEntry({
           </span>
           <span className="text-sky-700">월별 기록 유지 · 중복 이월 방지</span>
         </div>
+        <div className={`rounded-xl border px-4 py-2 text-[12px] font-bold ${canEditEst ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-300 bg-slate-100 text-slate-600"}`}>
+          {isAdmin ? "관리자 권한으로 EST를 수정할 수 있습니다." : withinEstEntryPeriod ? "EST 입력 기간입니다. 매월 1~5일에만 수정할 수 있습니다." : "EST 입력 기간이 종료되어 읽기 전용입니다. 수정이 필요하면 관리자에게 요청해주세요."}
+        </div>
 
         <div
           className="flex min-h-[360px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
@@ -6085,28 +6136,35 @@ function EstQuickEntry({
                         </span>
                       </td>
                       <td className="border border-slate-300 px-3 py-2">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          disabled={!canEdit || store.status !== "거래중"}
-                          value={value ? won(value) : ""}
-                          onFocus={() => {
-                            setEditingStoreCode(store.code);
-                            setFrozenRowOrder(rows.map((row) => row.code));
-                          }}
-                          onChange={(e) => updateEst(store, num(e.target.value))}
-                          onBlur={() => {
-                            setEditingStoreCode("");
-                            setFrozenRowOrder([]);
-                          }}
-                          placeholder={store.status === "거래중" ? "0" : "입력 제외"}
-                          title={
-                            store.status === "거래중"
-                              ? `${month} EST 입력`
-                              : "거래중단·거래종료 거래처는 당월 EST를 입력할 수 없습니다."
-                          }
-                          className="h-9 w-full min-w-[150px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-orange-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                        />
+                        {store.estInputMode === "brand" ? (
+                          <button
+                            type="button"
+                            onClick={() => setBrandEstStoreCode(store.code)}
+                            className="flex h-9 w-full min-w-[150px] items-center justify-between rounded-lg border border-orange-300 bg-orange-50 px-3 text-sm font-extrabold text-orange-800 hover:bg-orange-100"
+                            title="브랜드별 EST 입력"
+                          >
+                            <span>브랜드별 입력</span><span>{won(value)}</span>
+                          </button>
+                        ) : (
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            disabled={!canEditEst || store.status !== "거래중"}
+                            value={value ? won(value) : ""}
+                            onFocus={() => {
+                              setEditingStoreCode(store.code);
+                              setFrozenRowOrder(rows.map((row) => row.code));
+                            }}
+                            onChange={(e) => updateEst(store, num(e.target.value))}
+                            onBlur={() => {
+                              setEditingStoreCode("");
+                              setFrozenRowOrder([]);
+                            }}
+                            placeholder={store.status !== "거래중" ? "입력 제외" : canEditEst ? "0" : "입력 기간 종료"}
+                            title={store.status === "거래중" ? `${month} EST 입력` : "거래중단·거래종료 거래처는 당월 EST를 입력할 수 없습니다."}
+                            className="h-9 w-full min-w-[150px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-orange-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                          />
+                        )}
                       </td>
                       <td className="min-w-[190px] border border-slate-300 px-3 py-2">
                         <div className="flex items-center gap-2" title={`${brandName}: 매출 ${won(brandSales)} / EST ${won(brandEst)}`}>
@@ -6163,6 +6221,30 @@ function EstQuickEntry({
         </div>
       </div>
 
+      {brandEstStore && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/35 p-4" onMouseDown={() => setBrandEstStoreCode("")}>
+          <div className="flex max-h-[82vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-orange-200 bg-orange-50 px-5 py-3">
+              <div><h3 className="text-base font-black text-slate-900">{brandEstStore.name} · 브랜드별 EST</h3><p className="mt-0.5 text-xs font-semibold text-slate-500">브랜드 합계가 거래처 EST로 자동 반영되며 별도로 중복 합산되지 않습니다.</p></div>
+              <button type="button" onClick={() => setBrandEstStoreCode("")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-extrabold">닫기</button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-4">
+              <table className="w-full border-separate border-spacing-0 text-center text-xs">
+                <thead><tr><th className="border border-slate-300 bg-slate-100 px-3 py-2">브랜드</th><th className="border border-slate-300 bg-yellow-100 px-3 py-2">{month} EST</th></tr></thead>
+                <tbody>
+                  {brandEstNames.map((brand) => {
+                    const amount = ests.filter((row) => row.month === month && row.storeCode === brandEstStore.code && row.brand === brand).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+                    return <tr key={brand}><td className="border border-slate-300 px-3 py-2 text-left font-bold">{brand}</td><td className="border border-slate-300 px-3 py-2"><input type="text" inputMode="numeric" disabled={!canEditEst || brandEstStore.status !== "거래중"} value={amount ? won(amount) : ""} onChange={(event) => updateBrandEst(brandEstStore, brand, num(event.target.value))} placeholder={canEditEst ? "0" : "입력 기간 종료"} className="h-9 w-full rounded-lg border border-slate-300 px-3 text-right text-sm font-bold outline-none focus:border-orange-500 disabled:bg-slate-100" /></td></tr>;
+                  })}
+                  {!brandEstNames.length && <tr><td colSpan={2} className="border border-slate-300 p-8 text-slate-500">이 거래처의 매출 자료에서 확인되는 브랜드가 없습니다.</td></tr>}
+                </tbody>
+                <tfoot><tr className="bg-orange-50 font-black"><td className="border border-orange-200 px-3 py-2 text-left">거래처 EST 합계</td><td className="border border-orange-200 px-3 py-2 text-right text-orange-700">{won(estMap.get(brandEstStore.code) || 0)}</td></tr></tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {openBrand && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/35 p-4" onMouseDown={() => setOpenBrand("")}>
           <div className="flex max-h-[82vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
@@ -6211,10 +6293,10 @@ function EstQuickEntry({
                           <input
                             type="text"
                             inputMode="numeric"
-                            disabled={!canEdit || store.status !== "거래중"}
+                            disabled={!canEditEst || store.status !== "거래중" || store.estInputMode === "brand"}
                             value={value ? won(value) : ""}
                             onChange={(event) => updateEst(store, num(event.target.value))}
-                            placeholder={store.status === "거래중" ? "0" : "입력 제외"}
+                            placeholder={store.estInputMode === "brand" ? "브랜드별 입력" : store.status === "거래중" ? (canEditEst ? "0" : "입력 기간 종료") : "입력 제외"}
                             className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
                           />
                         </td>
@@ -12458,6 +12540,7 @@ function StoreListManagement({
         storeType: saved?.storeType || row.storeType || "비매장",
         brand: displayBrand(saved?.brand || row.brand),
         status: "거래중",
+        estInputMode: saved?.estInputMode || "store",
       });
     });
 
@@ -12474,6 +12557,7 @@ function StoreListManagement({
         storeType: saved?.storeType || row.storeType || "비매장",
         brand: displayBrand(saved?.brand || row.brand),
         status: "거래종료",
+        estInputMode: saved?.estInputMode || "store",
       });
     });
 
@@ -13001,6 +13085,7 @@ function StoreListManagement({
                   <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2">현재 브랜드</th>
                   <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">채널</th>
                   <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">매장/비매장</th>
+                  <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-50 px-3 py-2">EST 입력 방식</th>
                   <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">상태</th>
                 </tr>
               </thead>
@@ -13066,6 +13151,21 @@ function StoreListManagement({
                         )}
                       </td>
                       <td className="border border-slate-300 px-3 py-2">
+                        <select
+                          value={row.estInputMode === "brand" ? "brand" : "store"}
+                          onChange={(event) => {
+                            event.stopPropagation();
+                            const estInputMode = event.target.value as "store" | "brand";
+                            setStores(totalRows.map((store) => store.code === row.code ? { ...store, estInputMode } : store));
+                          }}
+                          onClick={(event) => event.stopPropagation()}
+                          className="h-8 min-w-[118px] rounded-lg border border-amber-300 bg-amber-50 px-2 text-xs font-bold outline-none focus:border-orange-500"
+                        >
+                          <option value="store">거래처 합계</option>
+                          <option value="brand">브랜드별 입력</option>
+                        </select>
+                      </td>
+                      <td className="border border-slate-300 px-3 py-2">
                         <span className={`rounded-full px-3 py-1 font-bold ${row.status === "거래중" ? "bg-emerald-100 text-emerald-800" : row.status === "거래중단" ? "bg-amber-100 text-amber-900" : "bg-slate-200 text-slate-700"}`}>
                           {row.status}
                         </span>
@@ -13075,7 +13175,7 @@ function StoreListManagement({
                 })}
                 {!visibleOtherRows.length && (
                   <tr>
-                    <td colSpan={8} className="border border-slate-300 px-4 py-12 text-center text-sm text-slate-500">
+                    <td colSpan={9} className="border border-slate-300 px-4 py-12 text-center text-sm text-slate-500">
                       검색 조건에 맞는 거래처가 없습니다.
                     </td>
                   </tr>
