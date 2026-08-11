@@ -10135,7 +10135,10 @@ function SalesStatus({
   const firstSaleDateByStore = useMemo(() => {
     const map = new Map<string, string>();
     sales
-      .filter((record) => record.period === "current" && record.saleDate <= date)
+      // 당월 자료만 보면 전월/전년 업로드 이력이 누락되어 기존 거래처가
+      // 신규로 잘못 표시될 수 있습니다. 저장된 모든 period의 실제 판매일을
+      // 함께 비교해 거래처별 최초 매출일을 찾습니다.
+      .filter((record) => record.saleDate && record.saleDate <= date)
       .forEach((record) => {
         const resolved = resolveRecord(record);
         const key = resolved.code || resolved.name || record.storeCode || record.storeName;
