@@ -12532,6 +12532,7 @@ function StoreListManagement({
   type ListTab = "기존거래처 리스트" | "전년동월 리스트" | "총 거래처 리스트" | "기타 관리";
   const [listTab, setListTab] = useState<ListTab>("기존거래처 리스트");
   const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
   const [otherTab, setOtherTab] = useState<"담당자 관리" | "브랜드 관리" | "채널 관리" | "거래상태 관리" | "품목 관리">("담당자 관리");
   const [managerSubTab, setManagerSubTab] = useState<"EST 담당자 관리" | "거래처 담당자 관리">("EST 담당자 관리");
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
@@ -12567,6 +12568,7 @@ function StoreListManagement({
   useEffect(() => {
     setListTab(section === "list" ? "기존거래처 리스트" : "기타 관리");
     setSearch("");
+    setSearchDraft("");
     setSelectedCodes(new Set());
     setShowNewOnly(false);
     setManagerSubTab("EST 담당자 관리");
@@ -12812,16 +12814,43 @@ function StoreListManagement({
       .toLowerCase()
       .includes(normalizedSearch),
   );
-  const visibleTotalRows = totalRows.filter((row) =>
-    `${row.code} ${row.name} ${row.channel} ${row.manager} ${row.brand} ${row.status}`
-      .toLowerCase()
-      .includes(normalizedSearch),
-  );
   const newStoreCodes = new Set(
     existingRows
       .filter((row) => row.statusLabel === "당월 신규")
       .map((row) => row.code),
   );
+  const visibleTotalRows = totalRows.filter((row) => {
+    if (!normalizedSearch) return true;
+    if (section !== "reference") {
+      return `${row.code} ${row.name} ${row.channel} ${row.manager} ${row.brand} ${row.status}`
+        .toLowerCase()
+        .includes(normalizedSearch);
+    }
+
+    if (otherTab === "담당자 관리") {
+      const manager = normalizeManager(row.manager);
+      return normalizedSearch === "미지정"
+        ? !manager
+        : manager === normalizedSearch.toUpperCase();
+    }
+    if (otherTab === "브랜드 관리") {
+      const brand = displayBrand(row.brand).trim().toLowerCase();
+      const isNewStoreSearch = ["신규", "신규거래처", "신규 거래처", "당월 신규 거래처"]
+        .includes(normalizedSearch.replace(/\s+/g, " "));
+      if (isNewStoreSearch) {
+        return newStoreCodes.has(row.code) || brand === "당월 신규 거래처";
+      }
+      return brand.includes(normalizedSearch);
+    }
+    if (otherTab === "채널 관리") {
+      return row.channel.trim().toLowerCase() === normalizedSearch;
+    }
+    if (otherTab === "거래상태 관리") {
+      const statusAlias = normalizedSearch === "거래중지" ? "거래중단" : normalizedSearch;
+      return row.status.trim().toLowerCase() === statusAlias;
+    }
+    return true;
+  });
   const needsReferenceSetup = (row: Store) => {
     if (otherTab === "브랜드 관리") {
       const brand = displayBrand(row.brand).trim();
@@ -13138,6 +13167,8 @@ function StoreListManagement({
                     else {
                       setListTab("기타 관리");
                       setOtherTab(menu as typeof otherTab);
+                      setSearch("");
+                      setSearchDraft("");
                       setSelectedCodes(new Set());
                       setShowNewOnly(false);
                       setBrandDrafts({});
@@ -13155,6 +13186,8 @@ function StoreListManagement({
                         type="button"
                         onClick={() => {
                           setManagerSubTab(subMenu);
+                          setSearch("");
+                          setSearchDraft("");
                           setSelectedCodes(new Set());
                           setShowNewOnly(false);
                         }}
@@ -13176,7 +13209,41 @@ function StoreListManagement({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-extrabold text-slate-900">{section === "list" ? listTab : otherTab === "담당자 관리" ? managerSubTab : otherTab}</h2>
             <div className="flex flex-wrap items-center gap-2">
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={section === "reference" ? "거래처명/담당자/브랜드/채널 검색" : "사업자번호/거래처명/상태 검색"} className="h-8 w-[270px] rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-blue-500" />
+              <input
+                value={searchDraft}
+                onChange={(event) => setSearchDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  setSearch(searchDraft.trim());
+                  setSelectedCodes(new Set());
+                }}
+                placeholder={section !== "reference"
+                  ? "검색어 입력 후 Enter"
+                  : otherTab === "담당자 관리"
+                    ? "담당자 이니셜 또는 미지정 입력 후 Enter"
+                    : otherTab === "브랜드 관리"
+                      ? "브랜드명 또는 신규 거래처 입력 후 Enter"
+                      : otherTab === "채널 관리"
+                        ? "매장 또는 비매장 입력 후 Enter"
+                        : otherTab === "거래상태 관리"
+                          ? "거래중지·거래종료·거래중 입력 후 Enter"
+                          : "검색어 입력 후 Enter"}
+                className="h-8 w-[300px] rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-blue-500"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setSearchDraft("");
+                    setSelectedCodes(new Set());
+                  }}
+                  className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                >
+                  검색 초기화
+                </button>
+              )}
               {section === "list" && listTab === "총 거래처 리스트" && (
                 <button type="button" onClick={saveTotalList} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700">총 리스트 저장</button>
               )}
@@ -13250,8 +13317,6 @@ function StoreListManagement({
                       <option value="거래종료">거래종료</option>
                     </select>
                     <button type="button" onClick={() => applyBulkChange("status")} className="h-8 rounded-lg bg-violet-600 px-3 text-xs font-bold text-white">거래상태 일괄 수정</button>
-                    <span className="mx-1 h-5 w-px bg-slate-300" />
-                    {(["거래중", "거래중단", "거래종료"] as const).map((status) => <button key={status} type="button" onClick={() => setSearch(status)} className={`h-8 rounded-lg border px-3 text-xs font-bold ${search === status ? "border-violet-500 bg-violet-100 text-violet-800" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}>{status}</button>)}
                   </>
                 )}
               </div>
