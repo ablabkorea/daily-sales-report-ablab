@@ -30,6 +30,7 @@ type SalesStatusSortKey =
   | "timeGoneGap"
   | "est"
   | "estRate"
+  | "brandProgressRate"
   | "profitAmount"
   | "profitRate"
   | "lastOrderDate";
@@ -3968,6 +3969,8 @@ function salesKeysForMonth(baseKey: string, month: string) {
   return [
     salesChunkKey(baseKey, "current", month),
     salesChunkKey(baseKey, "current", addMonths(month, 1)),
+    salesChunkKey(baseKey, "current", previousMonth(month)),
+    salesChunkKey(baseKey, "current", addMonths(month, -12)),
     salesChunkKey(baseKey, "prevMonth", month),
     salesChunkKey(baseKey, "prevYear", month),
   ];
@@ -4103,6 +4106,22 @@ function asPreviousMonthSales(rows: SalesRecord[], targetMonth: string) {
     }));
 }
 
+function asPreviousYearSales(rows: SalesRecord[], targetMonth: string) {
+  const sourceMonth = addMonths(targetMonth, -12);
+  return rows
+    .filter((row) => {
+      if (row.period !== "current") return false;
+      const rowMonth = row.refMonth || row.saleDate.slice(0, 7);
+      return rowMonth === sourceMonth;
+    })
+    .map((row) => ({
+      ...row,
+      id: `prev-year-fallback:${targetMonth}:${row.id}`,
+      period: "prevYear" as PeriodType,
+      refMonth: targetMonth,
+    }));
+}
+
 async function replaceV3SalesBatch(request: SalesUploadRequest) {
   const api = d1SalesEndpoint("sales/replace");
   const response = await fetch(api.url, {
@@ -4177,6 +4196,7 @@ function useChunkedSales(
     const v3Periods = v3.periodsWithBatch;
     const legacyForUnmigratedPeriods = legacy.filter((row) => !v3Periods.has(row.period));
     let previousMonthFallback: SalesRecord[] = [];
+    let previousYearFallback: SalesRecord[] = [];
 
     // 선택 월에 전월 업로드가 따로 없으면, D1에 보존된 직전 월의 당월 매출을
     // 전월 매출로 연결합니다. 별도 전월 업로드가 존재할 때는 그 값을 우선합니다.
@@ -4196,10 +4216,28 @@ function useChunkedSales(
       }
     }
 
+
+    const alreadyHasPreviousYear =
+      v3Periods.has("prevYear") ||
+      legacyForUnmigratedPeriods.some(
+        (row) => row.period === "prevYear" && row.refMonth === targetMonth,
+      );
+    if (!alreadyHasPreviousYear) {
+      try {
+        const previousYearV3 = await loadV3SalesForMonth(addMonths(targetMonth, -12));
+        if (previousYearV3.available) {
+          previousYearFallback = asPreviousYearSales(previousYearV3.records, targetMonth);
+        }
+      } catch (error) {
+        console.warn("전년동월 매출 자동 연결 실패", error);
+      }
+    }
+
     return dedupeSales([
       ...legacyForUnmigratedPeriods,
       ...v3.records,
       ...previousMonthFallback,
+      ...previousYearFallback,
     ]);
   };
 
@@ -5977,13 +6015,6 @@ function EstQuickEntry({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-[12px] font-semibold text-sky-950">
-          <span>
-            {prevMonth} 당월 EST가 {month}의 전월 EST로 자동 연결됩니다. {month} 당월 EST는 새 입력값으로 별도 저장됩니다.
-          </span>
-          <span className="text-sky-700">월별 기록 유지 · 중복 이월 방지</span>
-        </div>
-
         <div
           className="flex min-h-[360px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
           style={{ height: "clamp(360px, calc(100vh - 430px), 600px)" }}
@@ -6826,7 +6857,7 @@ function KpiGroup({
           return (
             <div
               key={item.title}
-              className={`flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 rounded-lg px-1.5 py-0.5 first:pt-0 last:pb-0 ${item.separatorBefore ? "mt-1 border-t-4 border-double border-slate-400 pt-1.5" : ""} ${item.highlightClass || ""}`}
+              className={`flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 rounded-lg px-1.5 py-0.5 first:pt-0 last:pb-0 ${item.separatorBefore ? "mt-1 border-t border-slate-400 pt-1.5" : ""} ${item.highlightClass || ""}`}
             >
               <p className="shrink-0 break-keep text-[12px] font-semibold text-black">
                 {item.title}
@@ -10005,6 +10036,9 @@ function SalesStatus({
         }))
         .filter((item) => item.sales || item.est)
         .sort((a, b) => b.est - a.est || b.sales - a.sales || a.brand.localeCompare(b.brand, "ko-KR"));
+      const brandProgressSales = brandProgress.reduce((total, item) => total + item.sales, 0);
+      const brandProgressEst = brandProgress.reduce((total, item) => total + item.est, 0);
+      const brandProgressRate = brandProgressEst ? (brandProgressSales / brandProgressEst) * 100 : 0;
       const firstRecord = allRecords[0];
       const storeStatus = firstRecord
         ? resolveRecord(firstRecord).status
@@ -10032,6 +10066,7 @@ function SalesStatus({
         est,
         estRate,
         brandProgress,
+        brandProgressRate,
         profitAmount,
         profitRate,
         isEndedStore,
@@ -10625,7 +10660,7 @@ function SalesStatus({
                 <ThCompactSortable right tone="pink" top="top-[31px]" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>전체 매출</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" top="top-[31px]" className="period-group-start" w={compact ? "w-[5%]" : ""} sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
-                <ThCompact tone="yellow" top="top-[31px]" w="w-[16%]">브랜드별 진척률</ThCompact>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" w="w-[16%]" sortKey="brandProgressRate" sortConfig={sortConfig} onSort={requestSort}>브랜드별 진척률</ThCompactSortable>
                 <ThCompactSortable right tone="orange" top="top-[31px]" className="period-group-start" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
                 <ThCompactSortable right tone="orange" top="top-[31px]" w="w-[5%]" sortKey="profitRate" sortConfig={sortConfig} onSort={requestSort}>이익률</ThCompactSortable>
               </tr>
@@ -14401,7 +14436,7 @@ function UploadPage({
   const [holidayText, setHolidayText] = useState("");
   const [deleteDate, setDeleteDate] = useState(today());
 
-  async function uploadSales(file: File | null, period: PeriodType) {
+  async function uploadSales(file: File | null) {
     if (!file) return;
     const rows = await readFileRows(file);
     const parsed = rows
@@ -14411,8 +14446,7 @@ function UploadPage({
             r["일자"] ??
             r["매출일"] ??
             r["판매일"] ??
-            r["기준일"] ??
-            deleteDate,
+            r["기준일"],
         );
         const storeCode = norm(
           r["거래처 코드"] ?? r["거래처코드"] ?? r["매장코드"],
@@ -14457,9 +14491,10 @@ function UploadPage({
         );
         const mapping = storeMap(stores).get(storeCode);
 
+        const saleMonth = saleDate.slice(0, 7);
         return makeSale(
-          period,
-          month,
+          "current",
+          saleMonth,
           saleDate,
           storeCode,
           storeName,
@@ -14483,9 +14518,7 @@ function UploadPage({
             r.quantity !== 0),
       );
 
-    const missingStores =
-      period === "current"
-        ? parsed
+    const missingStores = parsed
             .filter((r) => !storeMap(stores).has(r.storeCode))
             .map((r) => ({
               code: r.storeCode,
@@ -14495,8 +14528,7 @@ function UploadPage({
               storeType: "매장" as StoreType,
               brand: displayBrand(r.brand),
               status: "거래중" as const,
-            }))
-        : [];
+            }));
 
     if (missingStores.length) {
       const map = new Map(stores.map((s) => [s.code, s]));
@@ -14511,50 +14543,61 @@ function UploadPage({
       return;
     }
 
-    const uploadedDates = Array.from(
-      new Set(parsed.map((r) => r.saleDate).filter(Boolean)),
-    );
-
     try {
-      const result = await salesActions.replaceUpload({
-        period,
-        refMonth: month,
-        fileName: file.name,
-        uploadedDates,
-        rows: parsed,
+      const rowsByMonth = new Map<string, SalesRecord[]>();
+      parsed.forEach((row) => {
+        const saleMonth = row.saleDate.slice(0, 7);
+        rowsByMonth.set(saleMonth, [...(rowsByMonth.get(saleMonth) || []), row]);
       });
-      if (result.mode === "legacy") {
-        console.warn("Sales V3 SQL이 아직 적용되지 않아 기존 저장 방식을 사용했습니다.");
+      for (const [saleMonth, monthRows] of Array.from(rowsByMonth.entries()).sort()) {
+        const uploadedDates = Array.from(new Set(monthRows.map((row) => row.saleDate))).sort();
+        const result = await salesActions.replaceUpload({
+          period: "current",
+          refMonth: saleMonth,
+          fileName: file.name,
+          uploadedDates,
+          rows: monthRows,
+        });
+        if (result.mode === "legacy") {
+          console.warn("Sales V3 SQL이 아직 적용되지 않아 기존 저장 방식을 사용했습니다.");
+        }
       }
 
-      if (period === "current") {
-        const itemMasterMap = new Map(itemMasters.map((item) => [item.itemCode, item]));
-        let addedItemCount = 0;
-        parsed.forEach((row) => {
-          if (!row.itemCode || itemMasterMap.has(row.itemCode)) return;
-          itemMasterMap.set(row.itemCode, {
-            itemCode: row.itemCode,
-            itemName: row.itemName || row.itemCode,
-            category: "미지정",
-            supplier: "미지정",
-            source: "sales",
-            firstSeenMonth: month,
-            active: true,
-            memo: "당월 매출 로우 파일에서 자동 추가",
-          });
-          addedItemCount += 1;
+      const itemMasterMap = new Map(itemMasters.map((item) => [item.itemCode, item]));
+      let addedItemCount = 0;
+      parsed.forEach((row) => {
+        if (!row.itemCode || itemMasterMap.has(row.itemCode)) return;
+        itemMasterMap.set(row.itemCode, {
+          itemCode: row.itemCode,
+          itemName: row.itemName || row.itemCode,
+          category: "미지정",
+          supplier: "미지정",
+          source: "sales",
+          firstSeenMonth: row.saleDate.slice(0, 7),
+          active: true,
+          memo: "통합 매출 로우 파일에서 자동 추가",
         });
-        if (addedItemCount > 0) setItemMasters(Array.from(itemMasterMap.values()));
-      }
+        addedItemCount += 1;
+      });
+      if (addedItemCount > 0) setItemMasters(Array.from(itemMasterMap.values()));
     } catch (error) {
       console.error("매출 업로드 저장 실패", error);
       alert("매출 저장에 실패했습니다. 기존 데이터는 그대로 유지됩니다. Cloudflare D1 연결 상태를 확인해 주세요.");
       return;
     }
 
-    const closedMessage = "";
+    const monthSummary = Array.from(
+      parsed.reduce((map, row) => {
+        const saleMonth = row.saleDate.slice(0, 7);
+        map.set(saleMonth, (map.get(saleMonth) || 0) + 1);
+        return map;
+      }, new Map<string, number>()),
+    )
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([saleMonth, count]) => `${saleMonth}: ${count.toLocaleString("ko-KR")}건`)
+      .join("\n");
     alert(
-      `${period === "current" ? "당월" : period === "prevMonth" ? "전월" : "전년동월"} 매출 ${parsed.length}건을 반영했습니다.\n반영 날짜: ${uploadedDates.join(", ")}${closedMessage}`,
+      `통합 매출 ${parsed.length.toLocaleString("ko-KR")}건을 날짜 기준으로 반영했습니다.\n${monthSummary}`,
     );
   }
 
@@ -14790,21 +14833,11 @@ function UploadPage({
             {salesActions.storageMode === "v3" ? "안전 저장 V3" : salesActions.storageMode === "checking" ? "저장소 확인 중" : "기존 저장 방식"}
           </span>
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
           <UploadBox
-            title="당월 매출 업로드"
-            description="같은 날짜 파일을 다시 올리면 해당 날짜 기존 당월 매출을 삭제하고 새 파일로 업데이트합니다."
-            onUpload={(file) => uploadSales(file, "current")}
-          />
-          <UploadBox
-            title="전월 매출 업로드"
-            description="매출비교와 매출현황의 전월 매출 기준으로 사용합니다. 같은 기준월 자료는 새 파일로 교체됩니다."
-            onUpload={(file) => uploadSales(file, "prevMonth")}
-          />
-          <UploadBox
-            title="전년동월 매출 업로드"
-            description="매출비교와 매출현황의 전년동월 매출 기준으로 사용합니다. 같은 기준월 자료는 새 파일로 교체됩니다."
-            onUpload={(file) => uploadSales(file, "prevYear")}
+            title="통합 매출 업로드"
+            description="파일의 일자를 읽어 월별로 자동 저장합니다. 여러 월이 섞인 파일도 처리하며, 같은 날짜를 다시 올리면 해당 날짜 자료만 교체됩니다."
+            onUpload={uploadSales}
           />
           <UploadBox
             title="품목 정보 업로드"
