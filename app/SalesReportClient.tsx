@@ -100,6 +100,13 @@ type TargetRecord = {
   storeName?: string;
 };
 
+type EstHeaderSummary = {
+  manager: string;
+  storeEst: number;
+  nonStoreEst: number;
+  targetTotal: number;
+};
+
 type EstRecord = {
   storeCode: string;
   storeName: string;
@@ -3321,6 +3328,17 @@ function today() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function todayInSeoul() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: "year" | "month" | "day") => parts.find((part) => part.type === type)?.value || "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
 function thisMonth() {
   return today().slice(0, 7);
 }
@@ -4561,12 +4579,14 @@ async function hashAdminPassword(value: string) {
     .join("");
 }
 
-function isEstEntryPeriodToday() {
-  return Number(today().slice(8, 10)) <= 5;
+function isEstEntryPeriodOpen(month: string) {
+  const seoulToday = todayInSeoul();
+  return seoulToday.slice(0, 7) === month && Number(seoulToday.slice(8, 10)) <= 5;
 }
 
 export default function SalesReportClient() {
   const [active, setActive] = useState("EST 입력");
+  const [estHeaderSummary, setEstHeaderSummary] = useState<EstHeaderSummary | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
   const [menuVisibility, setMenuVisibility] = useLocal<Record<MainMenuLabel, boolean>>(
@@ -4758,7 +4778,6 @@ export default function SalesReportClient() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-extrabold text-slate-900">카테고리 공개 설정</h2>
-                <p className="mt-1 text-xs text-slate-500">열림 메뉴만 일반 화면에 표시됩니다. 관리자는 설정을 위해 전체 메뉴를 계속 볼 수 있습니다.</p>
               </div>
               <button type="button" onClick={() => setMenuSettingsOpen(false)} className="rounded-lg px-2 py-1 text-lg font-bold text-slate-500 hover:bg-slate-100">×</button>
             </div>
@@ -5140,6 +5159,16 @@ export default function SalesReportClient() {
               <HeaderTimeInfo title="총일수" value={tg.totalDays} />
               <HeaderTimeInfo title="진행일수" value={tg.progressedDays} />
               <HeaderTimeInfo title="잔여일수" value={tg.remainingDays} />
+              {active === "EST 입력" && !isEstEntryPeriodOpen(dashMonth) && estHeaderSummary && (
+                <div className="ml-auto rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-right text-[12px] font-extrabold text-slate-800 shadow-sm">
+                  <div className="mb-0.5 text-[10px] text-orange-700">{estHeaderSummary.manager}</div>
+                  <span>매장 EST 합계 : {won(estHeaderSummary.storeEst)}</span>
+                  <span className="mx-2 text-slate-400">/</span>
+                  <span>비매장 EST 합계 : {won(estHeaderSummary.nonStoreEst)}</span>
+                  <span className="mx-2 text-slate-400">|</span>
+                  <span>Target 합계 : {won(estHeaderSummary.targetTotal)}</span>
+                </div>
+              )}
               {active === "매출현황" && (
                 <SalesTargetHeaderKpi
                   stores={stores}
@@ -5176,9 +5205,10 @@ export default function SalesReportClient() {
             targets={targets}
             setTargets={setTargets}
             month={dashMonth}
-            canEdit={true}
+            canEdit={isEstEntryPeriodOpen(dashMonth)}
             isAdmin={isAdmin}
             managerConfigs={managerConfigs}
+            onSummaryChange={setEstHeaderSummary}
           />
         )}
         {active === "대시보드" && (
@@ -5375,6 +5405,7 @@ function EstQuickEntry({
   canEdit,
   isAdmin,
   managerConfigs,
+  onSummaryChange,
 }: {
   stores: Store[];
   setStores: (v: Store[]) => void;
@@ -5387,6 +5418,7 @@ function EstQuickEntry({
   canEdit: boolean;
   isAdmin: boolean;
   managerConfigs: ManagerConfig[];
+  onSummaryChange: (summary: EstHeaderSummary | null) => void;
 }) {
   const activeManagers = useMemo(
     () => managerConfigs
@@ -5650,14 +5682,21 @@ function EstQuickEntry({
   const nonStoreEstTotal = rows
     .filter((store) => store.storeType !== "매장")
     .reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0);
-  const monthlyEstSummary = useMemo(
-    () => metricsByStoreType(stores, targets, ests, month),
-    [stores, targets, ests, month],
-  );
-  const monthlyEstTotal =
-    monthlyEstSummary.storeEst +
-    monthlyEstSummary.nonStoreEst +
-    monthlyEstSummary.unregisteredEst;
+  const selectedManagerEstSummary = useMemo(() => {
+    const selectedStores = stores.filter(
+      (store) => store.manager.trim().toUpperCase() === selectedManager,
+    );
+    const selectedCodes = new Set(selectedStores.map((store) => store.code));
+    const totals = { storeEst: 0, nonStoreEst: 0 };
+    ests
+      .filter((row) => row.month === month && selectedCodes.has(row.storeCode))
+      .forEach((row) => {
+        const store = selectedStores.find((item) => item.code === row.storeCode);
+        if (store?.storeType === "매장") totals.storeEst += Number(row.amount || 0);
+        else totals.nonStoreEst += Number(row.amount || 0);
+      });
+    return totals;
+  }, [stores, ests, month, selectedManager]);
 
   const currentSalesByBrand = useMemo(() => {
     const map = new Map<string, number>();
@@ -5694,6 +5733,21 @@ function EstQuickEntry({
     statusView === "active" ? "거래중" : statusView === "paused" ? "거래중지" : "거래종료";
   const selectedManagerConfig = activeManagers.find((config) => config.name === selectedManager);
   const canEditTarget = canEdit && Boolean(selectedManagerConfig?.canTarget);
+  const targetTotal = targetByType.store + targetByType.nonStore;
+
+  useEffect(() => {
+    if (!selectedManager) {
+      onSummaryChange(null);
+      return;
+    }
+    onSummaryChange({
+      manager: selectedManager,
+      storeEst: selectedManagerEstSummary.storeEst,
+      nonStoreEst: selectedManagerEstSummary.nonStoreEst,
+      targetTotal,
+    });
+    return () => onSummaryChange(null);
+  }, [selectedManager, selectedManagerEstSummary.storeEst, selectedManagerEstSummary.nonStoreEst, targetTotal, onSummaryChange]);
 
   const selectedManagerStoreCodes = useMemo(
     () =>
@@ -5893,9 +5947,6 @@ function EstQuickEntry({
               <span>당월 EST 초기화</span>
               <span>({selectedManagerEstInputCount}건)</span>
             </button>
-            <p className="mt-1.5 text-center text-[10px] font-semibold leading-4 text-slate-500">
-              {selectedManager} 담당자만 초기화 · 전월 EST와 Target 유지
-            </p>
           </div>
         )}
 
@@ -5941,31 +5992,15 @@ function EstQuickEntry({
         <div className="rounded-2xl border border-slate-300 bg-white p-3 shadow-sm">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
             <div className="flex flex-wrap items-stretch gap-3">
-              <div className="min-w-[310px] overflow-hidden rounded-xl border border-amber-200 bg-[#FFFDF2] shadow-sm">
-                <div className="border-b border-amber-200 bg-[#FFF8D9] px-4 py-2 text-center text-[13px] font-extrabold text-slate-900">
-                  EST 입력 합계
+              {canEdit && (
+                <div className="flex min-h-[48px] items-center rounded-xl border border-amber-200 bg-[#FFFDF2] px-4 py-2 text-[12px] font-extrabold text-slate-800 shadow-sm">
+                  <span>매장 EST 합계 : {won(selectedManagerEstSummary.storeEst)}</span>
+                  <span className="mx-2 text-slate-400">/</span>
+                  <span>비매장 EST 합계 : {won(selectedManagerEstSummary.nonStoreEst)}</span>
+                  <span className="mx-2 text-slate-400">|</span>
+                  <span>Target 합계 : {won(targetTotal)}</span>
                 </div>
-                <div className="grid grid-cols-2 divide-x divide-amber-200">
-                  <div className="px-4 py-2.5 text-center">
-                    <div className="text-[12px] font-bold text-slate-600">매장 EST</div>
-                    <div className="mt-1 text-[18px] font-black text-slate-900">{won(monthlyEstSummary.storeEst)}</div>
-                  </div>
-                  <div className="px-4 py-2.5 text-center">
-                    <div className="text-[12px] font-bold text-slate-600">비매장 EST</div>
-                    <div className="mt-1 text-[18px] font-black text-slate-900">{won(monthlyEstSummary.nonStoreEst)}</div>
-                  </div>
-                </div>
-                {monthlyEstSummary.unregisteredEst !== 0 && (
-                  <div className="flex items-center justify-between border-t border-rose-200 bg-rose-50 px-4 py-2 text-[11px] font-extrabold text-rose-700">
-                    <span>미등록 거래처 EST</span>
-                    <span>{won(monthlyEstSummary.unregisteredEst)}</span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between border-t border-amber-200 bg-[#FFF9E3] px-4 py-2.5">
-                  <span className="text-[12px] font-extrabold text-slate-700">총 EST 합계</span>
-                  <span className="text-[18px] font-black text-orange-700">{won(monthlyEstTotal)}</span>
-                </div>
-              </div>
+              )}
 
               {selectedManagerConfig?.canTarget && (
                 <div className="w-[330px] max-w-full shrink-0 overflow-hidden rounded-xl border border-violet-200 bg-[#F7F4FF] shadow-sm">
@@ -5997,10 +6032,6 @@ function EstQuickEntry({
                         className="mt-1 h-8 w-full min-w-0 rounded-lg border border-violet-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
                       />
                     </label>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-violet-200 bg-[#F1ECFF] px-4 py-2.5">
-                    <span className="text-[12px] font-extrabold text-violet-950">총 Target 합계</span>
-                    <span className="text-[18px] font-black text-violet-800">{won(targetByType.store + targetByType.nonStore)}</span>
                   </div>
                 </div>
               )}
@@ -6096,7 +6127,6 @@ function EstQuickEntry({
                         <div className="truncate font-semibold text-slate-800" title={row.stores.map((store) => store.name).join("\n")}>
                           {row.stores.map((store) => store.name).join(" · ")}
                         </div>
-                        <div className="mt-1 text-[10px] font-bold text-slate-500">{row.stores.length}개 센터를 하나의 브랜드 EST로 집계</div>
                       </td>
                       <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.prevYearSales)}</td>
                       <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.prevSales)}</td>
@@ -6316,7 +6346,6 @@ function EstQuickEntry({
             <div className="flex items-center justify-between border-b border-slate-200 bg-orange-50 px-5 py-3">
               <div>
                 <h3 className="text-base font-black text-slate-900">{openBrand}</h3>
-                <p className="mt-0.5 text-xs font-semibold text-slate-500">거래처별 전년동월·전월 매출을 확인하면서 당월 EST를 입력할 수 있습니다.</p>
               </div>
               <button type="button" onClick={() => setOpenBrand("")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50">닫기</button>
             </div>
@@ -10033,6 +10062,46 @@ function SalesStatus({
     return currentFullMonthRows;
   };
 
+  const fullBrandProgressMap = new Map<string, {
+    sales: number;
+    est: number;
+    stores: Map<string, { name: string; sales: number; est: number }>;
+  }>();
+  const ensureFullBrand = (brand: string) => {
+    const existing = fullBrandProgressMap.get(brand);
+    if (existing) return existing;
+    const created = { sales: 0, est: 0, stores: new Map<string, { name: string; sales: number; est: number }>() };
+    fullBrandProgressMap.set(brand, created);
+    return created;
+  };
+  sales
+    .filter((record) => record.period === "current" && inRange(record.saleDate, monthStart(month), date))
+    .forEach((record) => {
+      const resolved = resolveRecord(record);
+      const brand = displayBrand(resolved.brand) || "미지정";
+      const group = ensureFullBrand(brand);
+      const storeId = resolved.code || record.storeCode || resolved.name || record.storeName || "미지정";
+      const store = group.stores.get(storeId) || { name: resolved.name || record.storeName || storeId, sales: 0, est: 0 };
+      const amount = Number(record.salesAmount || 0);
+      group.sales += amount;
+      store.sales += amount;
+      group.stores.set(storeId, store);
+    });
+  ests
+    .filter((record) => record.month === month)
+    .forEach((record) => {
+      const mapped = stMap.get(record.storeCode);
+      const resolved = resolveStoreInfo(record.storeCode, record.storeName, mapped || {}, stores);
+      const brand = displayBrand(resolved.brand) || "미지정";
+      const group = ensureFullBrand(brand);
+      const storeId = resolved.code || record.storeCode || resolved.name || record.storeName || "미지정";
+      const store = group.stores.get(storeId) || { name: resolved.name || record.storeName || storeId, sales: 0, est: 0 };
+      const amount = Number(record.amount || 0);
+      group.est += amount;
+      store.est += amount;
+      group.stores.set(storeId, store);
+    });
+
   const rows = keys
     .map((key) => {
       const currentRecords = currentMap.get(key) || [];
@@ -10126,7 +10195,7 @@ function SalesStatus({
             Number(record.amount || 0),
           );
         });
-      const brandProgress = Array.from(brandProgressMap.entries())
+      let brandProgress = Array.from(brandProgressMap.entries())
         .map(([brand, value]) => ({
           brand,
           sales: value.sales,
@@ -10138,6 +10207,22 @@ function SalesStatus({
         }))
         .filter((item) => item.sales || item.est)
         .sort((a, b) => b.est - a.est || b.sales - a.sales || a.brand.localeCompare(b.brand, "ko-KR"));
+      if (isStoreListView) {
+        const rowStore = stMap.get(key) || allRecords.map(resolveRecord).find((store) => (store.code || store.name) === key);
+        const rowBrand = displayBrand(rowStore?.brand) || "미지정";
+        const fullBrand = fullBrandProgressMap.get(rowBrand);
+        brandProgress = fullBrand && (fullBrand.sales || fullBrand.est)
+          ? [{
+              brand: rowBrand,
+              sales: fullBrand.sales,
+              est: fullBrand.est,
+              stores: Array.from(fullBrand.stores.values())
+                .filter((store) => store.sales || store.est)
+                .sort((a, b) => b.est - a.est || b.sales - a.sales || a.name.localeCompare(b.name, "ko-KR")),
+              rate: fullBrand.est ? (fullBrand.sales / fullBrand.est) * 100 : 0,
+            }]
+          : [];
+      }
       const brandProgressSales = brandProgress.reduce((total, item) => total + item.sales, 0);
       const brandProgressEst = brandProgress.reduce((total, item) => total + item.est, 0);
       const brandProgressRate = brandProgressEst ? (brandProgressSales / brandProgressEst) * 100 : 0;
@@ -10525,10 +10610,6 @@ function SalesStatus({
         <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-900">매출현황</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              상단 헤더를 클릭하면 내림차순/오름차순으로 정렬됩니다. 금액을
-              클릭하면 해당 주문내역을 볼 수 있습니다.
-            </p>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {compact && (
@@ -11301,10 +11382,6 @@ function DormantAccountPage({
       <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-base font-bold text-slate-900">휴면거래처관리</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            3개월 미주문 거래처와 품목을 확인하고 엑셀 다운로드 또는 메일 전송용
-            파일을 만들 수 있습니다. 기준 기간: {startDate} ~ {endDate}
-          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -12009,9 +12086,6 @@ function SalesCompare({
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-lg font-bold text-slate-900">매출비교</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            거래처별 전년동월 / 전월 / 당월 매출을 비교합니다.
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -12344,7 +12418,6 @@ function ItemMasterManagement({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-sm font-extrabold text-slate-900">품목 기준정보</h2>
-            <p className="mt-1 text-[11px] font-semibold text-slate-500">품목코드·품목명은 기준 품목리스트와 당월 매출 자료에서 자동 표시됩니다. 관리자는 카테고리와 매입처만 수정할 수 있으며, 신규품목 표시는 최초 매출 발생월에만 나타납니다.</p>
           </div>
           <input
             value={search}
@@ -13220,7 +13293,6 @@ function StoreListManagement({
               <tbody>{brandUploadPreview.map((row) => <tr key={`${row.rowNumber}-${row.inputCode}-${row.inputName}`} className={row.status === "정상" ? "bg-emerald-50/30" : row.status === "건너뜀" ? "bg-slate-50" : "bg-red-50/40"}><td className="border border-slate-200 px-2 py-1.5">{row.rowNumber}</td><td className="border border-slate-200 px-2 py-1.5">{row.inputCode || "-"}</td><td className="border border-slate-200 px-2 py-1.5 text-left">{row.inputName || "-"}</td><td className="border border-slate-200 px-2 py-1.5 text-left">{row.storeName ? `${row.storeCode} / ${row.storeName}` : "-"}</td><td className="border border-slate-200 px-2 py-1.5">{row.beforeBrand || "-"}</td><td className="border border-slate-200 px-2 py-1.5 font-bold text-emerald-800">{row.afterBrand || row.inputBrand || "-"}</td><td className="border border-slate-200 px-2 py-1.5"><span className={`rounded-full px-2 py-0.5 font-bold ${row.status === "정상" ? "bg-emerald-100 text-emerald-800" : row.status === "건너뜀" ? "bg-slate-200 text-slate-700" : "bg-red-100 text-red-700"}`}>{row.status}</span></td><td className="border border-slate-200 px-2 py-1.5 text-left text-slate-600">{row.reason}</td></tr>)}</tbody>
             </table>
           </div>
-          <div className="mt-2 text-[11px] font-semibold text-slate-500">사업자번호를 우선 확인합니다. 번호와 이름이 서로 다른 거래처를 가리키면 반영하지 않으며, 빈 브랜드는 유지하고 ‘삭제’는 ‘미지정’으로 변경합니다.</div>
         </div>
       )}
 
@@ -13681,12 +13753,6 @@ function MappingPage({
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-base font-bold">거래처 매핑관리</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            채널/담당자/브랜드 정보를 거래처코드 기준으로 관리합니다. 전년동월
-            매출은 당월 매출에 같은 거래처코드나 거래처명이 있으면 당월 거래처
-            기준으로 합산하고, 당월 매출이 없으면 전년동월 업로드 거래처
-            기준으로 별도 표시합니다.
-          </p>
         </div>
         <label className="shrink-0 cursor-pointer rounded-md bg-green-600 px-2 py-1 text-[11px] font-semibold text-white">
           매핑 엑셀 업로드
@@ -13856,9 +13922,6 @@ function MappingPage({
                 <h3 className="text-lg font-bold text-slate-900">
                   전년동월 거래처 매핑 검증
                 </h3>
-                <p className="mt-1 text-xs text-slate-500">
-                  검증표는 필요할 때만 열어서 수동 매핑을 설정합니다.
-                </p>
               </div>
               <button
                 type="button"
@@ -13875,12 +13938,6 @@ function MappingPage({
                     <h3 className="text-sm font-bold text-slate-900">
                       전년동월 거래처 매핑 검증
                     </h3>
-                    <p className="mt-1 text-xs text-slate-500">
-                      전년동월 업로드 거래처를 당월 매출 거래처 기준으로
-                      비교합니다. 코드나 거래처명 중 하나라도 당월 매출과 같으면
-                      당월 거래처 기준으로 자동 합산되고, 당월 매출이 없으면
-                      전년동월 업로드 거래처 기준으로 표시됩니다.
-                    </p>
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
                     <span>자동 {mappingSummary["자동 매핑"] || 0}건</span>
@@ -14193,9 +14250,6 @@ function TargetByTypePage({
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-lg font-bold">Target 관리</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Target은 거래처별이 아니라 매장 / 비매장 기준으로만 관리합니다.
-          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -14361,9 +14415,6 @@ function TargetOrEstPage({
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-lg font-bold">{title}</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            거래처별 {title.replace(" 관리", "")} 금액을 관리합니다.
-          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <label className="cursor-pointer rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white">
@@ -14996,10 +15047,6 @@ function UploadPage({
 
       <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-5 shadow-sm backdrop-blur">
         <h2 className="mb-3 text-lg font-bold">TIME GONE 공휴일 설정</h2>
-        <p className="mb-3 text-sm text-slate-500">
-          월~금 일반일 1일, 공휴일 0.5일, 토요일 0.5일, 일요일 0.5일
-          기준입니다.
-        </p>
         <textarea
           value={holidayText}
           onChange={(e) => setHolidayText(e.target.value)}
