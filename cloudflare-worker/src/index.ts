@@ -96,6 +96,48 @@ async function getSales(url: URL, env: Env) {
   return json({ available: true, records: result.results || [], batches: batches.results || [] });
 }
 
+async function getPriorYearStoreHistory(url: URL, env: Env) {
+  const baseMonth = url.searchParams.get("baseMonth") || "";
+  if (!/^\d{4}-\d{2}$/.test(baseMonth)) return json({ error: "Invalid baseMonth" }, 400);
+
+  const [yearText, monthText] = baseMonth.split("-");
+  const monthNumber = Number(monthText);
+  if (monthNumber < 1 || monthNumber > 12) return json({ error: "Invalid baseMonth" }, 400);
+
+  const rangeStart = `${yearText}-01-01`;
+  const rangeEnd = `${baseMonth}-01`;
+  if (monthNumber === 1) {
+    return json({
+      available: true,
+      baseMonth,
+      rangeStart,
+      rangeEnd,
+      stores: [],
+    });
+  }
+
+  const result = await env.DB.prepare(
+    `SELECT r.customer_code AS store_code,
+            MAX(r.customer_name) AS store_name,
+            MIN(r.sales_date) AS first_sale_date
+       FROM sales_records r
+       JOIN sales_upload_batches b ON b.id = r.batch_id
+      WHERE r.period_type = 'current'
+        AND b.status = 'success'
+        AND r.sales_date >= ?
+        AND r.sales_date < ?
+      GROUP BY r.customer_code`,
+  ).bind(rangeStart, rangeEnd).all();
+
+  return json({
+    available: true,
+    baseMonth,
+    rangeStart,
+    rangeEnd,
+    stores: result.results || [],
+  });
+}
+
 async function replaceSales(request: Request, env: Env) {
   const payload = await request.json<ReplacePayload>();
   if (!payload || !["current", "prevMonth", "prevYear"].includes(payload.period) || !/^\d{4}-\d{2}$/.test(payload.refMonth) || !Array.isArray(payload.rows)) {
@@ -200,6 +242,7 @@ export default {
         if (request.method === "PUT") return putSetting(request, env, key);
       }
       if (request.method === "GET" && path === "/sales") return getSales(url, env);
+      if (request.method === "GET" && path === "/sales/prior-year-store-history") return getPriorYearStoreHistory(url, env);
       if (request.method === "POST" && path === "/sales/replace") return replaceSales(request, env);
       if (request.method === "POST" && path === "/sales/delete-date") return deleteSalesDate(request, env);
       return json({ error: "Not found" }, 404);

@@ -4021,6 +4021,12 @@ type V3SalesRecordRow = {
   profit_rate: number | string;
 };
 
+type PriorYearStoreHistoryRow = {
+  store_code: string;
+  store_name: string;
+  first_sale_date: string;
+};
+
 function d1SalesEndpoint(path: string) {
   return {
     url: `/api/d1/${path.replace(/^\/+/, "")}`,
@@ -4096,6 +4102,17 @@ async function loadV3SalesForMonth(month: string): Promise<{
     periodsWithBatch: new Set((payload.batches || []).map((row) => row.period)),
     records: (payload.records || []).map(fromV3Row),
   };
+}
+
+async function loadPriorYearStoreHistory(month: string): Promise<PriorYearStoreHistoryRow[]> {
+  const api = d1SalesEndpoint("sales/prior-year-store-history");
+  const response = await fetch(
+    `${api.url}?baseMonth=${encodeURIComponent(month)}`,
+    { method: "GET", headers: api.headers, cache: "no-store" },
+  );
+  if (!response.ok) throw new Error(`D1 prior-year history load failed: ${response.status}`);
+  const payload = (await response.json()) as { stores?: PriorYearStoreHistoryRow[] };
+  return payload.stores || [];
 }
 
 function asPreviousMonthSales(rows: SalesRecord[], targetMonth: string) {
@@ -9813,7 +9830,26 @@ function SalesStatus({
   const [hideEndedStores, setHideEndedStores] = useState(false);
   const [channelTypeFilter, setChannelTypeFilter] = useState<"all" | "store" | "nonStore">("all");
   const [newStoreFilter, setNewStoreFilter] = useState<"all" | "new">("all");
+  const [priorYearStoreHistory, setPriorYearStoreHistory] = useState<PriorYearStoreHistoryRow[] | null>(null);
+  const [priorYearHistoryError, setPriorYearHistoryError] = useState(false);
   const [selectedManagers, setSelectedManagers] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPriorYearStoreHistory(null);
+    setPriorYearHistoryError(false);
+    loadPriorYearStoreHistory(month)
+      .then((rows) => {
+        if (!cancelled) setPriorYearStoreHistory(rows);
+      })
+      .catch((error) => {
+        console.warn("금년 과거 매출 이력 조회 실패", error);
+        if (!cancelled) setPriorYearHistoryError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [month]);
 
   const normalizedSearch = search.trim().toLowerCase();
   const stMap = storeMap(stores);
@@ -10132,28 +10168,37 @@ function SalesStatus({
     return map;
   }, [sales, date, view, stores, codeMappings]);
 
-  const firstSaleDateByStore = useMemo(() => {
-    const map = new Map<string, string>();
-    sales
-      // 당월 자료만 보면 전월/전년 업로드 이력이 누락되어 기존 거래처가
-      // 신규로 잘못 표시될 수 있습니다. 저장된 모든 period의 실제 판매일을
-      // 함께 비교해 거래처별 최초 매출일을 찾습니다.
-      .filter((record) => record.saleDate && record.saleDate <= date)
-      .forEach((record) => {
-        const resolved = resolveRecord(record);
-        const key = resolved.code || resolved.name || record.storeCode || record.storeName;
-        if (!key) return;
-        const previous = map.get(key);
-        if (!previous || record.saleDate < previous) map.set(key, record.saleDate);
-      });
-    return map;
-  }, [sales, date, stores, codeMappings]);
+  const priorYearStoreKeys = useMemo(() => {
+    if (!priorYearStoreHistory) return null;
+    const keys = new Set<string>();
+    priorYearStoreHistory.forEach((row) => {
+      const manual = findManualMapping(row.store_code, row.store_name);
+      const mappedCode = manual?.currentCode || row.store_code;
+      const mappedName = manual?.currentName || row.store_name;
+      const resolved = resolveStoreInfo(mappedCode, mappedName, {}, stores);
+      const codeKey = norm(resolved.code || mappedCode);
+      const nameKey = normalizeStoreNameKey(resolved.name || mappedName);
+      if (codeKey) keys.add(`code:${codeKey}`);
+      if (nameKey) keys.add(`name:${nameKey}`);
+    });
+    return keys;
+  }, [priorYearStoreHistory, stores, codeMappings]);
 
   const isFirstSaleInSelectedMonth = (record: SalesRecord) => {
+    if (!priorYearStoreKeys) return false;
+    if (
+      record.period !== "current" ||
+      !record.saleDate ||
+      record.saleDate > date ||
+      record.saleDate.slice(0, 7) !== month
+    ) return false;
     const resolved = resolveRecord(record);
-    const key = resolved.code || resolved.name || record.storeCode || record.storeName;
-    const firstSaleDate = key ? firstSaleDateByStore.get(key) : undefined;
-    return Boolean(firstSaleDate && firstSaleDate <= date && firstSaleDate.slice(0, 7) === month);
+    const codeKey = norm(resolved.code || record.storeCode);
+    const nameKey = normalizeStoreNameKey(resolved.name || record.storeName);
+    return !(
+      (codeKey && priorYearStoreKeys.has(`code:${codeKey}`)) ||
+      (nameKey && priorYearStoreKeys.has(`name:${nameKey}`))
+    );
   };
 
   const getDrillRows = (key: string, period: DrillPeriod) => {
@@ -10723,6 +10768,12 @@ function SalesStatus({
         <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-900">매출현황</h2>
+            {priorYearStoreHistory === null && !priorYearHistoryError && (
+              <div className="mt-1 text-[11px] font-medium text-slate-500">금년 과거 매출 이력 확인 중...</div>
+            )}
+            {priorYearHistoryError && (
+              <div className="mt-1 text-[11px] font-bold text-red-600">금년 과거 매출 이력을 불러오지 못해 신규 표시를 중지했습니다.</div>
+            )}
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {compact && (
@@ -10937,6 +10988,7 @@ function SalesStatus({
                         value={newStoreFilter}
                         onChange={(event) => setNewStoreFilter(event.target.value as "all" | "new")}
                         onClick={(event) => event.stopPropagation()}
+                        disabled={priorYearStoreHistory === null}
                         className="h-7 w-full min-w-[62px] rounded-md border border-slate-300 bg-white px-1 text-[11px] font-bold text-slate-700 outline-none"
                         aria-label="매출현황 신규 거래처 필터"
                       >
