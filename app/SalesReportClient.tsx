@@ -5175,6 +5175,8 @@ export default function SalesReportClient() {
               sales={sales}
               targets={targets}
               ests={ests}
+              setEsts={setEsts}
+              isAdmin={isAdmin}
               itemCosts={itemCosts}
               month={dashMonth}
               date={dashDate}
@@ -7094,6 +7096,8 @@ function DashboardTopKpis({
   sales,
   targets,
   ests,
+  setEsts,
+  isAdmin,
   itemCosts,
   month,
   date,
@@ -7102,12 +7106,15 @@ function DashboardTopKpis({
   sales: SalesRecord[];
   targets: TargetRecord[];
   ests: EstRecord[];
+  setEsts: React.Dispatch<React.SetStateAction<EstRecord[]>>;
+  isAdmin: boolean;
   itemCosts: ItemCostRecord[];
   month: string;
   date: string;
 }) {
   const [costAlertOpen, setCostAlertOpen] = useState(false);
   const [unregisteredEstOpen, setUnregisteredEstOpen] = useState(false);
+  const [selectedUnregisteredEstCodes, setSelectedUnregisteredEstCodes] = useState<Set<string>>(new Set());
   const current = sales.filter(
     (s) =>
       s.period === "current" && inRange(s.saleDate, monthStart(month), date),
@@ -7154,6 +7161,61 @@ function DashboardTopKpis({
   )
     .map(([storeCode, amount]) => ({ storeCode, amount }))
     .sort((a, b) => b.amount - a.amount || a.storeCode.localeCompare(b.storeCode, "ko-KR"));
+
+  useEffect(() => {
+    const visibleCodes = new Set(unregisteredEstRows.map((row) => row.storeCode));
+    setSelectedUnregisteredEstCodes((previous) => {
+      const next = new Set(Array.from(previous).filter((code) => visibleCodes.has(code)));
+      if (next.size === previous.size && Array.from(next).every((code) => previous.has(code))) return previous;
+      return next;
+    });
+  }, [month, ests, stores]);
+
+  const allUnregisteredEstSelected =
+    unregisteredEstRows.length > 0 && unregisteredEstRows.every((row) => selectedUnregisteredEstCodes.has(row.storeCode));
+
+  function toggleUnregisteredEstCode(storeCode: string) {
+    setSelectedUnregisteredEstCodes((previous) => {
+      const next = new Set(previous);
+      if (next.has(storeCode)) next.delete(storeCode);
+      else next.add(storeCode);
+      return next;
+    });
+  }
+
+  function toggleAllUnregisteredEstCodes() {
+    setSelectedUnregisteredEstCodes((previous) => {
+      if (allUnregisteredEstSelected) return new Set();
+      return new Set(unregisteredEstRows.map((row) => row.storeCode));
+    });
+  }
+
+  function deleteUnregisteredEstCodes(codes: Set<string>) {
+    if (!isAdmin) {
+      alert("관리자 로그인 후 삭제할 수 있습니다.");
+      return;
+    }
+    const validCodes = new Set(
+      Array.from(codes).filter((code) => unregisteredEstRows.some((row) => row.storeCode === code)),
+    );
+    if (!validCodes.size) {
+      alert("삭제할 미등록 거래처 EST를 선택해주세요.");
+      return;
+    }
+    const deleteAmount = unregisteredEstRows
+      .filter((row) => validCodes.has(row.storeCode))
+      .reduce((total, row) => total + row.amount, 0);
+    if (!confirm(`${month} 미등록 거래처 EST ${validCodes.size.toLocaleString("ko-KR")}개 코드, ${won(deleteAmount)}을 삭제하시겠습니까?\n\n정상 등록 거래처의 EST는 유지됩니다.`)) return;
+    setEsts((previous) =>
+      previous.filter((row) => {
+        if (row.month !== month) return true;
+        const code = norm(row.storeCode) || "코드 없음";
+        return !validCodes.has(code) || stMap.has(row.storeCode);
+      }),
+    );
+    setSelectedUnregisteredEstCodes(new Set());
+    alert(`${month} 미등록 거래처 EST ${validCodes.size.toLocaleString("ko-KR")}개 코드를 삭제했습니다.`);
+  }
 
   const scheduledCostItems = itemCosts.filter(
     (item) => item.effectiveDate && Number(item.nextCost || 0) > 0,
@@ -7325,10 +7387,20 @@ function DashboardTopKpis({
             </div>
             <button type="button" onClick={() => setUnregisteredEstOpen(false)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700">닫기</button>
           </div>
+          {isAdmin && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-5 py-3">
+              <span className="text-xs font-bold text-slate-600">선택 {selectedUnregisteredEstCodes.size.toLocaleString("ko-KR")}개</span>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => deleteUnregisteredEstCodes(selectedUnregisteredEstCodes)} disabled={!selectedUnregisteredEstCodes.size} className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-extrabold text-rose-700 disabled:cursor-not-allowed disabled:opacity-40">선택 삭제</button>
+                <button type="button" onClick={() => deleteUnregisteredEstCodes(new Set(unregisteredEstRows.map((row) => row.storeCode)))} disabled={!unregisteredEstRows.length} className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40">미등록 EST 전체 삭제</button>
+              </div>
+            </div>
+          )}
           <div className="max-h-[60vh] overflow-auto">
             <table className="w-full border-separate border-spacing-0 text-[12px] text-slate-900">
               <thead>
                 <tr>
+                  {isAdmin && <th className="sticky top-0 z-10 w-12 border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-center"><input type="checkbox" aria-label="미등록 EST 전체 선택" checked={allUnregisteredEstSelected} onChange={toggleAllUnregisteredEstCodes} /></th>}
                   <th className="sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-50 px-4 py-2 text-left">거래처코드</th>
                   <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-2 text-right">EST 금액</th>
                 </tr>
@@ -7336,6 +7408,7 @@ function DashboardTopKpis({
               <tbody>
                 {unregisteredEstRows.map((row) => (
                   <tr key={row.storeCode}>
+                    {isAdmin && <td className="border-b border-r border-slate-200 px-3 py-2 text-center"><input type="checkbox" aria-label={`${row.storeCode} 선택`} checked={selectedUnregisteredEstCodes.has(row.storeCode)} onChange={() => toggleUnregisteredEstCode(row.storeCode)} /></td>}
                     <td className="border-b border-r border-slate-200 px-4 py-2 font-semibold">{row.storeCode}</td>
                     <td className="border-b border-slate-200 px-4 py-2 text-right font-bold">{won(row.amount)}</td>
                   </tr>
@@ -7343,7 +7416,7 @@ function DashboardTopKpis({
               </tbody>
               <tfoot>
                 <tr className="bg-rose-50">
-                  <td className="border-t border-slate-300 px-4 py-2 font-extrabold">합계</td>
+                  <td colSpan={isAdmin ? 2 : 1} className="border-t border-slate-300 px-4 py-2 font-extrabold">합계</td>
                   <td className="border-t border-slate-300 px-4 py-2 text-right font-extrabold text-rose-700">{won(unregisteredEst)}</td>
                 </tr>
               </tfoot>
