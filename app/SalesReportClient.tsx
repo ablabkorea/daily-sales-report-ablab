@@ -6955,6 +6955,7 @@ function KpiGroup({
     format?: "won" | "percent" | "number";
     highlightClass?: string;
     separatorBefore?: boolean;
+    onClick?: () => void;
   }[];
   className?: string;
 }) {
@@ -6975,6 +6976,14 @@ function KpiGroup({
           return (
             <div
               key={item.title}
+              role={item.onClick ? "button" : undefined}
+              tabIndex={item.onClick ? 0 : undefined}
+              onClick={item.onClick}
+              onKeyDown={(event) => {
+                if (!item.onClick || (event.key !== "Enter" && event.key !== " ")) return;
+                event.preventDefault();
+                item.onClick();
+              }}
               className={`flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 rounded-lg px-1.5 py-0.5 first:pt-0 last:pb-0 ${item.separatorBefore ? "mt-1 border-t border-slate-400 pt-1.5" : ""} ${item.highlightClass || ""}`}
             >
               <p className="shrink-0 break-keep text-[12px] font-semibold text-black">
@@ -7098,6 +7107,7 @@ function DashboardTopKpis({
   date: string;
 }) {
   const [costAlertOpen, setCostAlertOpen] = useState(false);
+  const [unregisteredEstOpen, setUnregisteredEstOpen] = useState(false);
   const current = sales.filter(
     (s) =>
       s.period === "current" && inRange(s.saleDate, monthStart(month), date),
@@ -7133,6 +7143,17 @@ function DashboardTopKpis({
     metricsByStoreType(stores, targets, ests, month);
   const targetTotal = storeTarget + nonStoreTarget;
   const estTotal = storeEst + nonStoreEst + unregisteredEst;
+  const unregisteredEstRows = Array.from(
+    ests
+      .filter((row) => row.month === month && !stMap.has(row.storeCode))
+      .reduce((map, row) => {
+        const code = norm(row.storeCode) || "코드 없음";
+        map.set(code, (map.get(code) || 0) + Number(row.amount || 0));
+        return map;
+      }, new Map<string, number>()),
+  )
+    .map(([storeCode, amount]) => ({ storeCode, amount }))
+    .sort((a, b) => b.amount - a.amount || a.storeCode.localeCompare(b.storeCode, "ko-KR"));
 
   const scheduledCostItems = itemCosts.filter(
     (item) => item.effectiveDate && Number(item.nextCost || 0) > 0,
@@ -7213,7 +7234,14 @@ function DashboardTopKpis({
         items={[
           { title: "매장 EST", value: storeEst, format: "won" },
           { title: "비매장 EST", value: nonStoreEst, format: "won" },
-          { title: "미등록 거래처 EST", value: unregisteredEst, format: "won", color: unregisteredEst ? "text-rose-700" : "text-slate-500" },
+          {
+            title: "미등록 거래처 EST",
+            value: unregisteredEst,
+            format: "won",
+            color: unregisteredEst ? "text-rose-700" : "text-slate-500",
+            highlightClass: unregisteredEst ? "cursor-pointer hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-300" : "",
+            onClick: unregisteredEst ? () => setUnregisteredEstOpen(true) : undefined,
+          },
           {
             title: "총 EST",
             value: estTotal,
@@ -7287,6 +7315,43 @@ function DashboardTopKpis({
         </div>
       </button>
     </div>
+    {unregisteredEstOpen && (
+      <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/45 p-4" onMouseDown={() => setUnregisteredEstOpen(false)}>
+        <div className="max-h-[78vh] w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900">미등록 거래처 EST 상세</h3>
+              <p className="mt-1 text-xs font-semibold text-slate-500">{month} · {unregisteredEstRows.length.toLocaleString("ko-KR")}개 코드 · 합계 {won(unregisteredEst)}</p>
+            </div>
+            <button type="button" onClick={() => setUnregisteredEstOpen(false)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700">닫기</button>
+          </div>
+          <div className="max-h-[60vh] overflow-auto">
+            <table className="w-full border-separate border-spacing-0 text-[12px] text-slate-900">
+              <thead>
+                <tr>
+                  <th className="sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-50 px-4 py-2 text-left">거래처코드</th>
+                  <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-2 text-right">EST 금액</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unregisteredEstRows.map((row) => (
+                  <tr key={row.storeCode}>
+                    <td className="border-b border-r border-slate-200 px-4 py-2 font-semibold">{row.storeCode}</td>
+                    <td className="border-b border-slate-200 px-4 py-2 text-right font-bold">{won(row.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-rose-50">
+                  <td className="border-t border-slate-300 px-4 py-2 font-extrabold">합계</td>
+                  <td className="border-t border-slate-300 px-4 py-2 text-right font-extrabold text-rose-700">{won(unregisteredEst)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    )}
     {costAlertOpen && (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4" onMouseDown={() => setCostAlertOpen(false)}>
         <div className="max-h-[82vh] w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -12564,6 +12629,7 @@ function StoreListManagement({
     ["매장", "비매장"],
   );
   const normalizedSearch = search.trim().toLowerCase();
+  const normalizeManager = (value: string) => value.trim().toUpperCase();
 
   useEffect(() => {
     setListTab(section === "list" ? "기존거래처 리스트" : "기타 관리");
@@ -12865,7 +12931,6 @@ function StoreListManagement({
   const visibleOtherRows = showNewOnly && (otherTab !== "담당자 관리" || managerSubTab === "거래처 담당자 관리")
     ? visibleTotalRows.filter(needsReferenceSetup)
     : visibleTotalRows;
-  const normalizeManager = (value: string) => value.trim().toUpperCase();
   const normalizedManagerConfigs = managerConfigs
     .map((config) => ({ ...config, name: normalizeManager(config.name) }))
     .filter((config, index, list) => Boolean(config.name) && list.findIndex((item) => item.name === config.name) === index)
