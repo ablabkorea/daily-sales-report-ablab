@@ -10648,14 +10648,11 @@ function SalesStatus({
                           {pct(r.estRate)}
                         </TdCompact>
                         <td className="border border-gray-300 bg-amber-50/40 px-2 py-1.5 text-left align-middle">
-                          <div className="max-h-20 min-w-[190px] space-y-1 overflow-y-auto pr-1">
+                          <div className="max-h-20 min-w-[120px] space-y-0.5 overflow-y-auto pr-1">
                             {r.brandProgress.map((item) => (
-                              <div key={`${r.key}-${item.brand}`} className="grid grid-cols-[70px_1fr_48px] items-center gap-1.5" title={`${item.brand}: 매출 ${won(item.sales)} / EST ${won(item.est)}`}>
+                              <div key={`${r.key}-${item.brand}`} className="flex items-center justify-between gap-2" title={`${item.brand}: 매출 ${won(item.sales)} / EST ${won(item.est)}`}>
                                 <span className="truncate text-[10px] font-bold text-slate-700">{item.brand}</span>
-                                <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
-                                  <div className={`h-full rounded-full ${item.rate >= 100 ? "bg-emerald-500" : item.rate >= 70 ? "bg-amber-400" : "bg-orange-400"}`} style={{ width: `${Math.min(100, Math.max(0, item.rate))}%` }} />
-                                </div>
-                                <span className={`text-right text-[10px] font-extrabold ${item.rate >= 100 ? "text-emerald-700" : "text-orange-700"}`}>{item.est ? pct(item.rate) : "-"}</span>
+                                <span className="shrink-0 text-right text-[10px] font-extrabold text-slate-800">{item.est ? pct(item.rate) : "-"}</span>
                               </div>
                             ))}
                             {!r.brandProgress.length && <div className="text-center text-slate-400">-</div>}
