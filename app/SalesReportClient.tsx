@@ -12252,6 +12252,21 @@ function StoreListManagement({
   const [newManager, setNewManager] = useState("");
   const [newChannel1, setNewChannel1] = useState("");
   const [brandDrafts, setBrandDrafts] = useState<Record<string, string>>({});
+  type BrandUploadPreviewRow = {
+    rowNumber: number;
+    inputCode: string;
+    inputName: string;
+    inputBrand: string;
+    storeCode: string;
+    storeName: string;
+    beforeBrand: string;
+    afterBrand: string;
+    status: "정상" | "미매칭" | "충돌" | "중복" | "건너뜀";
+    reason: string;
+  };
+  const [brandUploadFileName, setBrandUploadFileName] = useState("");
+  const [brandUploadPreview, setBrandUploadPreview] = useState<BrandUploadPreviewRow[]>([]);
+  const brandUploadInputRef = useRef<HTMLInputElement>(null);
   const [showNewOnly, setShowNewOnly] = useState(false);
   const [savedChannel1Options, setSavedChannel1Options] = useLocal<string[]>(
     "month-start-channel1-options-v1",
@@ -12266,6 +12281,8 @@ function StoreListManagement({
     setShowNewOnly(false);
     setManagerSubTab("EST 담당자 관리");
     setBrandDrafts({});
+    setBrandUploadFileName("");
+    setBrandUploadPreview([]);
   }, [section]);
 
   type SalesStoreSummary = {
@@ -12650,6 +12667,95 @@ function StoreListManagement({
     alert(`브랜드 ${changes.length.toLocaleString("ko-KR")}건을 한꺼번에 반영했습니다.`);
   }
 
+  function downloadBrandUploadTemplate() {
+    const rows = totalRows.map((row) => ({
+      사업자번호: row.code,
+      거래처명: row.name,
+      "현재 브랜드": displayBrand(row.brand),
+      "변경할 브랜드": "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 사업자번호: "", 거래처명: "", "현재 브랜드": "", "변경할 브랜드": "" }]);
+    ws["!cols"] = [{ wch: 18 }, { wch: 32 }, { wch: 22 }, { wch: 24 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "브랜드 일괄수정");
+    XLSX.writeFile(wb, `브랜드_일괄수정_양식_${month}.xlsx`);
+  }
+
+  async function previewBrandUpload(file: File) {
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: false });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      if (!sheet) throw new Error("첫 번째 시트를 찾을 수 없습니다.");
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
+      const headerValue = (row: Record<string, unknown>, names: string[]) => {
+        const found = Object.keys(row).find((key) => names.includes(norm(key).replace(/\s/g, "")));
+        return found ? norm(row[found]) : "";
+      };
+      const codeKey = (value: unknown) => {
+        const text = norm(value).replace(/\.0$/, "");
+        const digits = text.replace(/\D/g, "");
+        return digits || text.toLowerCase().replace(/\s/g, "");
+      };
+      const storesByCode = new Map<string, Store[]>();
+      const storesByName = new Map<string, Store[]>();
+      totalRows.forEach((store) => {
+        const cKey = codeKey(store.code);
+        const nKey = normalizeStoreNameKey(store.name);
+        storesByCode.set(cKey, [...(storesByCode.get(cKey) || []), store]);
+        storesByName.set(nKey, [...(storesByName.get(nKey) || []), store]);
+      });
+
+      const preview = rows.map((row, index): BrandUploadPreviewRow => {
+        const inputCode = headerValue(row, ["사업자번호", "거래처코드", "사업자등록번호"]);
+        const inputName = headerValue(row, ["거래처명", "사업자명", "상호", "거래처"]);
+        const inputBrand = headerValue(row, ["변경할브랜드", "변경브랜드", "신규브랜드", "브랜드"]);
+        const base = { rowNumber: index + 2, inputCode, inputName, inputBrand, storeCode: "", storeName: "", beforeBrand: "", afterBrand: "", status: "미매칭" as const, reason: "" };
+        if (!inputBrand) return { ...base, status: "건너뜀", reason: "변경할 브랜드가 비어 있어 변경하지 않습니다." };
+        const codeMatches = inputCode ? (storesByCode.get(codeKey(inputCode)) || []) : [];
+        const nameMatches = inputName ? (storesByName.get(normalizeStoreNameKey(inputName)) || []) : [];
+        if (codeMatches.length > 1 || nameMatches.length > 1) return { ...base, status: "충돌", reason: "같은 사업자번호 또는 거래처명을 가진 거래처가 여러 개입니다." };
+        const byCode = codeMatches[0];
+        const byName = nameMatches[0];
+        if (byCode && byName && byCode.code !== byName.code) return { ...base, status: "충돌", reason: `사업자번호는 '${byCode.name}', 거래처명은 '${byName.name}'을(를) 가리킵니다.` };
+        const matched = byCode || (!inputCode ? byName : undefined) || (!byCode ? byName : undefined);
+        if (!matched) return { ...base, status: "미매칭", reason: "일치하는 거래처를 찾지 못했습니다." };
+        if (inputCode && !byCode && byName) return { ...base, storeCode: matched.code, storeName: matched.name, beforeBrand: displayBrand(matched.brand), status: "충돌", reason: "사업자번호가 일치하지 않아 거래처명만으로 자동 반영하지 않습니다." };
+        const afterBrand = ["삭제", "미지정"].includes(inputBrand.replace(/\s/g, "")) ? "미지정" : inputBrand.trim();
+        return { ...base, storeCode: matched.code, storeName: matched.name, beforeBrand: displayBrand(matched.brand), afterBrand, status: "정상", reason: afterBrand === displayBrand(matched.brand) ? "현재 브랜드와 동일합니다." : "변경 가능" };
+      });
+
+      const normalByCode = new Map<string, number[]>();
+      preview.forEach((row, index) => {
+        if (row.status === "정상") normalByCode.set(row.storeCode, [...(normalByCode.get(row.storeCode) || []), index]);
+      });
+      normalByCode.forEach((indices) => {
+        if (indices.length < 2) return;
+        indices.forEach((index) => {
+          preview[index] = { ...preview[index], status: "중복", reason: "파일 안에 같은 거래처가 두 번 이상 있습니다." };
+        });
+      });
+      setBrandUploadFileName(file.name);
+      setBrandUploadPreview(preview);
+    } catch (error) {
+      setBrandUploadFileName("");
+      setBrandUploadPreview([]);
+      alert(`브랜드 업로드 파일을 읽지 못했습니다.\n${error instanceof Error ? error.message : "파일 형식을 확인해주세요."}`);
+    } finally {
+      if (brandUploadInputRef.current) brandUploadInputRef.current.value = "";
+    }
+  }
+
+  function applyBrandUpload() {
+    const validRows = brandUploadPreview.filter((row) => row.status === "정상" && row.afterBrand !== row.beforeBrand);
+    if (!validRows.length) return alert("실제로 변경할 수 있는 정상 행이 없습니다.");
+    if (!window.confirm(`정상 확인된 ${validRows.length.toLocaleString("ko-KR")}개 거래처의 브랜드를 적용할까요?\n미매칭·충돌·중복 행은 반영되지 않습니다.`)) return;
+    const changes = new Map(validRows.map((row) => [row.storeCode, row.afterBrand]));
+    setStores(totalRows.map((store) => changes.has(store.code) ? { ...store, brand: changes.get(store.code) || store.brand } : store));
+    setBrandUploadPreview([]);
+    setBrandUploadFileName("");
+    alert(`브랜드 ${validRows.length.toLocaleString("ko-KR")}건을 적용했습니다. 기존 EST 금액은 복사하지 않고 변경된 브랜드 기준으로 즉시 재분류됩니다.`);
+  }
+
   function addChannel1Option() {
     const value = newChannel1.trim();
     if (!value) return alert("추가할 업종명을 입력해주세요.");
@@ -12820,6 +12926,19 @@ function StoreListManagement({
                     <span className="mx-1 h-5 w-px bg-slate-300" />
                     <button type="button" onClick={applyBrandDrafts} className="h-8 rounded-lg bg-orange-500 px-3 text-xs font-bold text-white hover:bg-orange-600">입력값 전체 반영</button>
                     <button type="button" onClick={() => setBrandDrafts({})} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">입력값 초기화</button>
+                    <span className="mx-1 h-5 w-px bg-slate-300" />
+                    <button type="button" onClick={downloadBrandUploadTemplate} className="h-8 rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 hover:bg-emerald-100">브랜드 업로드 양식 다운로드</button>
+                    <input
+                      ref={brandUploadInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void previewBrandUpload(file);
+                      }}
+                      className="hidden"
+                    />
+                    <button type="button" onClick={() => brandUploadInputRef.current?.click()} className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700">브랜드 파일 업로드</button>
                   </>
                 )}
                 {otherTab === "채널 관리" && (
@@ -12896,6 +13015,28 @@ function StoreListManagement({
             </>
           )}
         </div>
+
+      {section === "reference" && otherTab === "브랜드 관리" && brandUploadPreview.length > 0 && (
+        <div className="rounded-xl border border-emerald-300 bg-white p-3 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-extrabold text-slate-900">브랜드 업로드 미리보기</div>
+              <div className="mt-1 text-[11px] font-semibold text-slate-500">{brandUploadFileName} · 정상 {brandUploadPreview.filter((row) => row.status === "정상").length.toLocaleString("ko-KR")}건 · 미매칭 {brandUploadPreview.filter((row) => row.status === "미매칭").length.toLocaleString("ko-KR")}건 · 충돌 {brandUploadPreview.filter((row) => row.status === "충돌").length.toLocaleString("ko-KR")}건 · 중복 {brandUploadPreview.filter((row) => row.status === "중복").length.toLocaleString("ko-KR")}건 · 건너뜀 {brandUploadPreview.filter((row) => row.status === "건너뜀").length.toLocaleString("ko-KR")}건</div>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => { setBrandUploadPreview([]); setBrandUploadFileName(""); }} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">취소</button>
+              <button type="button" onClick={applyBrandUpload} className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700">정상 건 최종 적용</button>
+            </div>
+          </div>
+          <div className="mt-3 max-h-64 overflow-auto rounded-lg border border-slate-200">
+            <table className="w-full min-w-[1050px] border-collapse text-center text-[11px] whitespace-nowrap">
+              <thead><tr className="bg-emerald-50 text-slate-700"><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">행</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">입력 사업자번호</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">입력 거래처명</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">매칭 거래처</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">변경 전</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">변경 후</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">결과</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">확인 내용</th></tr></thead>
+              <tbody>{brandUploadPreview.map((row) => <tr key={`${row.rowNumber}-${row.inputCode}-${row.inputName}`} className={row.status === "정상" ? "bg-emerald-50/30" : row.status === "건너뜀" ? "bg-slate-50" : "bg-red-50/40"}><td className="border border-slate-200 px-2 py-1.5">{row.rowNumber}</td><td className="border border-slate-200 px-2 py-1.5">{row.inputCode || "-"}</td><td className="border border-slate-200 px-2 py-1.5 text-left">{row.inputName || "-"}</td><td className="border border-slate-200 px-2 py-1.5 text-left">{row.storeName ? `${row.storeCode} / ${row.storeName}` : "-"}</td><td className="border border-slate-200 px-2 py-1.5">{row.beforeBrand || "-"}</td><td className="border border-slate-200 px-2 py-1.5 font-bold text-emerald-800">{row.afterBrand || row.inputBrand || "-"}</td><td className="border border-slate-200 px-2 py-1.5"><span className={`rounded-full px-2 py-0.5 font-bold ${row.status === "정상" ? "bg-emerald-100 text-emerald-800" : row.status === "건너뜀" ? "bg-slate-200 text-slate-700" : "bg-red-100 text-red-700"}`}>{row.status}</span></td><td className="border border-slate-200 px-2 py-1.5 text-left text-slate-600">{row.reason}</td></tr>)}</tbody>
+            </table>
+          </div>
+          <div className="mt-2 text-[11px] font-semibold text-slate-500">사업자번호를 우선 확인합니다. 번호와 이름이 서로 다른 거래처를 가리키면 반영하지 않으며, 빈 브랜드는 유지하고 ‘삭제’는 ‘미지정’으로 변경합니다.</div>
+        </div>
+      )}
 
       <div className="min-h-0 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="min-h-0 flex-1 overflow-auto pb-8 pr-2" style={{ height: "clamp(420px, calc(100vh - 285px), 760px)" }}>
