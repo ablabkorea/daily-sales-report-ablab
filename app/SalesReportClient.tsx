@@ -153,20 +153,7 @@ type TimeConfig = {
   holidays: string[];
 };
 
-const CHANNELS: Channel[] = [
-  "도매",
-  "체인",
-  "체인물류",
-  "식자재마트",
-  "제조",
-  "권역배송",
-  "온라인",
-  "매장",
-  "비매장",
-  "기업",
-  "매입",
-  "본사",
-];
+const CHANNELS: Channel[] = ["매장", "비매장"];
 const MANAGERS: Manager[] = ["SY", "KT", "SW", "NH", "Bomi", "BM", "bomi"];
 const INITIAL_MANAGER_CONFIGS: ManagerConfig[] = [
   { name: "SY", active: true, order: 1, canTarget: true },
@@ -12529,7 +12516,7 @@ function StoreListManagement({
   const [showNewOnly, setShowNewOnly] = useState(false);
   const [savedChannel1Options, setSavedChannel1Options] = useLocal<string[]>(
     "month-start-channel1-options-v1",
-    ["도매", "체인", "권역배송", "온라인", "식자재마트"],
+    ["매장", "비매장"],
   );
   const normalizedSearch = search.trim().toLowerCase();
 
@@ -12543,6 +12530,19 @@ function StoreListManagement({
     setBrandUploadFileName("");
     setBrandUploadPreview([]);
   }, [section]);
+
+  useEffect(() => {
+    const hasLegacyChannel = stores.some(
+      (store) => store.channel !== "매장" && store.channel !== "비매장",
+    );
+    if (!hasLegacyChannel) return;
+    setStores(
+      stores.map((store) => ({
+        ...store,
+        channel: store.storeType === "매장" ? "매장" : "비매장",
+      })),
+    );
+  }, [stores, setStores]);
 
   type SalesStoreSummary = {
     code: string;
@@ -12798,14 +12798,7 @@ function StoreListManagement({
     .filter((config, index, list) => Boolean(config.name) && list.findIndex((item) => item.name === config.name) === index)
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, "ko-KR"));
   const managerOptions = normalizedManagerConfigs.map((config) => config.name);
-  const channel1Options = Array.from(
-    new Map(
-      [...savedChannel1Options, ...totalRows.map((row) => row.channel)]
-        .map((value) => value.trim())
-        .filter(Boolean)
-        .map((value) => [value.toLowerCase(), value] as const),
-    ).values(),
-  ).sort((a, b) => a.localeCompare(b, "ko-KR"));
+  const channel1Options: Channel[] = ["매장", "비매장"];
   const brandOptions = Array.from(
     new Set(totalRows.map((row) => displayBrand(row.brand)).filter(Boolean)),
   ).sort((a, b) => a.localeCompare(b, "ko-KR", { numeric: true }));
@@ -13205,11 +13198,8 @@ function StoreListManagement({
                     <div className="flex rounded-lg border border-slate-300 bg-white p-0.5">{(["채널 1", "채널 2"] as const).map((item) => <button key={item} type="button" onClick={() => setChannelTab(item)} className={`rounded-md px-3 py-1.5 text-xs font-bold ${channelTab === item ? "bg-slate-800 text-white" : "text-slate-600"}`}>{item}</button>)}</div>
                     {channelTab === "채널 1" ? (
                       <>
-                        <select value={bulkChannel1} onChange={(event) => setBulkChannel1(event.target.value)} className="h-8 min-w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold"><option value="">업종 선택</option>{channel1Options.map((channel) => <option key={channel} value={channel}>{channel}</option>)}</select>
+                        <select value={bulkChannel1} onChange={(event) => setBulkChannel1(event.target.value)} className="h-8 min-w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold"><option value="">채널 1 선택</option>{channel1Options.map((channel) => <option key={channel} value={channel}>{channel}</option>)}</select>
                         <button type="button" onClick={() => applyBulkChange("channel")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">채널 1 일괄 수정</button>
-                        <span className="mx-1 h-5 w-px bg-slate-300" />
-                        <input value={newChannel1} onChange={(event) => setNewChannel1(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addChannel1Option(); }} placeholder="신규 업종" className="h-8 w-[130px] rounded-lg border border-slate-300 bg-white px-2 text-xs" />
-                        <button type="button" onClick={addChannel1Option} className="h-8 rounded-lg border border-blue-300 bg-blue-50 px-3 text-xs font-bold text-blue-700">업종 추가</button>
                       </>
                     ) : (
                       <>
@@ -13437,7 +13427,32 @@ function StoreListManagement({
                           />
                         ) : (row.brand || "미지정")}
                       </td>
-                      <td className="border border-slate-300 px-3 py-2">{row.channel}</td>
+                      <td className="border border-slate-300 px-3 py-2">
+                        {otherTab === "채널 관리" && channelTab === "채널 1" ? (
+                          <select
+                            value={row.channel === "매장" ? "매장" : row.channel === "비매장" ? "비매장" : ""}
+                            onChange={(event) => {
+                              event.stopPropagation();
+                              const nextChannel = event.target.value as Channel;
+                              if (!nextChannel) return;
+                              setStores(
+                                totalRows.map((store) =>
+                                  store.code === row.code ? { ...store, channel: nextChannel } : store,
+                                ),
+                              );
+                            }}
+                            onClick={(event) => event.stopPropagation()}
+                            className="h-8 min-w-[92px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500"
+                            aria-label={`${row.name} 채널 1 선택`}
+                          >
+                            <option value="">선택</option>
+                            <option value="매장">매장</option>
+                            <option value="비매장">비매장</option>
+                          </select>
+                        ) : (
+                          row.channel
+                        )}
+                      </td>
                       <td className="border border-slate-300 px-3 py-2">
                         {otherTab === "채널 관리" && channelTab === "채널 2" ? (
                           <select
