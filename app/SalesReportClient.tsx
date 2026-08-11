@@ -5192,7 +5192,7 @@ export default function SalesReportClient() {
             targets={targets}
             setTargets={setTargets}
             month={dashMonth}
-            canEdit={isEstEntryPeriodOpen(dashMonth)}
+            canEdit={isAdmin || isEstEntryPeriodOpen(dashMonth)}
             isAdmin={isAdmin}
             managerConfigs={managerConfigs}
             onSummaryChange={setEstHeaderSummary}
