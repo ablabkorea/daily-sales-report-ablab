@@ -3582,6 +3582,7 @@ function makeSale(
   profitAmount: number,
   stores: Store[],
   uploadedProfitRate?: number,
+  sourceRowNumber?: number,
 ): SalesRecord {
   const s = storeMap(stores).get(storeCode);
   const profitRate = Number.isFinite(uploadedProfitRate)
@@ -3590,7 +3591,9 @@ function makeSale(
       ? (profitAmount / salesAmount) * 100
       : 0;
   return {
-    id: `${period}|${refMonth}|${saleDate}|${storeCode}|${itemCode}|${itemName}`,
+    // 같은 날짜·거래처·품목이 여러 행이어도 원본 엑셀 행별로 각각 보존합니다.
+    // 업로드 날짜는 replaceUpload에서 기존 자료를 먼저 교체하므로 재업로드 시 중복 누적되지 않습니다.
+    id: `${period}|${refMonth}|${saleDate}|${storeCode}|${itemCode}|${itemName}|source-row:${sourceRowNumber ?? "unknown"}`,
     period,
     refMonth,
     saleDate,
@@ -14885,6 +14888,7 @@ function UploadPage({
           profitAmount,
           stores,
           uploadedProfitRate,
+          index + 2,
         );
       })
       .filter(
@@ -14896,6 +14900,13 @@ function UploadPage({
             r.profitAmount !== 0 ||
             r.quantity !== 0),
       );
+
+    if (new Set(parsed.map((row) => row.id)).size !== parsed.length) {
+      alert(
+        "엑셀 행별 고유번호를 만들지 못해 업로드를 중단했습니다. 기존 데이터는 변경하지 않았습니다.",
+      );
+      return;
+    }
 
     const missingStores = parsed
             .filter((r) => !storeMap(stores).has(r.storeCode))
