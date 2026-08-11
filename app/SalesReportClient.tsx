@@ -9812,6 +9812,7 @@ function SalesStatus({
   >("all");
   const [hideEndedStores, setHideEndedStores] = useState(false);
   const [channelTypeFilter, setChannelTypeFilter] = useState<"all" | "store" | "nonStore">("all");
+  const [newStoreFilter, setNewStoreFilter] = useState<"all" | "new">("all");
   const [selectedManagers, setSelectedManagers] = useState<string[]>([]);
 
   const normalizedSearch = search.trim().toLowerCase();
@@ -10131,6 +10132,27 @@ function SalesStatus({
     return map;
   }, [sales, date, view, stores, codeMappings]);
 
+  const firstSaleDateByStore = useMemo(() => {
+    const map = new Map<string, string>();
+    sales
+      .filter((record) => record.period === "current" && record.saleDate <= date)
+      .forEach((record) => {
+        const resolved = resolveRecord(record);
+        const key = resolved.code || resolved.name || record.storeCode || record.storeName;
+        if (!key) return;
+        const previous = map.get(key);
+        if (!previous || record.saleDate < previous) map.set(key, record.saleDate);
+      });
+    return map;
+  }, [sales, date, stores, codeMappings]);
+
+  const isFirstSaleInSelectedMonth = (record: SalesRecord) => {
+    const resolved = resolveRecord(record);
+    const key = resolved.code || resolved.name || record.storeCode || record.storeName;
+    const firstSaleDate = key ? firstSaleDateByStore.get(key) : undefined;
+    return Boolean(firstSaleDate && firstSaleDate <= date && firstSaleDate.slice(0, 7) === month);
+  };
+
   const getDrillRows = (key: string, period: DrillPeriod) => {
     if (period === "prevYear") return prevYearMap.get(key) || [];
     if (period === "prevMonth") return prevMonthMap.get(key) || [];
@@ -10319,10 +10341,7 @@ function SalesStatus({
       const channelValues = Array.from(new Set(resolvedStores.map((store) => store.storeType === "매장" ? "매장" : "비매장")));
       const channel = channelValues.length === 1 ? channelValues[0] : channelValues.length > 1 ? "혼합" : (firstRecord ? (resolveRecord(firstRecord).storeType === "매장" ? "매장" : "비매장") : "-");
       const baseLabel = rowLabel(key, allRecords);
-      const isNewStore = view === "브랜드별"
-        ? displayBrand(key) === "당월 신규 거래처"
-        : resolvedStores.some((store) => displayBrand(store.brand) === "당월 신규 거래처") ||
-          displayBrand(stMap.get(key)?.brand) === "당월 신규 거래처";
+      const isNewStore = allRecords.some(isFirstSaleInSelectedMonth);
       return {
         key,
         label: view === "브랜드별" ? `${baseLabel} (${uniqueStoreCount})` : baseLabel,
@@ -10371,6 +10390,8 @@ function SalesStatus({
       nextRows = nextRows.filter((row) => row.channel === "매장");
     if (channelTypeFilter === "nonStore")
       nextRows = nextRows.filter((row) => row.channel === "비매장");
+    if (newStoreFilter === "new")
+      nextRows = nextRows.filter((row) => row.isNewStore);
     if (view === "담당자별" && selectedManagers.length > 0) {
       const selected = new Set(selectedManagers);
       nextRows = nextRows.filter((row) =>
@@ -10378,7 +10399,7 @@ function SalesStatus({
       );
     }
     return nextRows;
-  }, [rows, hideEndedStores, channelTypeFilter, view, selectedManagers]);
+  }, [rows, hideEndedStores, channelTypeFilter, newStoreFilter, view, selectedManagers]);
 
   const managerFilterOptions = useMemo(() => {
     if (view !== "담당자별") return [];
@@ -10906,7 +10927,21 @@ function SalesStatus({
                   </ThCompact>
                 )}
                 {showChannelColumn && (
-                  <ThCompact rowSpan={2} tone="gray" w="w-[4%]">신규</ThCompact>
+                  <ThCompact rowSpan={2} tone="gray" w="w-[5%]">
+                    <div className="flex flex-col items-center gap-1">
+                      <span>신규</span>
+                      <select
+                        value={newStoreFilter}
+                        onChange={(event) => setNewStoreFilter(event.target.value as "all" | "new")}
+                        onClick={(event) => event.stopPropagation()}
+                        className="h-7 w-full min-w-[62px] rounded-md border border-slate-300 bg-white px-1 text-[11px] font-bold text-slate-700 outline-none"
+                        aria-label="매출현황 신규 거래처 필터"
+                      >
+                        <option value="all">전체</option>
+                        <option value="new">신규(Y)</option>
+                      </select>
+                    </div>
+                  </ThCompact>
                 )}
                 {!compact && isStoreListView && (
                   <ThCompactSortable
