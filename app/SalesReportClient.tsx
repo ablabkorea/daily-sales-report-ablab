@@ -5409,6 +5409,7 @@ function EstQuickEntry({
   }, [activeManagers, selectedManager]);
   const [statusView, setStatusView] = useState<"active" | "paused" | "ended">("active");
   const [channelView, setChannelView] = useState<"all" | "store" | "nonStore">("all");
+  const [entryView, setEntryView] = useState<"store" | "brand">("store");
   const [openBrand, setOpenBrand] = useState("");
   const [editingStoreCode, setEditingStoreCode] = useState("");
   const [frozenRowOrder, setFrozenRowOrder] = useState<string[]>([]);
@@ -5603,6 +5604,24 @@ function EstQuickEntry({
       .sort((a, b) => a.name.localeCompare(b.name, "ko-KR", { numeric: true }));
   }, [stores, openBrand, selectedManager]);
 
+  const brandEntryRows = useMemo(() => {
+    const grouped = new Map<string, Store[]>();
+    rows.forEach((store) => {
+      const brand = displayBrand(store.brand) || "미지정";
+      grouped.set(brand, [...(grouped.get(brand) || []), store]);
+    });
+    return Array.from(grouped.entries())
+      .map(([brand, groupedStores]) => ({
+        brand,
+        stores: groupedStores,
+        est: groupedStores.reduce((sum, store) => sum + Number(estMap.get(store.code) || 0), 0),
+        prevEst: groupedStores.reduce((sum, store) => sum + Number(prevEstMap.get(store.code) || 0), 0),
+        prevSales: groupedStores.reduce((sum, store) => sum + Number(prevSalesMap.get(store.code) || 0), 0),
+        prevYearSales: groupedStores.reduce((sum, store) => sum + Number(prevYearSalesMap.get(store.code) || 0), 0),
+      }))
+      .sort((a, b) => a.brand.localeCompare(b.brand, "ko-KR", { numeric: true }));
+  }, [rows, estMap, prevEstMap, prevSalesMap, prevYearSalesMap]);
+
   const managerInfo = useMemo(() => {
     const managerStores = stores.filter(
       (store) =>
@@ -5770,6 +5789,27 @@ function EstQuickEntry({
         );
       }
       return [...prev, { storeCode: store.code, storeName: store.name, month, amount }];
+    });
+  };
+
+  const updateBrandEst = (groupedStores: Store[], amount: number) => {
+    if (!canEdit) return;
+    const activeStores = groupedStores.filter((store) => store.status === "거래중");
+    if (!activeStores.length) return;
+    const representative = activeStores[0];
+    const groupedCodes = new Set(groupedStores.map((store) => store.code));
+    setEsts((prev) => {
+      const next = prev.map((row) =>
+        row.month === month && groupedCodes.has(row.storeCode)
+          ? { ...row, amount: row.storeCode === representative.code ? amount : 0 }
+          : row,
+      );
+      const representativeExists = next.some(
+        (row) => row.month === month && row.storeCode === representative.code,
+      );
+      return representativeExists
+        ? next
+        : [...next, { storeCode: representative.code, storeName: representative.name, month, amount }];
     });
   };
 
@@ -5967,6 +6007,22 @@ function EstQuickEntry({
             </div>
 
             <div className="flex flex-wrap items-end gap-x-5 gap-y-3 xl:justify-end">
+              <div className="flex items-center rounded-xl border border-orange-200 bg-orange-50 p-1 text-xs font-extrabold">
+                <button
+                  type="button"
+                  onClick={() => setEntryView("store")}
+                  className={`rounded-lg px-3 py-2 transition ${entryView === "store" ? "bg-white text-orange-700 shadow-sm" : "text-slate-600"}`}
+                >
+                  거래처별 입력
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEntryView("brand")}
+                  className={`rounded-lg px-3 py-2 transition ${entryView === "brand" ? "bg-white text-orange-700 shadow-sm" : "text-slate-600"}`}
+                >
+                  브랜드별 입력
+                </button>
+              </div>
               <label className="flex items-center gap-2">
                 <span className="text-xs font-extrabold text-slate-600">채널</span>
                 <select
@@ -6020,6 +6076,51 @@ function EstQuickEntry({
           style={{ height: "clamp(360px, calc(100vh - 430px), 600px)" }}
         >
           <div className="isolate min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 pr-2">
+            {entryView === "brand" ? (
+              <table className="w-full min-w-[980px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+                <thead>
+                  <tr>
+                    <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">브랜드</th>
+                    <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">포함 거래처 / 센터</th>
+                    <th className="sticky top-0 z-20 border border-slate-300 bg-[#F7FCEB] px-3 py-2">전년동월 매출</th>
+                    <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2">전월 매출</th>
+                    <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2">전월 EST</th>
+                    <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2">{month} 브랜드 EST 입력</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {brandEntryRows.map((row) => (
+                    <tr key={row.brand} className="hover:bg-orange-50/60">
+                      <td className="border border-slate-300 px-3 py-2 font-extrabold text-orange-800">{row.brand}</td>
+                      <td className="max-w-[420px] border border-slate-300 px-3 py-2 text-left">
+                        <div className="truncate font-semibold text-slate-800" title={row.stores.map((store) => store.name).join("\n")}>
+                          {row.stores.map((store) => store.name).join(" · ")}
+                        </div>
+                        <div className="mt-1 text-[10px] font-bold text-slate-500">{row.stores.length}개 센터를 하나의 브랜드 EST로 집계</div>
+                      </td>
+                      <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.prevYearSales)}</td>
+                      <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.prevSales)}</td>
+                      <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.prevEst)}</td>
+                      <td className="border border-slate-300 px-3 py-2">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          disabled={!canEdit || !row.stores.some((store) => store.status === "거래중")}
+                          value={row.est ? won(row.est) : ""}
+                          onChange={(event) => updateBrandEst(row.stores, num(event.target.value))}
+                          placeholder="0"
+                          title="같은 브랜드의 여러 센터를 한 거래처로 묶어 입력합니다."
+                          className="h-9 w-full min-w-[170px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  {!brandEntryRows.length && (
+                    <tr><td colSpan={6} className="border border-slate-300 p-8 text-slate-500">선택한 조건에 해당하는 브랜드가 없습니다.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            ) : (
             <table className="w-full min-w-[1770px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-100">
@@ -6183,6 +6284,7 @@ function EstQuickEntry({
                 )}
               </tbody>
             </table>
+            )}
             <div aria-hidden="true" className="h-3" />
           </div>
 
