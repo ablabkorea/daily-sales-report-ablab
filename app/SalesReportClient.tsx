@@ -9928,12 +9928,48 @@ function SalesStatus({
       const prevMonthTimeGoneGap = prevMonthRate - timeGone.timeGoneRate;
       const est = estMap.get(key) || 0;
       const estRate = est ? (currentSales / est) * 100 : 0;
-      const brandProgressMap = new Map<string, { sales: number; est: number }>();
+      const brandProgressMap = new Map<string, {
+        sales: number;
+        est: number;
+        stores: Map<string, { name: string; sales: number; est: number }>;
+      }>();
+      const ensureBrandProgress = (brand: string) => {
+        const existing = brandProgressMap.get(brand);
+        if (existing) return existing;
+        const created = { sales: 0, est: 0, stores: new Map<string, { name: string; sales: number; est: number }>() };
+        brandProgressMap.set(brand, created);
+        return created;
+      };
+      const addBrandStore = (
+        brand: string,
+        storeCode: string,
+        storeName: string,
+        salesAmount: number,
+        estAmount: number,
+      ) => {
+        const progress = ensureBrandProgress(brand);
+        const storeKey = storeCode || storeName || "미지정";
+        const existing = progress.stores.get(storeKey) || {
+          name: storeName || storeCode || "미지정",
+          sales: 0,
+          est: 0,
+        };
+        existing.sales += salesAmount;
+        existing.est += estAmount;
+        progress.stores.set(storeKey, existing);
+      };
       currentRecords.forEach((record) => {
-        const brand = displayBrand(resolveRecord(record).brand) || "미지정";
-        const value = brandProgressMap.get(brand) || { sales: 0, est: 0 };
+        const resolved = resolveRecord(record);
+        const brand = displayBrand(resolved.brand) || "미지정";
+        const value = ensureBrandProgress(brand);
         value.sales += Number(record.salesAmount || 0);
-        brandProgressMap.set(brand, value);
+        addBrandStore(
+          brand,
+          resolved.code || record.storeCode,
+          resolved.name || record.storeName,
+          Number(record.salesAmount || 0),
+          0,
+        );
       });
       ests
         .filter((record) => record.month === month)
@@ -9947,14 +9983,24 @@ function SalesStatus({
               : resolved.channel || "미지정";
           if (recordKey !== key) return;
           const brand = displayBrand(resolved.brand) || "미지정";
-          const value = brandProgressMap.get(brand) || { sales: 0, est: 0 };
+          const value = ensureBrandProgress(brand);
           value.est += Number(record.amount || 0);
-          brandProgressMap.set(brand, value);
+          addBrandStore(
+            brand,
+            resolved.code || record.storeCode,
+            resolved.name || record.storeName,
+            0,
+            Number(record.amount || 0),
+          );
         });
       const brandProgress = Array.from(brandProgressMap.entries())
         .map(([brand, value]) => ({
           brand,
-          ...value,
+          sales: value.sales,
+          est: value.est,
+          stores: Array.from(value.stores.values())
+            .filter((store) => store.sales || store.est)
+            .sort((a, b) => b.est - a.est || b.sales - a.sales || a.name.localeCompare(b.name, "ko-KR")),
           rate: value.est ? (value.sales / value.est) * 100 : 0,
         }))
         .filter((item) => item.sales || item.est)
@@ -10648,11 +10694,14 @@ function SalesStatus({
                           {pct(r.estRate)}
                         </TdCompact>
                         <td className="border border-gray-300 bg-amber-50/40 px-2 py-1.5 text-left align-middle">
-                          <div className="max-h-20 min-w-[120px] space-y-0.5 overflow-y-auto pr-1">
+                          <div className="max-h-20 min-w-[80px] space-y-0.5 overflow-y-auto pr-1">
                             {r.brandProgress.map((item) => (
-                              <div key={`${r.key}-${item.brand}`} className="flex items-center justify-between gap-2" title={`${item.brand}: 매출 ${won(item.sales)} / EST ${won(item.est)}`}>
-                                <span className="truncate text-[10px] font-bold text-slate-700">{item.brand}</span>
-                                <span className="shrink-0 text-right text-[10px] font-extrabold text-slate-800">{item.est ? pct(item.rate) : "-"}</span>
+                              <div
+                                key={`${r.key}-${item.brand}`}
+                                className="text-center"
+                                title={`${item.brand}\n${item.stores.length ? item.stores.map((store) => `${store.name} (매출 ${won(store.sales)} / EST ${won(store.est)})`).join("\n") : "해당 거래처 없음"}`}
+                              >
+                                <span className="cursor-help text-[11px] font-extrabold text-slate-800 underline decoration-dotted underline-offset-2">{item.est ? pct(item.rate) : "-"}</span>
                               </div>
                             ))}
                             {!r.brandProgress.length && <div className="text-center text-slate-400">-</div>}
