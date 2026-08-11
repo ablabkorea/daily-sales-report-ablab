@@ -9706,6 +9706,14 @@ function SalesStatus({
     title: string;
     rows: SalesRecord[];
   } | null>(null);
+  const [brandProgressPopup, setBrandProgressPopup] = useState<{
+    title: string;
+    brand: string;
+    rate: number;
+    sales: number;
+    est: number;
+    stores: { name: string; sales: number; est: number }[];
+  } | null>(null);
   const [sortConfig, setSortConfig] = useState<{
     key: SalesStatusSortKey;
     direction: SortDirection;
@@ -10904,9 +10912,22 @@ function SalesStatus({
                               <div
                                 key={`${r.key}-${item.brand}`}
                                 className="text-center"
-                                title={`${item.brand}\n${item.stores.length ? item.stores.map((store) => `${store.name} (매출 ${won(store.sales)} / EST ${won(store.est)})`).join("\n") : "해당 거래처 없음"}`}
+                                title="클릭하여 거래처 상세 보기"
                               >
-                                <span className="cursor-help text-[11px] font-extrabold text-slate-800 underline decoration-dotted underline-offset-2">{item.est ? pct(item.rate) : "-"}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setBrandProgressPopup({
+                                    title: view === "거래처별" ? `${r.label}의 소속 브랜드` : `${item.brand} 소속 거래처`,
+                                    brand: item.brand,
+                                    rate: item.rate,
+                                    sales: item.sales,
+                                    est: item.est,
+                                    stores: item.stores,
+                                  })}
+                                  className="rounded px-1 text-[11px] font-extrabold text-slate-800 underline decoration-dotted underline-offset-2 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                >
+                                  {item.est ? pct(item.rate) : "-"}
+                                </button>
                               </div>
                             ))}
                             {!r.brandProgress.length && <div className="text-center text-slate-400">-</div>}
@@ -10996,6 +11017,31 @@ function SalesStatus({
             </tbody>
           </table>
         </div>
+        {brandProgressPopup && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/25 p-4" onClick={() => setBrandProgressPopup(null)}>
+            <div className="w-full max-w-md overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="브랜드별 진척률 상세">
+              <div className="flex items-start justify-between border-b border-slate-200 bg-amber-50 px-4 py-3">
+                <div>
+                  <div className="text-xs font-bold text-slate-500">{brandProgressPopup.title}</div>
+                  <div className="mt-0.5 text-base font-extrabold text-slate-900">{brandProgressPopup.brand} · {brandProgressPopup.est ? pct(brandProgressPopup.rate) : "-"}</div>
+                </div>
+                <button type="button" onClick={() => setBrandProgressPopup(null)} className="rounded-md px-2 py-1 text-lg font-bold text-slate-500 hover:bg-white hover:text-slate-900" aria-label="닫기">×</button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 border-b border-slate-200 p-3 text-xs">
+                <div className="rounded-lg bg-slate-50 p-2"><span className="text-slate-500">당월 매출</span><div className="mt-0.5 font-extrabold text-slate-900">{won(brandProgressPopup.sales)}</div></div>
+                <div className="rounded-lg bg-slate-50 p-2"><span className="text-slate-500">EST</span><div className="mt-0.5 font-extrabold text-slate-900">{won(brandProgressPopup.est)}</div></div>
+              </div>
+              <div className="max-h-64 overflow-y-auto p-3">
+                {brandProgressPopup.stores.length ? brandProgressPopup.stores.map((store) => (
+                  <div key={`${brandProgressPopup.brand}-${store.name}`} className="flex items-center justify-between gap-3 border-b border-slate-100 px-1 py-2 text-xs last:border-b-0">
+                    <span className="min-w-0 flex-1 truncate font-bold text-slate-800">{store.name}</span>
+                    <span className="shrink-0 text-right text-[11px] text-slate-600">매출 {won(store.sales)}<br />EST {won(store.est)}</span>
+                  </div>
+                )) : <div className="py-6 text-center text-xs text-slate-500">해당 거래처가 없습니다.</div>}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {drill && (
@@ -12488,12 +12534,10 @@ function StoreListManagement({
   const [search, setSearch] = useState("");
   const [otherTab, setOtherTab] = useState<"담당자 관리" | "브랜드 관리" | "채널 관리" | "거래상태 관리" | "품목 관리">("담당자 관리");
   const [managerSubTab, setManagerSubTab] = useState<"EST 담당자 관리" | "거래처 담당자 관리">("EST 담당자 관리");
-  const [channelTab, setChannelTab] = useState<"채널 1" | "채널 2">("채널 1");
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
   const [bulkManager, setBulkManager] = useState("");
   const [bulkBrand, setBulkBrand] = useState("");
   const [bulkChannel1, setBulkChannel1] = useState("");
-  const [bulkChannel2, setBulkChannel2] = useState<"" | "매장" | "비매장">("");
   const [bulkStatus, setBulkStatus] = useState<"" | Store["status"]>("");
   const [newManager, setNewManager] = useState("");
   const [newChannel1, setNewChannel1] = useState("");
@@ -12769,7 +12813,7 @@ function StoreListManagement({
       .includes(normalizedSearch),
   );
   const visibleTotalRows = totalRows.filter((row) =>
-    `${row.code} ${row.name} ${row.channel} ${row.manager} ${row.brand}`
+    `${row.code} ${row.name} ${row.channel} ${row.manager} ${row.brand} ${row.status}`
       .toLowerCase()
       .includes(normalizedSearch),
   );
@@ -12827,20 +12871,18 @@ function StoreListManagement({
     });
   }
 
-  function applyBulkChange(field: "manager" | "brand" | "channel" | "storeType" | "status") {
+  function applyBulkChange(field: "manager" | "brand" | "channel" | "status") {
     const rawValue = field === "manager"
       ? bulkManager
       : field === "brand"
         ? bulkBrand
         : field === "channel"
           ? bulkChannel1
-          : field === "storeType"
-            ? bulkChannel2
-            : bulkStatus;
+          : bulkStatus;
     const value = field === "manager" ? normalizeManager(rawValue) : rawValue.trim();
     if (!selectedCodes.size) return alert("수정할 거래처를 먼저 선택해주세요.");
     if (!value) return alert("변경할 값을 선택하거나 입력해주세요.");
-    const label = field === "manager" ? "담당자" : field === "brand" ? "브랜드" : field === "channel" ? "채널 1" : field === "storeType" ? "채널 2" : "거래상태";
+    const label = field === "manager" ? "담당자" : field === "brand" ? "브랜드" : field === "channel" ? "채널 1" : "거래상태";
     if (!window.confirm(`선택한 ${selectedCodes.size.toLocaleString("ko-KR")}개 거래처의 ${label}를 '${value}'(으)로 일괄 변경할까요?`)) return;
     const nextStores = totalRows.map((row) => selectedCodes.has(row.code) ? { ...row, [field]: value } : row);
     setStores(nextStores);
@@ -13195,18 +13237,8 @@ function StoreListManagement({
                 )}
                 {otherTab === "채널 관리" && (
                   <>
-                    <div className="flex rounded-lg border border-slate-300 bg-white p-0.5">{(["채널 1", "채널 2"] as const).map((item) => <button key={item} type="button" onClick={() => setChannelTab(item)} className={`rounded-md px-3 py-1.5 text-xs font-bold ${channelTab === item ? "bg-slate-800 text-white" : "text-slate-600"}`}>{item}</button>)}</div>
-                    {channelTab === "채널 1" ? (
-                      <>
-                        <select value={bulkChannel1} onChange={(event) => setBulkChannel1(event.target.value)} className="h-8 min-w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold"><option value="">채널 1 선택</option>{channel1Options.map((channel) => <option key={channel} value={channel}>{channel}</option>)}</select>
-                        <button type="button" onClick={() => applyBulkChange("channel")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">채널 1 일괄 수정</button>
-                      </>
-                    ) : (
-                      <>
-                        <select value={bulkChannel2} onChange={(event) => setBulkChannel2(event.target.value as "" | "매장" | "비매장")} className="h-8 min-w-[140px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold"><option value="">채널 2 선택</option><option value="매장">매장</option><option value="비매장">비매장</option></select>
-                        <button type="button" onClick={() => applyBulkChange("storeType")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">채널 2 일괄 수정</button>
-                      </>
-                    )}
+                    <select value={bulkChannel1} onChange={(event) => setBulkChannel1(event.target.value)} className="h-8 min-w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold"><option value="">채널 1 선택</option>{channel1Options.map((channel) => <option key={channel} value={channel}>{channel}</option>)}</select>
+                    <button type="button" onClick={() => applyBulkChange("channel")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">채널 1 일괄 수정</button>
                   </>
                 )}
                 {otherTab === "거래상태 관리" && (
@@ -13218,7 +13250,8 @@ function StoreListManagement({
                       <option value="거래종료">거래종료</option>
                     </select>
                     <button type="button" onClick={() => applyBulkChange("status")} className="h-8 rounded-lg bg-violet-600 px-3 text-xs font-bold text-white">거래상태 일괄 수정</button>
-                    <span className="text-[11px] font-semibold text-slate-500">EST 입력 화면과 동일한 거래상태를 사용합니다.</span>
+                    <span className="mx-1 h-5 w-px bg-slate-300" />
+                    {(["거래중", "거래중단", "거래종료"] as const).map((status) => <button key={status} type="button" onClick={() => setSearch(status)} className={`h-8 rounded-lg border px-3 text-xs font-bold ${search === status ? "border-violet-500 bg-violet-100 text-violet-800" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}>{status}</button>)}
                   </>
                 )}
               </div>
@@ -13286,7 +13319,7 @@ function StoreListManagement({
         </div>
       )}
 
-      <div className="min-h-0 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+      <div className="min-h-0 overflow-hidden rounded-2xl border-2 border-slate-400 bg-white shadow-sm">
         <div className="min-h-0 flex-1 overflow-auto pb-8 pr-2" style={{ height: "clamp(420px, calc(100vh - 285px), 760px)" }}>
           {listTab === "기존거래처 리스트" && (
             <table className="w-full min-w-[1250px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
@@ -13350,7 +13383,6 @@ function StoreListManagement({
                   <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">거래처명</th>
                   <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">담당자</th>
                   <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">채널</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">매장/비매장</th>
                   <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">브랜드</th>
                   <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">상태</th>
                 </tr>
@@ -13389,7 +13421,6 @@ function StoreListManagement({
                   <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2">현재 담당자</th>
                   <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2">현재 브랜드</th>
                   <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">채널</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">매장/비매장</th>
                   <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">상태</th>
                 </tr>
               </thead>
@@ -13428,7 +13459,7 @@ function StoreListManagement({
                         ) : (row.brand || "미지정")}
                       </td>
                       <td className="border border-slate-300 px-3 py-2">
-                        {otherTab === "채널 관리" && channelTab === "채널 1" ? (
+                        {otherTab === "채널 관리" ? (
                           <select
                             value={row.channel === "매장" ? "매장" : row.channel === "비매장" ? "비매장" : ""}
                             onChange={(event) => {
@@ -13454,32 +13485,6 @@ function StoreListManagement({
                         )}
                       </td>
                       <td className="border border-slate-300 px-3 py-2">
-                        {otherTab === "채널 관리" && channelTab === "채널 2" ? (
-                          <select
-                            value={row.storeType === "매장" ? "매장" : "비매장"}
-                            onChange={(event) => {
-                              event.stopPropagation();
-                              const nextStoreType = event.target.value as "매장" | "비매장";
-                              setStores(
-                                totalRows.map((store) =>
-                                  store.code === row.code
-                                    ? { ...store, storeType: nextStoreType }
-                                    : store,
-                                ),
-                              );
-                            }}
-                            onClick={(event) => event.stopPropagation()}
-                            className="h-8 min-w-[92px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500"
-                            aria-label={`${row.name} 매장 비매장 선택`}
-                          >
-                            <option value="매장">매장</option>
-                            <option value="비매장">비매장</option>
-                          </select>
-                        ) : (
-                          row.storeType
-                        )}
-                      </td>
-                      <td className="border border-slate-300 px-3 py-2">
                         <span className={`rounded-full px-3 py-1 font-bold ${row.status === "거래중" ? "bg-emerald-100 text-emerald-800" : row.status === "거래중단" ? "bg-amber-100 text-amber-900" : "bg-slate-200 text-slate-700"}`}>
                           {row.status}
                         </span>
@@ -13489,13 +13494,16 @@ function StoreListManagement({
                 })}
                 {!visibleOtherRows.length && (
                   <tr>
-                    <td colSpan={8} className="border border-slate-300 px-4 py-12 text-center text-sm text-slate-500">
+                    <td colSpan={7} className="border border-slate-300 px-4 py-12 text-center text-sm text-slate-500">
                       검색 조건에 맞는 거래처가 없습니다.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+          )}
+          {section === "reference" && listTab === "기타 관리" && !(otherTab === "담당자 관리" && managerSubTab === "EST 담당자 관리") && (
+            <div className="border-t-4 border-slate-500 bg-slate-100 px-4 py-2 text-center text-[11px] font-extrabold text-slate-600">표 끝</div>
           )}
         </div>
       </div>
