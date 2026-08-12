@@ -5464,10 +5464,10 @@ function EstQuickEntry({
   const [newStoreType, setNewStoreType] = useState<StoreType>("매장");
   const [newStoreName, setNewStoreName] = useState("");
   const [newStoreEstAmount, setNewStoreEstAmount] = useState(0);
+  const [newStoreModalOpen, setNewStoreModalOpen] = useState(false);
 
   const addPendingNewStoreEst = () => {
     const name = newStoreName.trim();
-    if (!canEdit) return alert("현재는 EST 입력 기간이 아닙니다.");
     if (!selectedManager) return alert("담당자를 먼저 선택해주세요.");
     if (!name) return alert("신규 거래처명을 입력해주세요.");
     if (newStoreEstAmount <= 0) return alert("EST 금액을 0원보다 크게 입력해주세요.");
@@ -5493,6 +5493,7 @@ function EstQuickEntry({
     ]);
     setNewStoreName("");
     setNewStoreEstAmount(0);
+    setNewStoreModalOpen(false);
     alert(`${name} 신규 거래처 EST를 월초관리에 등록했습니다.`);
   };
 
@@ -6026,24 +6027,6 @@ function EstQuickEntry({
       </aside>
 
       <div className="min-w-0 flex-1 space-y-4">
-        <div className="rounded-2xl border border-emerald-300 bg-emerald-50/60 p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-black text-slate-900">신규 거래처 EST 미리 입력</h3>
-              <p className="mt-0.5 text-[11px] font-semibold text-slate-500">거래처 코드가 아직 없어도 등록할 수 있으며, 관리자가 월초관리에서 코드를 연결합니다.</p>
-            </div>
-            <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-emerald-700 ring-1 ring-emerald-200">담당자 {selectedManager || "미선택"}</span>
-          </div>
-          <div className="grid gap-2 md:grid-cols-[150px_minmax(220px,1fr)_190px_110px]">
-            <select value={newStoreType} onChange={(e) => setNewStoreType(e.target.value as StoreType)} disabled={!canEdit} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold outline-none focus:border-emerald-500 disabled:bg-slate-100">
-              <option value="매장">매장</option>
-              <option value="비매장">비매장</option>
-            </select>
-            <input value={newStoreName} onChange={(e) => setNewStoreName(e.target.value)} disabled={!canEdit} placeholder="신규 거래처명" className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold outline-none focus:border-emerald-500 disabled:bg-slate-100" />
-            <input type="text" inputMode="numeric" value={newStoreEstAmount ? won(newStoreEstAmount) : ""} onChange={(e) => setNewStoreEstAmount(num(e.target.value))} disabled={!canEdit} placeholder="EST 금액" className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-emerald-500 disabled:bg-slate-100" />
-            <button type="button" onClick={addPendingNewStoreEst} disabled={!canEdit || !selectedManager} className="h-10 rounded-lg bg-emerald-600 px-4 text-sm font-extrabold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300">추가</button>
-          </div>
-        </div>
         <div className="rounded-2xl border border-slate-300 bg-white p-3 shadow-sm">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
             <div className="flex flex-wrap items-stretch gap-3">
@@ -6122,6 +6105,15 @@ function EstQuickEntry({
                   <option value="nonStore">비매장</option>
                 </select>
               </label>
+
+              <button
+                type="button"
+                onClick={() => setNewStoreModalOpen(true)}
+                disabled={!selectedManager}
+                className="h-9 rounded-lg border border-emerald-600 bg-emerald-600 px-4 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
+              >
+                신규 거래처 생성
+              </button>
 
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-extrabold text-slate-600">거래상태</span>
@@ -6447,6 +6439,38 @@ function EstQuickEntry({
               <span className="rounded-xl border border-orange-300 bg-white px-4 py-2 text-sm font-black text-orange-700 shadow-sm">
                 브랜드 EST 총합계&nbsp; {won(openBrandEstTotal)}원
               </span>
+            </div>
+          </div>
+        </div>
+      )}
+      {newStoreModalOpen && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/35 p-4" onMouseDown={() => setNewStoreModalOpen(false)}>
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="신규 거래처 생성">
+            <div className="flex items-center justify-between border-b border-emerald-200 bg-emerald-50 px-5 py-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900">신규 거래처 생성</h3>
+                <p className="mt-1 text-xs font-semibold text-slate-500">담당자 {selectedManager || "미선택"} · {month} EST</p>
+              </div>
+              <button type="button" onClick={() => setNewStoreModalOpen(false)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50">닫기</button>
+            </div>
+            <div className="space-y-4 p-5">
+              <label className="block text-xs font-extrabold text-slate-700">구분
+                <select value={newStoreType} onChange={(e) => setNewStoreType(e.target.value as StoreType)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold outline-none focus:border-emerald-500">
+                  <option value="매장">매장</option>
+                  <option value="비매장">비매장</option>
+                </select>
+              </label>
+              <label className="block text-xs font-extrabold text-slate-700">거래처명
+                <input value={newStoreName} onChange={(e) => setNewStoreName(e.target.value)} placeholder="신규 거래처명" className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold outline-none focus:border-emerald-500" autoFocus />
+              </label>
+              <label className="block text-xs font-extrabold text-slate-700">EST 금액
+                <input type="text" inputMode="numeric" value={newStoreEstAmount ? won(newStoreEstAmount) : ""} onChange={(e) => setNewStoreEstAmount(num(e.target.value))} placeholder="0" className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-emerald-500" />
+              </label>
+              <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">월초부터 월말까지 언제든 등록할 수 있으며, 관리자가 월초관리에서 거래처 코드를 연결합니다.</p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button type="button" onClick={() => setNewStoreModalOpen(false)} className="h-9 rounded-lg border border-slate-300 bg-white px-4 text-xs font-extrabold text-slate-700">취소</button>
+              <button type="button" onClick={addPendingNewStoreEst} disabled={!selectedManager} className="h-9 rounded-lg bg-emerald-600 px-5 text-xs font-extrabold text-white hover:bg-emerald-700 disabled:bg-slate-300">등록</button>
             </div>
           </div>
         </div>
@@ -9993,8 +10017,9 @@ function SalesStatus({
   const uploadedStoreInfo = (r: SalesRecord) => {
     const mappedStore = stMap.get(r.storeCode);
     return {
-      code: mappedStore?.code || r.storeCode || r.storeName || "미지정",
-      name: mappedStore?.name || r.storeName || r.storeCode || "미지정",
+      code: mappedStore?.code || r.storeCode || "미지정",
+      // 매출현황에 표시하는 거래처명은 업로드 매출 원장의 값만 사용합니다.
+      name: norm(r.storeName),
       channel: mappedStore?.channel || r.channel || "미지정",
       manager: mappedStore?.manager || r.manager || "미지정",
       storeType: mappedStore?.storeType || r.storeType || "비매장",
@@ -10041,7 +10066,7 @@ function SalesStatus({
       return uploadedStoreInfo(r);
     }
 
-    return resolveStoreInfo(
+    const resolved = resolveStoreInfo(
       r.storeCode,
       r.storeName,
       {
@@ -10052,6 +10077,7 @@ function SalesStatus({
       },
       stores,
     );
+    return { ...resolved, name: norm(r.storeName) };
   };
 
   const filterByStoreSearch = (s: SalesRecord) => {
@@ -10094,6 +10120,7 @@ function SalesStatus({
   const current = sales.filter(
     (s) =>
       s.period === "current" &&
+      (view !== "거래처별" || Boolean(norm(s.storeName))) &&
       inRange(s.saleDate, monthStart(month), date) &&
       filterByStoreSearch(s) &&
       shouldIncludeRecord(s),
@@ -10101,6 +10128,7 @@ function SalesStatus({
   const currentFullMonthRows = sales.filter(
     (s) =>
       s.period === "current" &&
+      (view !== "거래처별" || Boolean(norm(s.storeName))) &&
       inRange(s.saleDate, monthStart(month), monthEnd(month)) &&
       filterByStoreSearch(s) &&
       shouldIncludeRecord(s),
@@ -10108,6 +10136,7 @@ function SalesStatus({
   const prevMonthRows = sales.filter(
     (s) =>
       s.period === "prevMonth" &&
+      (view !== "거래처별" || Boolean(norm(s.storeName))) &&
       s.refMonth === month &&
       filterByStoreSearch(s) &&
       shouldIncludeRecord(s),
@@ -10115,6 +10144,7 @@ function SalesStatus({
   const prevYearRows = sales.filter(
     (s) =>
       s.period === "prevYear" &&
+      (view !== "거래처별" || Boolean(norm(s.storeName))) &&
       s.refMonth === month &&
       filterByStoreSearch(s) &&
       shouldIncludeRecord(s),
@@ -10132,6 +10162,9 @@ function SalesStatus({
 
   const rowLabel = (key: string, records: SalesRecord[]) => {
     if (!isStoreListView) return key || "미지정";
+    const uploadedName = records.find((record) => norm(record.storeName))?.storeName;
+    if (uploadedName) return norm(uploadedName);
+    if (view === "거래처별") return "";
     const first = records[0];
     if (first) return resolveRecord(first).name;
     const mapped = stMap.get(key);
@@ -10211,9 +10244,9 @@ function SalesStatus({
     ...currentFullMonthMap.keys(),
     ...prevMonthMap.keys(),
     ...prevYearMap.keys(),
-    ...estMap.keys(),
+    ...(view === "거래처별" ? [] : estMap.keys()),
   ]);
-  if (isStoreListView && !normalizedSearch) {
+  if (isStoreListView && view !== "거래처별" && !normalizedSearch) {
     const selectedManagerSet = new Set(selectedManagers);
     stores
       .filter((store) => !hideEndedStores || store.status === "거래중")
@@ -10499,6 +10532,7 @@ function SalesStatus({
           : 0,
       };
     })
+    .filter((row) => view !== "거래처별" || Boolean(norm(row.label)))
     .filter((row) => {
       if (!isStoreListView) return true;
       if (orderDateFilter === "check7") return row.daysSinceLastOrder >= 7;
