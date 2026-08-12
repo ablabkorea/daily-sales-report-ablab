@@ -14,7 +14,7 @@ type ManagerConfig = {
 type StoreType = string;
 type PeriodType = "current" | "prevMonth" | "prevYear";
 type SalesView = "거래처별" | "브랜드별" | "담당자별" | "채널별";
-type MonthStartTab = "거래처 리스트" | "기준정보" | "업로드 관리" | "이익금액 검증표";
+type MonthStartTab = "신규 거래처 EST" | "거래처 리스트" | "기준정보" | "업로드 관리" | "이익금액 검증표";
 type DrillPeriod = "prevYear" | "prevMonth" | "current" | "currentFullMonth";
 type SalesStatusSortKey =
   | "label"
@@ -114,6 +114,16 @@ type EstRecord = {
   amount: number;
 };
 
+type PendingNewStoreEst = {
+  id: string;
+  month: string;
+  manager: string;
+  storeType: StoreType;
+  storeName: string;
+  amount: number;
+  createdAt: string;
+};
+
 type ItemCostHistory = {
   id: string;
   changedAt: string;
@@ -165,6 +175,7 @@ const INITIAL_MANAGER_CONFIGS: ManagerConfig[] = [
 ];
 const SALES_VIEWS: SalesView[] = ["거래처별", "브랜드별", "담당자별"];
 const MONTH_TABS: MonthStartTab[] = [
+  "신규 거래처 EST",
   "거래처 리스트",
   "기준정보",
   "업로드 관리",
@@ -4620,6 +4631,10 @@ export default function SalesReportClient() {
     initialTargets,
   );
   const [ests, setEsts] = useLocal<EstRecord[]>("ablab_ests_v14", initialEsts);
+  const [pendingNewStoreEsts, setPendingNewStoreEsts] = useLocal<PendingNewStoreEst[]>(
+    "ablab_pending_new_store_ests_v1",
+    [],
+  );
   const [timeConfigs, setTimeConfigs] = useLocal<TimeConfig[]>(
     "ablab_time_configs_v14",
     initialTimeConfigs,
@@ -5217,6 +5232,8 @@ export default function SalesReportClient() {
             canEdit={isAdmin || isEstEntryPeriodOpen(dashMonth)}
             isAdmin={isAdmin}
             managerConfigs={managerConfigs}
+            pendingNewStoreEsts={pendingNewStoreEsts}
+            setPendingNewStoreEsts={setPendingNewStoreEsts}
             onSummaryChange={setEstHeaderSummary}
           />
         )}
@@ -5283,6 +5300,8 @@ export default function SalesReportClient() {
             setItemMasters={setItemMasters}
             managerConfigs={managerConfigs}
             setManagerConfigs={setManagerConfigs}
+            pendingNewStoreEsts={pendingNewStoreEsts}
+            setPendingNewStoreEsts={setPendingNewStoreEsts}
           />
         )}
       </section>
@@ -5414,6 +5433,8 @@ function EstQuickEntry({
   canEdit,
   isAdmin,
   managerConfigs,
+  pendingNewStoreEsts,
+  setPendingNewStoreEsts,
   onSummaryChange,
 }: {
   stores: Store[];
@@ -5427,6 +5448,8 @@ function EstQuickEntry({
   canEdit: boolean;
   isAdmin: boolean;
   managerConfigs: ManagerConfig[];
+  pendingNewStoreEsts: PendingNewStoreEst[];
+  setPendingNewStoreEsts: React.Dispatch<React.SetStateAction<PendingNewStoreEst[]>>;
   onSummaryChange: (summary: EstHeaderSummary | null) => void;
 }) {
   const activeManagers = useMemo(
@@ -5438,6 +5461,40 @@ function EstQuickEntry({
     [managerConfigs],
   );
   const [selectedManager, setSelectedManager] = useState<Manager>("");
+  const [newStoreType, setNewStoreType] = useState<StoreType>("매장");
+  const [newStoreName, setNewStoreName] = useState("");
+  const [newStoreEstAmount, setNewStoreEstAmount] = useState(0);
+
+  const addPendingNewStoreEst = () => {
+    const name = newStoreName.trim();
+    if (!canEdit) return alert("현재는 EST 입력 기간이 아닙니다.");
+    if (!selectedManager) return alert("담당자를 먼저 선택해주세요.");
+    if (!name) return alert("신규 거래처명을 입력해주세요.");
+    if (newStoreEstAmount <= 0) return alert("EST 금액을 0원보다 크게 입력해주세요.");
+    const normalizedSelectedManager = norm(selectedManager).trim().toUpperCase();
+    const duplicate = pendingNewStoreEsts.some(
+      (row) =>
+        row.month === month &&
+        norm(row.manager).trim().toUpperCase() === normalizedSelectedManager &&
+        normalizeStoreNameKey(row.storeName) === normalizeStoreNameKey(name),
+    );
+    if (duplicate) return alert("같은 월·담당자·거래처명으로 등록된 신규 EST가 이미 있습니다.");
+    setPendingNewStoreEsts((prev) => [
+      ...prev,
+      {
+        id: `pending-est-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        month,
+        manager: selectedManager,
+        storeType: newStoreType,
+        storeName: name,
+        amount: newStoreEstAmount,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    setNewStoreName("");
+    setNewStoreEstAmount(0);
+    alert(`${name} 신규 거래처 EST를 월초관리에 등록했습니다.`);
+  };
 
   useEffect(() => {
     if (!activeManagers.length) {
@@ -5969,6 +6026,24 @@ function EstQuickEntry({
       </aside>
 
       <div className="min-w-0 flex-1 space-y-4">
+        <div className="rounded-2xl border border-emerald-300 bg-emerald-50/60 p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-black text-slate-900">신규 거래처 EST 미리 입력</h3>
+              <p className="mt-0.5 text-[11px] font-semibold text-slate-500">거래처 코드가 아직 없어도 등록할 수 있으며, 관리자가 월초관리에서 코드를 연결합니다.</p>
+            </div>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-emerald-700 ring-1 ring-emerald-200">담당자 {selectedManager || "미선택"}</span>
+          </div>
+          <div className="grid gap-2 md:grid-cols-[150px_minmax(220px,1fr)_190px_110px]">
+            <select value={newStoreType} onChange={(e) => setNewStoreType(e.target.value as StoreType)} disabled={!canEdit} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold outline-none focus:border-emerald-500 disabled:bg-slate-100">
+              <option value="매장">매장</option>
+              <option value="비매장">비매장</option>
+            </select>
+            <input value={newStoreName} onChange={(e) => setNewStoreName(e.target.value)} disabled={!canEdit} placeholder="신규 거래처명" className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold outline-none focus:border-emerald-500 disabled:bg-slate-100" />
+            <input type="text" inputMode="numeric" value={newStoreEstAmount ? won(newStoreEstAmount) : ""} onChange={(e) => setNewStoreEstAmount(num(e.target.value))} disabled={!canEdit} placeholder="EST 금액" className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-emerald-500 disabled:bg-slate-100" />
+            <button type="button" onClick={addPendingNewStoreEst} disabled={!canEdit || !selectedManager} className="h-10 rounded-lg bg-emerald-600 px-4 text-sm font-extrabold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300">추가</button>
+          </div>
+        </div>
         <div className="rounded-2xl border border-slate-300 bg-white p-3 shadow-sm">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
             <div className="flex flex-wrap items-stretch gap-3">
@@ -9830,6 +9905,7 @@ function SalesStatus({
   const [hideEndedStores, setHideEndedStores] = useState(false);
   const [channelTypeFilter, setChannelTypeFilter] = useState<"all" | "store" | "nonStore">("all");
   const [newStoreFilter, setNewStoreFilter] = useState<"all" | "new">("all");
+  const [managerColumnFilter, setManagerColumnFilter] = useState("all");
   const [priorYearStoreHistory, setPriorYearStoreHistory] = useState<PriorYearStoreHistoryRow[] | null>(null);
   const [priorYearHistoryError, setPriorYearHistoryError] = useState(false);
   const [selectedManagers, setSelectedManagers] = useState<string[]>([]);
@@ -10440,6 +10516,8 @@ function SalesStatus({
       nextRows = nextRows.filter((row) => row.channel === "비매장");
     if (newStoreFilter === "new")
       nextRows = nextRows.filter((row) => row.isNewStore);
+    if (view === "거래처별" && managerColumnFilter !== "all")
+      nextRows = nextRows.filter((row) => (row.manager || "미지정") === managerColumnFilter);
     if (view === "담당자별" && selectedManagers.length > 0) {
       const selected = new Set(selectedManagers);
       nextRows = nextRows.filter((row) =>
@@ -10447,7 +10525,12 @@ function SalesStatus({
       );
     }
     return nextRows;
-  }, [rows, hideEndedStores, channelTypeFilter, newStoreFilter, view, selectedManagers]);
+  }, [rows, hideEndedStores, channelTypeFilter, newStoreFilter, managerColumnFilter, view, selectedManagers]);
+
+  const managerColumnOptions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.manager || "미지정"))).sort((a, b) => a.localeCompare(b, "ko-KR")),
+    [rows],
+  );
 
   const managerFilterOptions = useMemo(() => {
     if (view !== "담당자별") return [];
@@ -10741,6 +10824,7 @@ function SalesStatus({
 
   const salesStatusExcelRows = sortedRows.map((r) => ({
     구분: r.label,
+    담당자: r.manager || "미지정",
     채널: r.channel,
     신규: r.isNewStore ? "Y" : "",
     전년동월: r.prevYearSales,
@@ -10761,7 +10845,7 @@ function SalesStatus({
     이익률: pct(r.profitRate),
   }));
 
-  const salesStatusColSpan = 1 + (showChannelColumn ? 2 : 0) + (!compact && isStoreListView ? 1 : 0) + 11;
+  const salesStatusColSpan = 1 + (view === "거래처별" ? 1 : 0) + (showChannelColumn ? 2 : 0) + (!compact && isStoreListView ? 1 : 0) + 11;
   return (
     <>
       <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
@@ -10955,15 +11039,26 @@ function SalesStatus({
               <tr className="bg-white">
                 <ThCompactSortable
                   rowSpan={2}
-                  w={isStoreListView ? (compact ? "w-[26%]" : "w-[19%]") : "w-[11%]"}
+                  w={isStoreListView ? (compact ? "w-[23%]" : "w-[15%]") : "w-[11%]"}
                   sortKey="label"
                   sortConfig={sortConfig}
                   onSort={requestSort}
                 >
                   {isStoreListView ? "거래처" : view.replace("별", "")}
                 </ThCompactSortable>
+                {view === "거래처별" && (
+                  <ThCompact rowSpan={2} tone="gray" w="w-[7%]">
+                    <div className="flex flex-col items-center gap-1">
+                      <span>담당자</span>
+                      <select value={managerColumnFilter} onChange={(event) => setManagerColumnFilter(event.target.value)} onClick={(event) => event.stopPropagation()} className="h-7 w-full min-w-[68px] rounded-md border border-slate-300 bg-white px-1 text-[11px] font-bold text-slate-700 outline-none" aria-label="매출현황 담당자 필터">
+                        <option value="all">전체</option>
+                        {managerColumnOptions.map((manager) => <option key={manager} value={manager}>{manager}</option>)}
+                      </select>
+                    </div>
+                  </ThCompact>
+                )}
                 {showChannelColumn && (
-                  <ThCompact rowSpan={2} tone="gray" w="w-[6%]">
+                  <ThCompact rowSpan={2} tone="gray" w="w-[5%]">
                     <div className="flex flex-col items-center gap-1">
                       <span>채널</span>
                       <select
@@ -11050,6 +11145,7 @@ function SalesStatus({
                     <Fragment key={r.key}>
                       <tr>
                         <TdCompact bold>{r.label}</TdCompact>
+                        {view === "거래처별" && <TdCompact bold>{r.manager || "미지정"}</TdCompact>}
                         {showChannelColumn && <TdCompact bold>{r.channel}</TdCompact>}
                         {showChannelColumn && <TdCompact bold>{r.isNewStore ? "Y" : ""}</TdCompact>}
                         {!compact && isStoreListView && (
@@ -12365,6 +12461,98 @@ function SalesCompare({
   );
 }
 
+function PendingNewStoreEstManagement({
+  month,
+  stores,
+  setStores,
+  ests,
+  setEsts,
+  rows,
+  setRows,
+}: {
+  month: string;
+  stores: Store[];
+  setStores: (v: Store[]) => void;
+  ests: EstRecord[];
+  setEsts: (v: EstRecord[]) => void;
+  rows: PendingNewStoreEst[];
+  setRows: React.Dispatch<React.SetStateAction<PendingNewStoreEst[]>>;
+}) {
+  const [codeDrafts, setCodeDrafts] = useState<Record<string, string>>({});
+  const visibleRows = rows
+    .filter((row) => row.month === month)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  const confirmRow = (row: PendingNewStoreEst) => {
+    const code = norm(codeDrafts[row.id]);
+    if (!code) return alert("거래처 코드를 입력해주세요.");
+    if (stores.some((store) => norm(store.code) === norm(code))) return alert("이미 등록된 거래처 코드입니다. 기존 거래처와 연결하려면 중복 여부를 먼저 확인해주세요.");
+    if (stores.some((store) => normalizeStoreNameKey(store.name) === normalizeStoreNameKey(row.storeName))) return alert("같은 거래처명의 기존 거래처가 있습니다. 중복 여부를 확인해주세요.");
+    if (!window.confirm(`${row.storeName}을(를) 거래처 코드 ${code}로 확정할까요?\nEST ${won(row.amount)}도 ${row.month}에 연결됩니다.`)) return;
+    const store: Store = {
+      code,
+      name: row.storeName,
+      channel: row.storeType,
+      manager: row.manager,
+      storeType: row.storeType,
+      brand: "당월 신규 거래처",
+      status: "거래중",
+    };
+    setStores([...stores, store]);
+    const withoutDuplicate = ests.filter((item) => !(item.month === row.month && norm(item.storeCode) === norm(code)));
+    setEsts([...withoutDuplicate, { storeCode: code, storeName: row.storeName, month: row.month, amount: row.amount }]);
+    setRows((previous) => previous.filter((item) => item.id !== row.id));
+    setCodeDrafts((previous) => {
+      const next = { ...previous };
+      delete next[row.id];
+      return next;
+    });
+    alert("거래처 코드와 EST 연결을 완료했습니다.");
+  };
+
+  const deleteRow = (row: PendingNewStoreEst) => {
+    if (!window.confirm(`${row.storeName} 신규 EST 신청을 삭제할까요?`)) return;
+    setRows((previous) => previous.filter((item) => item.id !== row.id));
+  };
+
+  return (
+    <div className="rounded-2xl border border-emerald-200 bg-white shadow-sm">
+      <div className="border-b border-emerald-200 bg-emerald-50 px-5 py-4">
+        <h2 className="text-base font-black text-slate-900">신규 거래처 EST 관리</h2>
+        <p className="mt-1 text-xs font-semibold text-slate-500">담당자가 입력한 내용을 확인하고 실제 거래처 코드를 넣어 확정하세요. · {month}</p>
+      </div>
+      <div className="overflow-auto">
+        <table className="w-full min-w-[980px] border-separate border-spacing-0 text-center text-xs">
+          <thead><tr>
+            <th className="sticky top-0 border border-slate-300 bg-slate-100 px-3 py-2">담당자</th>
+            <th className="sticky top-0 border border-slate-300 bg-slate-100 px-3 py-2">매장/비매장</th>
+            <th className="sticky top-0 border border-slate-300 bg-slate-100 px-3 py-2">거래처명</th>
+            <th className="sticky top-0 border border-slate-300 bg-slate-100 px-3 py-2">EST 금액</th>
+            <th className="sticky top-0 border border-slate-300 bg-slate-100 px-3 py-2">입력일시</th>
+            <th className="sticky top-0 border border-emerald-300 bg-emerald-50 px-3 py-2">거래처 코드</th>
+            <th className="sticky top-0 border border-slate-300 bg-slate-100 px-3 py-2">처리</th>
+          </tr></thead>
+          <tbody>
+            {visibleRows.map((row) => (
+              <tr key={row.id} className="hover:bg-emerald-50/40">
+                <td className="border border-slate-300 px-3 py-2 font-black">{row.manager}</td>
+                <td className="border border-slate-300 px-3 py-2 font-bold">{row.storeType}</td>
+                <td className="border border-slate-300 px-3 py-2 text-left font-bold">{row.storeName}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right font-black">{won(row.amount)}</td>
+                <td className="border border-slate-300 px-3 py-2">{row.createdAt ? new Date(row.createdAt).toLocaleString("ko-KR") : "-"}</td>
+                <td className="border border-emerald-300 bg-emerald-50/40 px-3 py-2"><input value={codeDrafts[row.id] || ""} onChange={(e) => setCodeDrafts((previous) => ({ ...previous, [row.id]: e.target.value }))} placeholder="거래처 코드 입력" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 font-bold outline-none focus:border-emerald-500" /></td>
+                <td className="border border-slate-300 px-3 py-2"><div className="flex justify-center gap-2"><button type="button" onClick={() => confirmRow(row)} className="rounded-lg bg-emerald-600 px-3 py-2 font-extrabold text-white hover:bg-emerald-700">확정</button><button type="button" onClick={() => deleteRow(row)} className="rounded-lg border border-rose-300 bg-white px-3 py-2 font-extrabold text-rose-700 hover:bg-rose-50">삭제</button></div></td>
+              </tr>
+            ))}
+            {!visibleRows.length && <tr><td colSpan={7} className="border border-slate-300 p-10 text-slate-500">{month}에 등록된 신규 거래처 EST가 없습니다.</td></tr>}
+          </tbody>
+          {visibleRows.length > 0 && <tfoot><tr className="bg-slate-100 font-black"><td colSpan={3} className="border border-slate-300 px-3 py-2 text-left">미확정 {visibleRows.length.toLocaleString("ko-KR")}건</td><td className="border border-slate-300 px-3 py-2 text-right text-emerald-700">{won(visibleRows.reduce((total, row) => total + row.amount, 0))}</td><td colSpan={3} className="border border-slate-300 px-3 py-2" /></tr></tfoot>}
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function MonthStartManagement({
   stores,
   setStores,
@@ -12385,6 +12573,8 @@ function MonthStartManagement({
   setItemMasters,
   managerConfigs,
   setManagerConfigs,
+  pendingNewStoreEsts,
+  setPendingNewStoreEsts,
 }: {
   stores: Store[];
   setStores: (v: Store[]) => void;
@@ -12405,6 +12595,8 @@ function MonthStartManagement({
   setItemMasters: React.Dispatch<React.SetStateAction<ItemMasterRecord[]>>;
   managerConfigs: ManagerConfig[];
   setManagerConfigs: React.Dispatch<React.SetStateAction<ManagerConfig[]>>;
+  pendingNewStoreEsts: PendingNewStoreEst[];
+  setPendingNewStoreEsts: React.Dispatch<React.SetStateAction<PendingNewStoreEst[]>>;
 }) {
   const [tab, setTab] = useState<MonthStartTab>("거래처 리스트");
 
@@ -12427,6 +12619,20 @@ function MonthStartManagement({
           ))}
         </div>
       </div>
+
+      {tab === "신규 거래처 EST" && (
+        <div className="min-h-0 flex-1 overflow-auto pb-24 pr-2">
+          <PendingNewStoreEstManagement
+            month={month}
+            stores={stores}
+            setStores={setStores}
+            ests={ests}
+            setEsts={setEsts}
+            rows={pendingNewStoreEsts}
+            setRows={setPendingNewStoreEsts}
+          />
+        </div>
+      )}
 
       {tab === "거래처 리스트" && (
         <div className="min-h-0 flex-1 overflow-auto pb-24 pr-2">
