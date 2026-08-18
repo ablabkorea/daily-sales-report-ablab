@@ -4609,6 +4609,7 @@ function isEstEntryPeriodOpen(month: string) {
 
 export default function SalesReportClient() {
   const [active, setActive] = useState("EST 입력");
+  const [isMobile, setIsMobile] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showIosInstallGuide, setShowIosInstallGuide] = useState(false);
   const [estHeaderSummary, setEstHeaderSummary] = useState<EstHeaderSummary | null>(null);
@@ -4666,6 +4667,20 @@ export default function SalesReportClient() {
   useEffect(() => {
     if (!dashDate.startsWith(dashMonth)) setDashDate(monthEnd(dashMonth));
   }, [dashMonth, dashDate]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+    const syncViewport = () => setIsMobile(media.matches);
+    syncViewport();
+    media.addEventListener("change", syncViewport);
+    return () => media.removeEventListener("change", syncViewport);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile && active !== "대시보드" && active !== "매출현황") {
+      setActive("대시보드");
+    }
+  }, [isMobile, active]);
 
   useEffect(() => {
     const headEntries: Array<[string, Record<string, string>]> = [
@@ -4747,12 +4762,15 @@ export default function SalesReportClient() {
   ];
   const openMenus = allMenus.filter((menu) => menuVisibility[menu.label] !== false);
   const menus = isAdmin ? allMenus : openMenus;
+  const displayedMenus = isMobile
+    ? allMenus.filter((menu) => menu.label === "대시보드" || menu.label === "매출현황")
+    : menus;
 
   useEffect(() => {
-    if (isAdmin) return;
+    if (isAdmin || isMobile) return;
     if (!openMenus.some((menu) => menu.label === active))
       setActive(openMenus[0]?.label || "EST 입력");
-  }, [isAdmin, active, menuVisibility]);
+  }, [isAdmin, isMobile, active, menuVisibility]);
 
   const toggleMenuVisibility = (label: MainMenuLabel) => {
     const currentlyOpen = menuVisibility[label] !== false;
@@ -4809,7 +4827,7 @@ export default function SalesReportClient() {
               에이비랩 코리아 Sales Report
             </div>
             <nav className="mobile-main-nav flex flex-wrap items-center gap-2">
-              {menus.map((m) => (
+              {displayedMenus.map((m) => (
                 <button
                   key={m.label}
                   onClick={() => setActive(m.label)}
@@ -5352,6 +5370,19 @@ export default function SalesReportClient() {
               padding: 0.4rem 0.7rem !important;
               font-size: 0.7rem !important;
             }
+            .sales-report-root .mobile-header-actions button:not(.install-app-button) {
+              display: none !important;
+            }
+            .sales-report-root .mobile-main-nav {
+              display: grid !important;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              overflow: visible !important;
+              padding-bottom: 0 !important;
+            }
+            .sales-report-root .mobile-main-nav button {
+              width: 100%;
+              text-align: center;
+            }
             .sales-report-root .report-controls {
               display: grid !important;
               grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -5508,7 +5539,7 @@ export default function SalesReportClient() {
                   <span>Target 합계 : {won(estHeaderSummary.targetTotal)}</span>
                 </div>
               )}
-              {active === "매출현황" && (
+              {!isMobile && active === "매출현황" && (
                 <SalesTargetHeaderKpi
                   stores={stores}
                   sales={sales}
@@ -5521,7 +5552,7 @@ export default function SalesReportClient() {
             </div>
           </div>
 
-          {active === "대시보드" && (
+          {!isMobile && active === "대시보드" && (
             <DashboardTopKpis
               stores={stores}
               sales={sales}
@@ -5536,7 +5567,7 @@ export default function SalesReportClient() {
           )}
         </div>
 
-        {active === "EST 입력" && (
+        {!isMobile && active === "EST 입력" && (
           <EstQuickEntry
             stores={stores}
             setStores={setStores}
@@ -5554,7 +5585,7 @@ export default function SalesReportClient() {
             onSummaryChange={setEstHeaderSummary}
           />
         )}
-        {active === "대시보드" && (
+        {!isMobile && active === "대시보드" && (
           <Dashboard
             stores={stores}
             sales={sales}
@@ -5566,7 +5597,7 @@ export default function SalesReportClient() {
             codeMappings={codeMappings}
           />
         )}
-        {active === "매출현황" && (
+        {!isMobile && active === "매출현황" && (
           <SalesStatus
             stores={stores}
             sales={sales}
@@ -5578,7 +5609,7 @@ export default function SalesReportClient() {
             codeMappings={codeMappings}
           />
         )}
-        {active === "거래처별 상세" && (
+        {!isMobile && active === "거래처별 상세" && (
           <ItemAnalysis
             stores={stores}
             sales={sales}
@@ -5587,7 +5618,7 @@ export default function SalesReportClient() {
             pageTitle="거래처별 상세"
           />
         )}
-        {active === "품목분석" && (
+        {!isMobile && active === "품목분석" && (
           <ItemShipmentAnalysis
             stores={stores}
             sales={sales}
@@ -5596,7 +5627,7 @@ export default function SalesReportClient() {
             date={dashDate}
           />
         )}
-        {isAdmin && active === "월초관리" && (
+        {!isMobile && isAdmin && active === "월초관리" && (
           <MonthStartManagement
             stores={stores}
             setStores={setStores}
@@ -5621,8 +5652,321 @@ export default function SalesReportClient() {
             setPendingNewStoreEsts={setPendingNewStoreEsts}
           />
         )}
+        {isMobile && active === "대시보드" && (
+          <MobileDashboard
+            stores={stores}
+            sales={sales}
+            targets={targets}
+            ests={ests}
+            month={dashMonth}
+            date={dashDate}
+          />
+        )}
+        {isMobile && active === "매출현황" && (
+          <MobileSalesStatus
+            stores={stores}
+            sales={sales}
+            ests={ests}
+            month={dashMonth}
+            date={dashDate}
+          />
+        )}
       </section>
     </main>
+  );
+}
+
+function MobileDashboard({
+  stores,
+  sales,
+  targets,
+  ests,
+  month,
+  date,
+}: {
+  stores: Store[];
+  sales: SalesRecord[];
+  targets: TargetRecord[];
+  ests: EstRecord[];
+  month: string;
+  date: string;
+}) {
+  const data = useMemo(() => {
+    const storesByCode = storeMap(stores);
+    const currentRows = sales.filter(
+      (row) => row.period === "current" && inRange(row.saleDate, monthStart(month), date),
+    );
+    const { storeTarget, nonStoreTarget, storeEst, nonStoreEst } = metricsByStoreType(
+      stores,
+      targets,
+      ests,
+      month,
+    );
+    const target = storeTarget + nonStoreTarget;
+    const est = storeEst + nonStoreEst;
+    let storeSales = 0;
+    let nonStoreSales = 0;
+    let profit = 0;
+    const managerMap = new Map<string, { sales: number; est: number }>();
+
+    currentRows.forEach((row) => {
+      const store = storesByCode.get(row.storeCode);
+      const storeType = store?.storeType || row.storeType;
+      const amount = Number(row.salesAmount || 0);
+      if (storeType === "매장") storeSales += amount;
+      else nonStoreSales += amount;
+      profit += Number(row.profitAmount || 0);
+      const manager = store?.manager || row.manager || "미지정";
+      const item = managerMap.get(manager) || { sales: 0, est: 0 };
+      item.sales += amount;
+      managerMap.set(manager, item);
+    });
+    ests.filter((row) => row.month === month).forEach((row) => {
+      const store = storesByCode.get(row.storeCode);
+      const manager = store?.manager || "미지정";
+      const item = managerMap.get(manager) || { sales: 0, est: 0 };
+      item.est += Number(row.amount || 0);
+      managerMap.set(manager, item);
+    });
+
+    return {
+      target,
+      est,
+      storeSales,
+      nonStoreSales,
+      totalSales: storeSales + nonStoreSales,
+      profit,
+      managers: Array.from(managerMap.entries())
+        .map(([manager, value]) => ({
+          manager,
+          ...value,
+          rate: value.est ? (value.sales / value.est) * 100 : 0,
+        }))
+        .filter((row) => row.sales || row.est)
+        .sort((a, b) => b.sales - a.sales),
+    };
+  }, [stores, sales, targets, ests, month, date]);
+
+  return (
+    <div className="mobile-dashboard-view space-y-3 pb-6">
+      <div className="grid grid-cols-2 gap-2">
+        <MobileKpiCard title="당일까지 매출" value={won(data.totalSales)} tone="orange" />
+        <MobileKpiCard title="Target 달성률" value={data.target ? pct((data.totalSales / data.target) * 100) : "-"} tone="yellow" />
+        <MobileKpiCard title="당월 EST" value={won(data.est)} tone="blue" />
+        <MobileKpiCard title="EST 달성률" value={data.est ? pct((data.totalSales / data.est) * 100) : "-"} tone="green" />
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <h2 className="text-sm font-extrabold text-slate-900">매출 요약</h2>
+        <div className="mt-2 divide-y divide-slate-100">
+          <MobileValueRow label="매장 매출" value={won(data.storeSales)} />
+          <MobileValueRow label="비매장 매출" value={won(data.nonStoreSales)} />
+          <MobileValueRow label="이익금액" value={won(data.profit)} />
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <h2 className="text-sm font-extrabold text-slate-900">담당자별 매출 · EST</h2>
+        <div className="mt-2 space-y-2">
+          {data.managers.map((row) => (
+            <div key={row.manager} className="rounded-xl bg-slate-50 p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-extrabold text-slate-800">{row.manager}</span>
+                <span className="text-xs font-black text-orange-700">{row.est ? pct(row.rate) : "-"}</span>
+              </div>
+              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-200">
+                <div className="h-full rounded-full bg-orange-500" style={{ width: `${Math.min(100, Math.max(0, row.rate))}%` }} />
+              </div>
+              <div className="mt-1.5 flex justify-between text-[10px] font-semibold text-slate-500">
+                <span>매출 {won(row.sales)}</span>
+                <span>EST {won(row.est)}</span>
+              </div>
+            </div>
+          ))}
+          {!data.managers.length && <p className="py-6 text-center text-xs text-slate-400">표시할 실적이 없습니다.</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileKpiCard({
+  title,
+  value,
+  tone,
+}: {
+  title: string;
+  value: string;
+  tone: "orange" | "yellow" | "blue" | "green";
+}) {
+  const toneClass =
+    tone === "orange" ? "border-orange-200 bg-orange-50" :
+    tone === "yellow" ? "border-amber-200 bg-amber-50" :
+    tone === "blue" ? "border-sky-200 bg-sky-50" :
+    "border-emerald-200 bg-emerald-50";
+  return (
+    <div className={`rounded-2xl border p-3 shadow-sm ${toneClass}`}>
+      <div className="text-[10px] font-bold text-slate-500">{title}</div>
+      <div className="mt-1 break-all text-[15px] font-black leading-tight text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function MobileValueRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2 text-xs">
+      <span className="font-semibold text-slate-600">{label}</span>
+      <span className="font-extrabold text-slate-900">{value}</span>
+    </div>
+  );
+}
+
+function MobileSalesStatus({
+  stores,
+  sales,
+  ests,
+  month,
+  date,
+}: {
+  stores: Store[];
+  sales: SalesRecord[];
+  ests: EstRecord[];
+  month: string;
+  date: string;
+}) {
+  const [search, setSearch] = useState("");
+  const [manager, setManager] = useState("전체");
+  const [channel, setChannel] = useState("전체");
+  const [newOnly, setNewOnly] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [history, setHistory] = useState<PriorYearStoreHistoryRow[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHistory(null);
+    loadPriorYearStoreHistory(month)
+      .then((rows) => { if (!cancelled) setHistory(rows); })
+      .catch(() => { if (!cancelled) setHistory([]); });
+    return () => { cancelled = true; };
+  }, [month]);
+
+  const rows = useMemo(() => {
+    const storesByCode = storeMap(stores);
+    const estByCode = new Map<string, number>();
+    ests.filter((row) => row.month === month).forEach((row) => {
+      estByCode.set(row.storeCode, (estByCode.get(row.storeCode) || 0) + Number(row.amount || 0));
+    });
+    const priorCodes = new Set((history || []).map((row) => norm(row.store_code)));
+    const priorNames = new Set((history || []).map((row) => normalizeStoreNameKey(row.store_name)));
+    const map = new Map<string, {
+      code: string;
+      name: string;
+      manager: string;
+      channel: string;
+      sales: number;
+      est: number;
+      lastOrder: string;
+      isNew: boolean;
+    }>();
+
+    sales.filter((row) =>
+      row.period === "current" &&
+      inRange(row.saleDate, monthStart(month), date) &&
+      Boolean(row.storeName.trim())
+    ).forEach((row) => {
+      const store = storesByCode.get(row.storeCode);
+      const key = row.storeCode || row.storeName;
+      const item = map.get(key) || {
+        code: row.storeCode,
+        name: row.storeName,
+        manager: store?.manager || row.manager || "미지정",
+        channel: store?.channel || row.channel || "-",
+        sales: 0,
+        est: estByCode.get(row.storeCode) || 0,
+        lastOrder: row.saleDate,
+        isNew: history !== null &&
+          !priorCodes.has(norm(row.storeCode)) &&
+          !priorNames.has(normalizeStoreNameKey(row.storeName)),
+      };
+      item.sales += Number(row.salesAmount || 0);
+      if (row.saleDate > item.lastOrder) item.lastOrder = row.saleDate;
+      map.set(key, item);
+    });
+
+    const keyword = search.trim().toLowerCase();
+    return Array.from(map.values())
+      .filter((row) => !keyword || row.name.toLowerCase().includes(keyword))
+      .filter((row) => manager === "전체" || row.manager === manager)
+      .filter((row) => channel === "전체" || row.channel === channel)
+      .filter((row) => !newOnly || row.isNew)
+      .sort((a, b) => b.sales - a.sales);
+  }, [stores, sales, ests, month, date, history, search, manager, channel, newOnly]);
+
+  const managers = useMemo(() => Array.from(new Set(stores.map((row) => row.manager).filter(Boolean))).sort(), [stores]);
+  const channels = useMemo(() => Array.from(new Set(stores.map((row) => row.channel).filter(Boolean))).sort(), [stores]);
+  const totalSales = rows.reduce((total, row) => total + row.sales, 0);
+
+  return (
+    <div className="mobile-sales-view space-y-3 pb-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <h2 className="text-base font-extrabold text-slate-900">매출현황</h2>
+            <p className="mt-0.5 text-[10px] font-semibold text-slate-500">{rows.length}개 거래처</p>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] font-semibold text-slate-500">조회 매출</div>
+            <div className="text-sm font-black text-orange-700">{won(totalSales)}</div>
+          </div>
+        </div>
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="거래처명 검색" className="mt-3 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-orange-400" />
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <select value={manager} onChange={(event) => setManager(event.target.value)} className="rounded-xl border border-slate-300 bg-white px-2 py-2 text-xs">
+            <option>전체</option>
+            {managers.map((item) => <option key={item}>{item}</option>)}
+          </select>
+          <select value={channel} onChange={(event) => setChannel(event.target.value)} className="rounded-xl border border-slate-300 bg-white px-2 py-2 text-xs">
+            <option>전체</option>
+            {channels.map((item) => <option key={item}>{item}</option>)}
+          </select>
+        </div>
+        <label className="mt-2 flex items-center gap-2 text-xs font-bold text-slate-600">
+          <input type="checkbox" checked={newOnly} onChange={(event) => setNewOnly(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
+          신규 거래처만 보기
+        </label>
+      </div>
+
+      <div className="space-y-2">
+        {rows.map((row) => {
+          const rate = row.est ? (row.sales / row.est) * 100 : 0;
+          const isOpen = expanded === row.code;
+          return (
+            <button key={row.code || row.name} type="button" onClick={() => setExpanded(isOpen ? null : row.code)} className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-extrabold text-slate-900">{row.name}</div>
+                  <div className="mt-1 flex flex-wrap gap-1 text-[10px] font-bold text-slate-500">
+                    <span>{row.manager}</span><span>·</span><span>{row.channel}</span>
+                    {row.isNew && <span className="rounded bg-orange-100 px-1 text-orange-700">신규</span>}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-sm font-black text-slate-900">{won(row.sales)}</div>
+                  <div className="mt-1 text-[10px] font-bold text-orange-700">EST {row.est ? pct(rate) : "-"}</div>
+                </div>
+              </div>
+              {isOpen && (
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-[11px]">
+                  <div><span className="text-slate-500">EST</span><div className="mt-0.5 font-extrabold">{won(row.est)}</div></div>
+                  <div><span className="text-slate-500">마지막 발주일</span><div className="mt-0.5 font-extrabold">{row.lastOrder}</div></div>
+                </div>
+              )}
+            </button>
+          );
+        })}
+        {!rows.length && <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center text-xs text-slate-400">조건에 맞는 거래처가 없습니다.</div>}
+      </div>
+    </div>
   );
 }
 
