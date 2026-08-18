@@ -5325,6 +5325,11 @@ export default function SalesReportClient() {
               scrollbar-width: none;
               -webkit-overflow-scrolling: touch;
             }
+            .sales-report-root .mobile-period-sticky {
+              isolation: isolate;
+              background: #fff !important;
+              box-shadow: 0 8px 10px -12px rgba(15, 23, 42, 0.45);
+            }
             .sales-report-root .mobile-period-bar-inner {
               height: 36px;
               min-height: 36px;
@@ -5735,8 +5740,9 @@ function MobilePeriodBar({
   const monthLabel = month ? `${month.slice(2, 4)}.${month.slice(5, 7)}` : "-";
   const dateLabel = date ? `${date.slice(5, 7)}.${date.slice(8, 10)}` : "-";
   return (
-    <div className="mobile-period-bar sticky top-0 z-30 mb-3 overflow-x-auto overflow-y-hidden rounded-xl border border-slate-200 bg-white/95 px-2 py-2 shadow-sm backdrop-blur">
-      <div className="mobile-period-bar-inner flex min-w-max items-center gap-1.5">
+    <div className="mobile-period-sticky sticky top-0 z-50 -mx-3 mb-3 bg-white px-3 pb-3">
+      <div className="mobile-period-bar isolate overflow-x-auto overflow-y-hidden rounded-xl border border-slate-200 bg-white px-2 py-2 shadow-sm">
+        <div className="mobile-period-bar-inner flex min-w-max items-center gap-1.5">
         <label className="relative flex h-9 cursor-pointer items-center gap-1 rounded-lg bg-orange-50 px-2.5 whitespace-nowrap">
           <span className="text-[10px] font-bold text-orange-700">기준월</span>
           <span className="text-[12px] font-black text-slate-900">{monthLabel}</span>
@@ -5750,7 +5756,8 @@ function MobilePeriodBar({
         <MobilePeriodChip label="TG" value={pct(timeGone.timeGoneRate)} />
         <MobilePeriodChip label="총" value={`${Number.isInteger(timeGone.totalDays) ? timeGone.totalDays : timeGone.totalDays.toFixed(1)}일`} />
         <MobilePeriodChip label="진행" value={`${Number.isInteger(timeGone.progressedDays) ? timeGone.progressedDays : timeGone.progressedDays.toFixed(1)}일`} />
-        <MobilePeriodChip label="잔여" value={`${Number.isInteger(timeGone.remainingDays) ? timeGone.remainingDays : timeGone.remainingDays.toFixed(1)}일`} />
+          <MobilePeriodChip label="잔여" value={`${Number.isInteger(timeGone.remainingDays) ? timeGone.remainingDays : timeGone.remainingDays.toFixed(1)}일`} />
+        </div>
       </div>
     </div>
   );
@@ -5952,7 +5959,8 @@ function MobileSalesStatus({
       name: string;
       manager: string;
       channel: string;
-      sales: number;
+      fullMonthSales: number;
+      currentSales: number;
       est: number;
       lastOrder: string;
       isNew: boolean;
@@ -5960,7 +5968,7 @@ function MobileSalesStatus({
 
     sales.filter((row) =>
       row.period === "current" &&
-      inRange(row.saleDate, monthStart(month), date) &&
+      inRange(row.saleDate, monthStart(month), monthEnd(month)) &&
       Boolean(row.storeName.trim())
     ).forEach((row) => {
       const store = storesByCode.get(row.storeCode);
@@ -5970,15 +5978,20 @@ function MobileSalesStatus({
         name: row.storeName,
         manager: store?.manager || row.manager || "미지정",
         channel: store?.channel || row.channel || "-",
-        sales: 0,
+        fullMonthSales: 0,
+        currentSales: 0,
         est: estByCode.get(row.storeCode) || 0,
-        lastOrder: row.saleDate,
+        lastOrder: "",
         isNew: history !== null &&
           !priorCodes.has(norm(row.storeCode)) &&
           !priorNames.has(normalizeStoreNameKey(row.storeName)),
       };
-      item.sales += Number(row.salesAmount || 0);
-      if (row.saleDate > item.lastOrder) item.lastOrder = row.saleDate;
+      const amount = Number(row.salesAmount || 0);
+      item.fullMonthSales += amount;
+      if (row.saleDate <= date) {
+        item.currentSales += amount;
+        if (!item.lastOrder || row.saleDate > item.lastOrder) item.lastOrder = row.saleDate;
+      }
       map.set(key, item);
     });
 
@@ -5988,12 +6001,12 @@ function MobileSalesStatus({
       .filter((row) => manager === "전체" || row.manager === manager)
       .filter((row) => channel === "전체" || row.channel === channel)
       .filter((row) => !newOnly || row.isNew)
-      .sort((a, b) => b.sales - a.sales);
+      .sort((a, b) => b.fullMonthSales - a.fullMonthSales);
   }, [stores, sales, ests, month, date, history, search, manager, channel, newOnly]);
 
   const managers = useMemo(() => Array.from(new Set(stores.map((row) => row.manager).filter(Boolean))).sort(), [stores]);
   const channels = useMemo(() => Array.from(new Set(stores.map((row) => row.channel).filter(Boolean))).sort(), [stores]);
-  const totalSales = rows.reduce((total, row) => total + row.sales, 0);
+  const totalSales = rows.reduce((total, row) => total + row.fullMonthSales, 0);
 
   return (
     <div className="mobile-sales-view space-y-3 pb-6">
@@ -6004,7 +6017,7 @@ function MobileSalesStatus({
             <p className="mt-0.5 text-[10px] font-semibold text-slate-500">{rows.length}개 거래처</p>
           </div>
           <div className="text-right">
-            <div className="text-[10px] font-semibold text-slate-500">조회 매출</div>
+            <div className="text-[10px] font-semibold text-slate-500">당월 총 매출</div>
             <div className="text-sm font-black text-orange-700">{won(totalSales)}</div>
           </div>
         </div>
@@ -6027,10 +6040,11 @@ function MobileSalesStatus({
 
       <div className="space-y-2">
         {rows.map((row) => {
-          const rate = row.est ? (row.sales / row.est) * 100 : 0;
-          const isOpen = expanded === row.code;
+          const rate = row.est ? (row.fullMonthSales / row.est) * 100 : 0;
+          const rowKey = row.code || row.name;
+          const isOpen = expanded === rowKey;
           return (
-            <button key={row.code || row.name} type="button" onClick={() => setExpanded(isOpen ? null : row.code)} className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm">
+            <button key={rowKey} type="button" onClick={() => setExpanded(isOpen ? null : rowKey)} className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-extrabold text-slate-900">{row.name}</div>
@@ -6040,14 +6054,16 @@ function MobileSalesStatus({
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="text-sm font-black text-slate-900">{won(row.sales)}</div>
+                  <div className="text-[9px] font-bold text-slate-500">당월 총 매출</div>
+                  <div className="mt-0.5 text-sm font-black text-slate-900">{won(row.fullMonthSales)}</div>
                   <div className="mt-1 text-[10px] font-bold text-orange-700">EST {row.est ? pct(rate) : "-"}</div>
                 </div>
               </div>
               {isOpen && (
                 <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-[11px]">
+                  <div><span className="text-slate-500">당일까지 매출</span><div className="mt-0.5 font-extrabold">{won(row.currentSales)}</div></div>
                   <div><span className="text-slate-500">EST</span><div className="mt-0.5 font-extrabold">{won(row.est)}</div></div>
-                  <div><span className="text-slate-500">마지막 발주일</span><div className="mt-0.5 font-extrabold">{row.lastOrder}</div></div>
+                  <div className="col-span-2"><span className="text-slate-500">마지막 발주일</span><div className="mt-0.5 font-extrabold">{row.lastOrder || "-"}</div></div>
                 </div>
               )}
             </button>
