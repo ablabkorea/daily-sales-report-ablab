@@ -5326,9 +5326,16 @@ export default function SalesReportClient() {
               -webkit-overflow-scrolling: touch;
             }
             .sales-report-root .mobile-period-sticky {
+              top: -12px !important;
               isolation: isolate;
               background: #fff !important;
-              box-shadow: 0 8px 10px -12px rgba(15, 23, 42, 0.45);
+              padding-top: 12px !important;
+              padding-bottom: 14px !important;
+              margin-bottom: 0 !important;
+              box-shadow:
+                0 -24px 0 24px #fff,
+                0 14px 0 #fff,
+                0 20px 14px -22px rgba(15, 23, 42, 0.4);
             }
             .sales-report-root .mobile-period-bar-inner {
               height: 36px;
@@ -5961,6 +5968,7 @@ function MobileSalesStatus({
       channel: string;
       fullMonthSales: number;
       currentSales: number;
+      profitAmount: number;
       est: number;
       lastOrder: string;
       isNew: boolean;
@@ -5980,6 +5988,7 @@ function MobileSalesStatus({
         channel: store?.channel || row.channel || "-",
         fullMonthSales: 0,
         currentSales: 0,
+        profitAmount: 0,
         est: estByCode.get(row.storeCode) || 0,
         lastOrder: "",
         isNew: history !== null &&
@@ -5988,6 +5997,7 @@ function MobileSalesStatus({
       };
       const amount = Number(row.salesAmount || 0);
       item.fullMonthSales += amount;
+      item.profitAmount += Number(row.profitAmount || 0);
       if (row.saleDate <= date) {
         item.currentSales += amount;
         if (!item.lastOrder || row.saleDate > item.lastOrder) item.lastOrder = row.saleDate;
@@ -6063,7 +6073,8 @@ function MobileSalesStatus({
                 <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-[11px]">
                   <div><span className="text-slate-500">당일까지 매출</span><div className="mt-0.5 font-extrabold">{won(row.currentSales)}</div></div>
                   <div><span className="text-slate-500">EST</span><div className="mt-0.5 font-extrabold">{won(row.est)}</div></div>
-                  <div className="col-span-2"><span className="text-slate-500">마지막 발주일</span><div className="mt-0.5 font-extrabold">{row.lastOrder || "-"}</div></div>
+                  <div><span className="text-slate-500">당월 이익금액</span><div className="mt-0.5 font-extrabold">{won(row.profitAmount)}</div></div>
+                  <div><span className="text-slate-500">마지막 발주일</span><div className="mt-0.5 font-extrabold">{row.lastOrder || "-"}</div></div>
                 </div>
               )}
             </button>
