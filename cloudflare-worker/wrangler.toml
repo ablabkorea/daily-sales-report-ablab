@@ -1,6 +1,10 @@
 name = "ablab-sales-api"
 main = "src/index.ts"
 compatibility_date = "2026-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+VAPID_SUBJECT = "mailto:admin@ablab.co.kr"
 
 [[d1_databases]]
 binding = "DB"

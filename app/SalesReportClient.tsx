@@ -43,6 +43,13 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
+function urlBase64ToUint8Array(value: string) {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  return Uint8Array.from(Array.from(raw).map((character) => character.charCodeAt(0)));
+}
+
 type Store = {
   code: string;
   name: string;
@@ -4613,6 +4620,9 @@ export default function SalesReportClient() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showIosInstallGuide, setShowIosInstallGuide] = useState(false);
   const [isAppInstalled, setIsAppInstalled] = useState(false);
+  const [notificationSupported, setNotificationSupported] = useState(false);
+  const [notificationSubscribed, setNotificationSubscribed] = useState(false);
+  const [notificationBusy, setNotificationBusy] = useState(false);
   const [estHeaderSummary, setEstHeaderSummary] = useState<EstHeaderSummary | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
@@ -4681,6 +4691,98 @@ export default function SalesReportClient() {
     media.addEventListener("change", syncViewport);
     return () => media.removeEventListener("change", syncViewport);
   }, []);
+
+  useEffect(() => {
+    const supported =
+      "serviceWorker" in navigator &&
+      "PushManager" in window &&
+      "Notification" in window;
+    setNotificationSupported(supported);
+    if (!supported) return;
+    navigator.serviceWorker.ready
+      .then((registration) => registration.pushManager.getSubscription())
+      .then((subscription) => setNotificationSubscribed(Boolean(subscription)))
+      .catch(() => setNotificationSubscribed(false));
+  }, []);
+
+  async function enableNotifications() {
+    if (!notificationSupported || notificationBusy) return;
+    setNotificationBusy(true);
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        alert("알림 권한이 허용되지 않았습니다. 브라우저 또는 앱 설정에서 알림을 허용해주세요.");
+        return;
+      }
+      const keyResponse = await fetch("/api/d1/push/public-key", { cache: "no-store" });
+      if (!keyResponse.ok) throw new Error("푸시 공개키를 불러오지 못했습니다.");
+      const { publicKey } = await keyResponse.json() as { publicKey: string };
+      const registration = await navigator.serviceWorker.ready;
+      const existing = await registration.pushManager.getSubscription();
+      const subscription = existing || await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+      const response = await fetch("/api/d1/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: subscription.toJSON() }),
+      });
+      if (!response.ok) throw new Error("알림 구독을 저장하지 못했습니다.");
+      setNotificationSubscribed(true);
+      alert("업데이트 알림을 받도록 설정되었습니다.");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "알림 설정 중 오류가 발생했습니다.");
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
+
+  async function disableNotifications() {
+    if (notificationBusy) return;
+    setNotificationBusy(true);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await fetch("/api/d1/push/subscribe", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: subscription.endpoint }),
+        });
+        await subscription.unsubscribe();
+      }
+      setNotificationSubscribed(false);
+      alert("업데이트 알림을 해제했습니다.");
+    } catch {
+      alert("알림 해제 중 오류가 발생했습니다.");
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
+
+  async function sendUpdateNotification() {
+    if (!window.confirm(`${dashDate} 매출 업데이트 완료 알림을 발송할까요?`)) return;
+    setNotificationBusy(true);
+    try {
+      const response = await fetch("/api/d1/push/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseMonth: dashMonth, reportDate: dashDate }),
+      });
+      const payload = await response.json() as { sent?: number; duplicate?: boolean; error?: string };
+      if (!response.ok) throw new Error(payload.error || "알림 발송에 실패했습니다.");
+      if (payload.duplicate) {
+        alert("해당 기준일의 업데이트 완료 알림은 이미 발송되었습니다.");
+      } else {
+        alert(`업데이트 완료 알림을 ${Number(payload.sent || 0).toLocaleString("ko-KR")}개 기기에 발송했습니다.`);
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "알림 발송 중 오류가 발생했습니다.");
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (isMobile && active !== "대시보드" && active !== "매출현황") {
@@ -4860,6 +4962,16 @@ export default function SalesReportClient() {
                 className="install-app-button rounded-xl border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-50"
               >
                 앱 설치
+              </button>
+            )}
+            {notificationSupported && (
+              <button
+                type="button"
+                disabled={notificationBusy}
+                onClick={notificationSubscribed ? disableNotifications : enableNotifications}
+                className="notification-button rounded-xl border border-sky-300 bg-sky-50 px-4 py-2 text-xs font-bold text-sky-800 hover:bg-sky-100 disabled:opacity-50"
+              >
+                {notificationSubscribed ? "알림 끄기" : "알림 받기"}
               </button>
             )}
             {isAdmin ? (
@@ -5261,6 +5373,59 @@ export default function SalesReportClient() {
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
           }
 
+          @media (min-width: 768px) {
+            .sales-report-root {
+              display: flex;
+              min-width: 1180px;
+              flex-direction: column;
+            }
+            .sales-report-root > header {
+              flex: 0 0 auto;
+            }
+            .sales-report-root > section {
+              height: 0 !important;
+              min-height: 0;
+              flex: 1 1 auto;
+              padding-bottom: 0.5rem !important;
+            }
+            .sales-report-root[data-active="EST 입력"] > section,
+            .sales-report-root[data-active="대시보드"] > section,
+            .sales-report-root[data-active="매출현황"] > section,
+            .sales-report-root[data-active="거래처별 상세"] > section,
+            .sales-report-root[data-active="품목분석"] > section {
+              overflow-y: auto !important;
+              scrollbar-gutter: stable;
+            }
+            .sales-report-root .sales-status-scroll,
+            .sales-report-root .item-profit-scroll,
+            .sales-report-root [class*="h-[clamp(300px"] {
+              height: max(420px, calc(100dvh - 385px)) !important;
+              max-height: none !important;
+            }
+            .sales-report-root[data-active="EST 입력"] .overflow-y-auto,
+            .sales-report-root[data-active="대시보드"] .overflow-auto,
+            .sales-report-root[data-active="거래처별 상세"] .overflow-auto,
+            .sales-report-root[data-active="품목분석"] .overflow-auto {
+              scrollbar-gutter: stable;
+            }
+            .sales-report-root table {
+              max-width: 100%;
+            }
+            .sales-report-root table th,
+            .sales-report-root table td {
+              box-sizing: border-box;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+            .sales-report-root table th[title],
+            .sales-report-root table td[title] {
+              cursor: help;
+            }
+            .sales-report-root .desktop-end-marker {
+              min-height: 42px;
+            }
+          }
+
           @media (max-width: 767px) {
             html, body {
               min-width: 0 !important;
@@ -5413,7 +5578,7 @@ export default function SalesReportClient() {
               padding: 0.4rem 0.7rem !important;
               font-size: 0.7rem !important;
             }
-            .sales-report-root .mobile-header-actions button:not(.install-app-button) {
+            .sales-report-root .mobile-header-actions button:not(.install-app-button):not(.notification-button) {
               display: none !important;
             }
             .sales-report-root .mobile-main-nav {
@@ -5704,6 +5869,23 @@ export default function SalesReportClient() {
             setManagerConfigs={setManagerConfigs}
             pendingNewStoreEsts={pendingNewStoreEsts}
             setPendingNewStoreEsts={setPendingNewStoreEsts}
+            notificationBusy={notificationBusy}
+            onSendUpdateNotification={sendUpdateNotification}
+          />
+        )}
+        {!isMobile && ["EST 입력", "대시보드", "매출현황", "거래처별 상세", "품목분석"].includes(active) && (
+          <DesktopEndMarker
+            label={
+              active === "EST 입력"
+                ? "마지막 거래처입니다"
+                : active === "대시보드"
+                  ? "대시보드의 마지막 항목입니다"
+                  : active === "매출현황"
+                    ? "매출현황의 마지막 거래처입니다"
+                    : active === "거래처별 상세"
+                      ? "거래처별 상세의 마지막 항목입니다"
+                      : "품목분석의 마지막 품목입니다"
+            }
           />
         )}
         {isMobile && active === "대시보드" && (
@@ -5727,6 +5909,14 @@ export default function SalesReportClient() {
         )}
       </section>
     </main>
+  );
+}
+
+function DesktopEndMarker({ label }: { label: string }) {
+  return (
+    <div className="desktop-end-marker hidden shrink-0 items-center justify-center py-2 text-[11px] font-bold text-slate-400 md:flex">
+      <span className="rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5">{label}</span>
+    </div>
   );
 }
 
@@ -13385,6 +13575,8 @@ function MonthStartManagement({
   setManagerConfigs,
   pendingNewStoreEsts,
   setPendingNewStoreEsts,
+  notificationBusy,
+  onSendUpdateNotification,
 }: {
   stores: Store[];
   setStores: (v: Store[]) => void;
@@ -13407,6 +13599,8 @@ function MonthStartManagement({
   setManagerConfigs: React.Dispatch<React.SetStateAction<ManagerConfig[]>>;
   pendingNewStoreEsts: PendingNewStoreEst[];
   setPendingNewStoreEsts: React.Dispatch<React.SetStateAction<PendingNewStoreEst[]>>;
+  notificationBusy: boolean;
+  onSendUpdateNotification: () => Promise<void>;
 }) {
   const [tab, setTab] = useState<MonthStartTab>("거래처 리스트");
 
@@ -13476,6 +13670,20 @@ function MonthStartManagement({
       )}
       {tab === "업로드 관리" && (
         <div className="min-h-0 flex-1 overflow-auto pb-24 pr-2">
+          <div className="mb-3 flex items-center justify-between gap-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+            <div>
+              <div className="text-sm font-extrabold text-slate-900">오늘 매출 업데이트 완료</div>
+              <div className="mt-1 text-xs font-semibold text-slate-500">모든 업로드가 끝난 뒤 한 번만 눌러 PC·모바일 구독자에게 알림을 보냅니다.</div>
+            </div>
+            <button
+              type="button"
+              disabled={notificationBusy}
+              onClick={onSendUpdateNotification}
+              className="shrink-0 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-extrabold text-white shadow-sm hover:bg-orange-600 disabled:opacity-50"
+            >
+              업데이트 완료 알림 보내기
+            </button>
+          </div>
           <UploadPage
             stores={stores}
             setStores={setStores}

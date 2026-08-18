@@ -1,7 +1,6 @@
 {
   "name": "에이비랩 코리아 Sales Report",
   "short_name": "Sales Report",
-  "id": "/",
   "description": "에이비랩 코리아 모바일 Sales Report",
   "lang": "ko",
   "start_url": "/",

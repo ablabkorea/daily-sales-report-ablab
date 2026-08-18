@@ -1,6 +1,11 @@
+import webpush from "web-push";
+
 interface Env {
   DB: D1Database;
   ABL_API_KEY: string;
+  VAPID_PUBLIC_KEY: string;
+  VAPID_PRIVATE_KEY: string;
+  VAPID_SUBJECT?: string;
 }
 
 type PeriodType = "current" | "prevMonth" | "prevYear";
@@ -225,6 +230,115 @@ async function deleteSalesDate(request: Request, env: Env) {
   return json({ ok: true, deletedDate: payload.saleDate });
 }
 
+async function ensurePushTables(env: Env) {
+  await env.DB.batch([
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS push_subscriptions (
+        endpoint TEXT PRIMARY KEY,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    ),
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS push_notifications (
+        report_date TEXT PRIMARY KEY,
+        base_month TEXT NOT NULL,
+        sent_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      )`,
+    ),
+  ]);
+}
+
+async function savePushSubscription(request: Request, env: Env) {
+  const payload = await request.json<{
+    subscription?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
+  }>();
+  const endpoint = payload.subscription?.endpoint || "";
+  const p256dh = payload.subscription?.keys?.p256dh || "";
+  const auth = payload.subscription?.keys?.auth || "";
+  if (!endpoint || !p256dh || !auth) return json({ error: "Invalid push subscription" }, 400);
+  await ensurePushTables(env);
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO push_subscriptions (endpoint, p256dh, auth, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET
+       p256dh = excluded.p256dh,
+       auth = excluded.auth,
+       updated_at = excluded.updated_at`,
+  ).bind(endpoint, p256dh, auth, now, now).run();
+  return json({ ok: true });
+}
+
+async function deletePushSubscription(request: Request, env: Env) {
+  const payload = await request.json<{ endpoint?: string }>();
+  if (!payload.endpoint) return json({ error: "Missing endpoint" }, 400);
+  await ensurePushTables(env);
+  await env.DB.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").bind(payload.endpoint).run();
+  return json({ ok: true });
+}
+
+async function sendUpdatePush(request: Request, env: Env) {
+  const payload = await request.json<{ baseMonth?: string; reportDate?: string }>();
+  const baseMonth = payload.baseMonth || "";
+  const reportDate = payload.reportDate || "";
+  if (!/^\d{4}-\d{2}$/.test(baseMonth) || !/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) {
+    return json({ error: "Invalid update date" }, 400);
+  }
+  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
+    return json({ error: "VAPID secrets are not configured" }, 503);
+  }
+  await ensurePushTables(env);
+  const existing = await env.DB.prepare(
+    "SELECT report_date FROM push_notifications WHERE report_date = ? LIMIT 1",
+  ).bind(reportDate).first();
+  if (existing) return json({ ok: true, duplicate: true, sent: 0 });
+
+  const subscriptions = await env.DB.prepare(
+    "SELECT endpoint, p256dh, auth FROM push_subscriptions ORDER BY created_at",
+  ).all<{ endpoint: string; p256dh: string; auth: string }>();
+  webpush.setVapidDetails(
+    env.VAPID_SUBJECT || "mailto:admin@ablab.co.kr",
+    env.VAPID_PUBLIC_KEY,
+    env.VAPID_PRIVATE_KEY,
+  );
+  const notification = JSON.stringify({
+    title: "Sales Report 업데이트 완료",
+    body: `${reportDate} 매출 자료가 업데이트되었습니다.`,
+    tag: `sales-report-${reportDate}`,
+    url: "/",
+  });
+  let sent = 0;
+  const expired: string[] = [];
+  for (const row of subscriptions.results || []) {
+    try {
+      await webpush.sendNotification(
+        { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
+        notification,
+        { TTL: 60 * 60 * 24 },
+      );
+      sent += 1;
+    } catch (error) {
+      const statusCode = Number((error as { statusCode?: number }).statusCode || 0);
+      if (statusCode === 404 || statusCode === 410) expired.push(row.endpoint);
+    }
+  }
+  if (expired.length) {
+    await env.DB.batch(
+      expired.map((endpoint) =>
+        env.DB.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").bind(endpoint),
+      ),
+    );
+  }
+  await env.DB.prepare(
+    "INSERT INTO push_notifications (report_date, base_month, sent_count, created_at) VALUES (?, ?, ?, ?)",
+  ).bind(reportDate, baseMonth, sent, new Date().toISOString()).run();
+  return json({ ok: true, duplicate: false, sent, removed: expired.length });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (!authorized(request, env)) return json({ error: "Unauthorized" }, 401);
@@ -245,6 +359,13 @@ export default {
       if (request.method === "GET" && path === "/sales/prior-year-store-history") return getPriorYearStoreHistory(url, env);
       if (request.method === "POST" && path === "/sales/replace") return replaceSales(request, env);
       if (request.method === "POST" && path === "/sales/delete-date") return deleteSalesDate(request, env);
+      if (request.method === "GET" && path === "/push/public-key") {
+        if (!env.VAPID_PUBLIC_KEY) return json({ error: "VAPID public key is not configured" }, 503);
+        return json({ publicKey: env.VAPID_PUBLIC_KEY });
+      }
+      if (request.method === "POST" && path === "/push/subscribe") return savePushSubscription(request, env);
+      if (request.method === "DELETE" && path === "/push/subscribe") return deletePushSubscription(request, env);
+      if (request.method === "POST" && path === "/push/notify") return sendUpdatePush(request, env);
       return json({ error: "Not found" }, 404);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
