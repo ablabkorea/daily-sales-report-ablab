@@ -5330,12 +5330,11 @@ export default function SalesReportClient() {
               isolation: isolate;
               background: #fff !important;
               padding-top: 12px !important;
-              padding-bottom: 14px !important;
-              margin-bottom: 0 !important;
+              padding-bottom: 6px !important;
+              margin-bottom: 8px !important;
               box-shadow:
                 0 -24px 0 24px #fff,
-                0 14px 0 #fff,
-                0 20px 14px -22px rgba(15, 23, 42, 0.4);
+                0 8px 10px -12px rgba(15, 23, 42, 0.35);
             }
             .sales-report-root .mobile-period-bar-inner {
               height: 36px;
