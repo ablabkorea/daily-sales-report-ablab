@@ -76,8 +76,12 @@ async function putSetting(request: Request, env: Env, key: string) {
 async function getSales(url: URL, env: Env) {
   const baseMonth = url.searchParams.get("baseMonth") || "";
   if (!/^\d{4}-\d{2}$/.test(baseMonth)) return json({ error: "Invalid baseMonth" }, 400);
+  const requestedPeriod = url.searchParams.get("period") || "";
+  if (requestedPeriod && !["current", "prevMonth", "prevYear"].includes(requestedPeriod)) {
+    return json({ error: "Invalid period" }, 400);
+  }
 
-  const result = await env.DB.prepare(
+  const recordsSql =
     `SELECT r.id AS row_key, r.period_type AS period, r.base_month AS ref_month,
       r.sales_date AS sale_date, r.customer_code AS store_code, r.customer_name AS store_name,
       r.manager, r.store_type, r.brand, r.item_code, r.item_name, r.category,
@@ -88,15 +92,23 @@ async function getSales(url: URL, env: Env) {
      FROM sales_records r
      JOIN sales_upload_batches b ON b.id = r.batch_id
      WHERE r.base_month = ? AND b.status = 'success'
-     ORDER BY r.sales_date, r.id`,
-  ).bind(baseMonth).all();
+       ${requestedPeriod ? "AND r.period_type = ?" : ""}
+     ORDER BY r.sales_date, r.id`;
+  const recordsStatement = env.DB.prepare(recordsSql);
+  const result = requestedPeriod
+    ? await recordsStatement.bind(baseMonth, requestedPeriod).all()
+    : await recordsStatement.bind(baseMonth).all();
 
-  const batches = await env.DB.prepare(
+  const batchesSql =
     `SELECT period_type AS period, MAX(completed_at) AS updated_at
      FROM sales_upload_batches
      WHERE base_month = ? AND status = 'success'
-     GROUP BY period_type`,
-  ).bind(baseMonth).all();
+       ${requestedPeriod ? "AND period_type = ?" : ""}
+     GROUP BY period_type`;
+  const batchesStatement = env.DB.prepare(batchesSql);
+  const batches = requestedPeriod
+    ? await batchesStatement.bind(baseMonth, requestedPeriod).all()
+    : await batchesStatement.bind(baseMonth).all();
 
   return json({ available: true, records: result.results || [], batches: batches.results || [] });
 }

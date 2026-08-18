@@ -4101,14 +4101,16 @@ function fromV3Row(row: V3SalesRecordRow): SalesRecord {
   };
 }
 
-async function loadV3SalesForMonth(month: string): Promise<{
+type V3SalesLoadResult = {
   available: boolean;
   periodsWithBatch: Set<PeriodType>;
   records: SalesRecord[];
-}> {
+};
+
+async function loadV3SalesPeriod(month: string, period: PeriodType): Promise<V3SalesLoadResult> {
   const api = d1SalesEndpoint("sales");
   const response = await fetch(
-    `${api.url}?baseMonth=${encodeURIComponent(month)}`,
+    `${api.url}?baseMonth=${encodeURIComponent(month)}&period=${encodeURIComponent(period)}`,
     { method: "GET", headers: api.headers, cache: "no-store" },
   );
   if (response.status === 404) {
@@ -4124,6 +4126,18 @@ async function loadV3SalesForMonth(month: string): Promise<{
     available: payload.available !== false,
     periodsWithBatch: new Set((payload.batches || []).map((row) => row.period)),
     records: (payload.records || []).map(fromV3Row),
+  };
+}
+
+async function loadV3SalesForMonth(
+  month: string,
+  periods: PeriodType[] = ["current", "prevMonth", "prevYear"],
+): Promise<V3SalesLoadResult> {
+  const results = await Promise.all(periods.map((period) => loadV3SalesPeriod(month, period)));
+  return {
+    available: results.some((result) => result.available),
+    periodsWithBatch: new Set(results.flatMap((result) => Array.from(result.periodsWithBatch))),
+    records: dedupeSales(results.flatMap((result) => result.records)),
   };
 }
 
@@ -4255,7 +4269,7 @@ function useChunkedSales(
       );
     if (!alreadyHasPreviousMonth) {
       try {
-        const previousV3 = await loadV3SalesForMonth(previousMonth(targetMonth));
+        const previousV3 = await loadV3SalesForMonth(previousMonth(targetMonth), ["current"]);
         if (previousV3.available) {
           previousMonthFallback = asPreviousMonthSales(previousV3.records, targetMonth);
         }
@@ -4272,7 +4286,7 @@ function useChunkedSales(
       );
     if (!alreadyHasPreviousYear) {
       try {
-        const previousYearV3 = await loadV3SalesForMonth(addMonths(targetMonth, -12));
+        const previousYearV3 = await loadV3SalesForMonth(addMonths(targetMonth, -12), ["current"]);
         if (previousYearV3.available) {
           previousYearFallback = asPreviousYearSales(previousYearV3.records, targetMonth);
         }
