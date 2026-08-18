@@ -4612,6 +4612,7 @@ export default function SalesReportClient() {
   const [isMobile, setIsMobile] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showIosInstallGuide, setShowIosInstallGuide] = useState(false);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
   const [estHeaderSummary, setEstHeaderSummary] = useState<EstHeaderSummary | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
@@ -4665,6 +4666,11 @@ export default function SalesReportClient() {
   );
 
   useEffect(() => {
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+    setIsAppInstalled(standalone || window.localStorage.getItem("ablab_pwa_installed") === "1");
+
     if (!dashDate.startsWith(dashMonth)) setDashDate(monthEnd(dashMonth));
   }, [dashMonth, dashDate]);
 
@@ -4712,7 +4718,11 @@ export default function SalesReportClient() {
       event.preventDefault();
       setInstallPrompt(event as BeforeInstallPromptEvent);
     };
-    const onAppInstalled = () => setInstallPrompt(null);
+    const onAppInstalled = () => {
+      setInstallPrompt(null);
+      setIsAppInstalled(true);
+      window.localStorage.setItem("ablab_pwa_installed", "1");
+    };
 
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
     window.addEventListener("appinstalled", onAppInstalled);
@@ -4843,13 +4853,15 @@ export default function SalesReportClient() {
             </nav>
           </div>
           <div className="mobile-header-actions flex items-center gap-2">
-            <button
-              type="button"
-              onClick={installApp}
-              className="install-app-button rounded-xl border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-50"
-            >
-              앱 설치
-            </button>
+            {!isAppInstalled && (
+              <button
+                type="button"
+                onClick={installApp}
+                className="install-app-button rounded-xl border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-50"
+              >
+                앱 설치
+              </button>
+            )}
             {isAdmin ? (
               <>
                 <button
@@ -5256,11 +5268,14 @@ export default function SalesReportClient() {
               overscroll-behavior-y: none;
             }
             .sales-report-root {
+              display: flex;
+              flex-direction: column;
               height: 100dvh !important;
               min-height: 100dvh;
               padding-bottom: env(safe-area-inset-bottom);
             }
             .sales-report-root > header {
+              flex: 0 0 auto;
               padding-top: env(safe-area-inset-top);
             }
             .sales-report-root > header > div {
@@ -5296,13 +5311,20 @@ export default function SalesReportClient() {
               min-height: 42px;
             }
             .sales-report-root > section {
-              height: auto !important;
+              height: 0 !important;
               min-height: 0;
               flex: 1 1 auto;
               overflow-x: hidden !important;
               overflow-y: auto !important;
               padding: 0.75rem 0.75rem calc(1.25rem + env(safe-area-inset-bottom)) !important;
               -webkit-overflow-scrolling: touch;
+            }
+            .sales-report-root .mobile-period-bar {
+              scrollbar-width: none;
+              -webkit-overflow-scrolling: touch;
+            }
+            .sales-report-root .mobile-period-bar::-webkit-scrollbar {
+              display: none;
             }
             .sales-report-root input,
             .sales-report-root select,
@@ -5487,6 +5509,16 @@ export default function SalesReportClient() {
           }
 
         `}</style>
+        {isMobile && (
+          <MobilePeriodBar
+            month={dashMonth}
+            date={dashDate}
+            setMonth={setDashMonth}
+            setDate={setDashDate}
+            timeGone={tg}
+          />
+        )}
+        {!isMobile && (
         <div
           className={
             ["매출현황", "거래처별 상세", "품목분석"].includes(active)
@@ -5566,6 +5598,7 @@ export default function SalesReportClient() {
             />
           )}
         </div>
+        )}
 
         {!isMobile && active === "EST 입력" && (
           <EstQuickEntry
@@ -5673,6 +5706,52 @@ export default function SalesReportClient() {
         )}
       </section>
     </main>
+  );
+}
+
+function MobilePeriodBar({
+  month,
+  date,
+  setMonth,
+  setDate,
+  timeGone,
+}: {
+  month: string;
+  date: string;
+  setMonth: (value: string) => void;
+  setDate: (value: string) => void;
+  timeGone: ReturnType<typeof getTimeGone>;
+}) {
+  const monthLabel = month ? `${month.slice(2, 4)}.${month.slice(5, 7)}` : "-";
+  const dateLabel = date ? `${date.slice(5, 7)}.${date.slice(8, 10)}` : "-";
+  return (
+    <div className="mobile-period-bar sticky top-0 z-30 mb-3 overflow-x-auto rounded-xl border border-slate-200 bg-white/95 px-2 py-2 shadow-sm backdrop-blur">
+      <div className="flex min-w-max items-center gap-1.5">
+        <label className="relative cursor-pointer rounded-lg bg-orange-50 px-2.5 py-2 text-center">
+          <span className="block text-[9px] font-bold text-orange-700">기준월</span>
+          <span className="block text-[12px] font-black text-slate-900">{monthLabel}</span>
+          <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="기준년월 변경" />
+        </label>
+        <label className="relative cursor-pointer rounded-lg bg-orange-50 px-2.5 py-2 text-center">
+          <span className="block text-[9px] font-bold text-orange-700">기준일</span>
+          <span className="block text-[12px] font-black text-slate-900">{dateLabel}</span>
+          <input type="date" value={date} min={monthStart(month)} max={monthEnd(month)} onChange={(event) => setDate(event.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="기준일 변경" />
+        </label>
+        <MobilePeriodChip label="TG" value={pct(timeGone.timeGoneRate)} />
+        <MobilePeriodChip label="총" value={`${Number.isInteger(timeGone.totalDays) ? timeGone.totalDays : timeGone.totalDays.toFixed(1)}일`} />
+        <MobilePeriodChip label="진행" value={`${Number.isInteger(timeGone.progressedDays) ? timeGone.progressedDays : timeGone.progressedDays.toFixed(1)}일`} />
+        <MobilePeriodChip label="잔여" value={`${Number.isInteger(timeGone.remainingDays) ? timeGone.remainingDays : timeGone.remainingDays.toFixed(1)}일`} />
+      </div>
+    </div>
+  );
+}
+
+function MobilePeriodChip({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-slate-50 px-2.5 py-2 text-center">
+      <span className="block text-[9px] font-bold text-slate-500">{label}</span>
+      <span className="block text-[12px] font-black text-slate-900">{value}</span>
+    </div>
   );
 }
 
