@@ -38,6 +38,11 @@ type MainMenuLabel = "EST 입력" | "대시보드" | "매출현황" | "거래처
 type SortDirection = "asc" | "desc";
 type InactiveOrderTab = "거래처별" | "품목별";
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
+
 type Store = {
   code: string;
   name: string;
@@ -4604,6 +4609,8 @@ function isEstEntryPeriodOpen(month: string) {
 
 export default function SalesReportClient() {
   const [active, setActive] = useState("EST 입력");
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showIosInstallGuide, setShowIosInstallGuide] = useState(false);
   const [estHeaderSummary, setEstHeaderSummary] = useState<EstHeaderSummary | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
@@ -4659,6 +4666,70 @@ export default function SalesReportClient() {
   useEffect(() => {
     if (!dashDate.startsWith(dashMonth)) setDashDate(monthEnd(dashMonth));
   }, [dashMonth, dashDate]);
+
+  useEffect(() => {
+    const headEntries: Array<[string, Record<string, string>]> = [
+      ["link", { rel: "manifest", href: "/manifest.webmanifest" }],
+      ["link", { rel: "apple-touch-icon", href: "/icons/icon-192.png" }],
+      ["meta", { name: "theme-color", content: "#f97316" }],
+      ["meta", { name: "mobile-web-app-capable", content: "yes" }],
+      ["meta", { name: "apple-mobile-web-app-capable", content: "yes" }],
+      ["meta", { name: "apple-mobile-web-app-status-bar-style", content: "default" }],
+      ["meta", { name: "apple-mobile-web-app-title", content: "Sales Report" }],
+    ];
+    headEntries.forEach(([tag, attributes]) => {
+      const selector = tag === "link"
+        ? `link[rel="${attributes.rel}"]`
+        : `meta[name="${attributes.name}"]`;
+      let element = document.head.querySelector(selector) as HTMLElement | null;
+      if (!element) {
+        element = document.createElement(tag);
+        document.head.appendChild(element);
+      }
+      Object.entries(attributes).forEach(([key, value]) => element?.setAttribute(key, value));
+    });
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    }
+
+    const onBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+    const onAppInstalled = () => setInstallPrompt(null);
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onAppInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onAppInstalled);
+    };
+  }, []);
+
+  async function installApp() {
+    if (installPrompt) {
+      await installPrompt.prompt();
+      await installPrompt.userChoice;
+      setInstallPrompt(null);
+      return;
+    }
+
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+    if (standalone) {
+      alert("이미 앱으로 설치되어 있습니다.");
+      return;
+    }
+
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (isIos) {
+      setShowIosInstallGuide(true);
+      return;
+    }
+    alert("브라우저 메뉴에서 ‘앱 설치’ 또는 ‘홈 화면에 추가’를 선택해주세요.");
+  }
 
   const canAccessEstEntry = true;
 
@@ -4737,7 +4808,7 @@ export default function SalesReportClient() {
             <div className="text-lg font-extrabold tracking-tight text-orange-950">
               에이비랩 코리아 Sales Report
             </div>
-            <nav className="flex flex-wrap items-center gap-2">
+            <nav className="mobile-main-nav flex flex-wrap items-center gap-2">
               {menus.map((m) => (
                 <button
                   key={m.label}
@@ -4754,6 +4825,13 @@ export default function SalesReportClient() {
             </nav>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={installApp}
+              className="install-app-button rounded-xl border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-50"
+            >
+              앱 설치
+            </button>
             {isAdmin ? (
               <>
                 <button
@@ -4793,6 +4871,21 @@ export default function SalesReportClient() {
           </div>
         </div>
       </header>
+
+      {showIosInstallGuide && (
+        <div className="fixed inset-0 z-[220] flex items-end justify-center bg-black/45 p-3 sm:items-center" onMouseDown={() => setShowIosInstallGuide(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900">iPhone 홈 화면에 설치</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">Safari 하단의 공유 버튼을 누른 다음 <b>홈 화면에 추가</b>를 선택해주세요.</p>
+              </div>
+              <button type="button" onClick={() => setShowIosInstallGuide(false)} className="min-h-11 min-w-11 rounded-xl text-xl font-bold text-slate-500 hover:bg-slate-100">×</button>
+            </div>
+            <button type="button" onClick={() => setShowIosInstallGuide(false)} className="mt-4 min-h-12 w-full rounded-xl bg-orange-500 px-4 py-3 text-sm font-extrabold text-white">확인</button>
+          </div>
+        </div>
+      )}
 
       {menuSettingsOpen && isAdmin && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" onMouseDown={() => setMenuSettingsOpen(false)}>
@@ -5136,6 +5229,99 @@ export default function SalesReportClient() {
             border-color: #f2d675 !important;
             background: #fffdf2 !important;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
+          }
+
+          @media (max-width: 767px) {
+            html, body {
+              min-width: 0 !important;
+              overflow-x: hidden;
+              overscroll-behavior-y: none;
+            }
+            .sales-report-root {
+              height: 100dvh !important;
+              min-height: 100dvh;
+              padding-bottom: env(safe-area-inset-bottom);
+            }
+            .sales-report-root > header {
+              padding-top: env(safe-area-inset-top);
+            }
+            .sales-report-root > header > div {
+              gap: 0.65rem !important;
+              padding: 0.65rem 0.75rem !important;
+            }
+            .sales-report-root > header > div > div {
+              min-width: 0;
+              width: 100%;
+            }
+            .sales-report-root .mobile-main-nav {
+              width: 100%;
+              flex-wrap: nowrap !important;
+              gap: 0.4rem !important;
+              overflow-x: auto;
+              padding: 0.2rem 0 0.35rem;
+              scrollbar-width: none;
+              scroll-snap-type: x proximity;
+              -webkit-overflow-scrolling: touch;
+            }
+            .sales-report-root .mobile-main-nav::-webkit-scrollbar {
+              display: none;
+            }
+            .sales-report-root .mobile-main-nav button {
+              flex: 0 0 auto;
+              min-height: 42px;
+              padding-left: 0.85rem !important;
+              padding-right: 0.85rem !important;
+              scroll-snap-align: start;
+            }
+            .sales-report-root .install-app-button {
+              margin-left: auto;
+              min-height: 42px;
+            }
+            .sales-report-root > section {
+              height: auto !important;
+              min-height: 0;
+              flex: 1 1 auto;
+              overflow-x: hidden !important;
+              overflow-y: auto !important;
+              padding: 0.75rem 0.75rem calc(1.25rem + env(safe-area-inset-bottom)) !important;
+              -webkit-overflow-scrolling: touch;
+            }
+            .sales-report-root input,
+            .sales-report-root select,
+            .sales-report-root textarea,
+            .sales-report-root button {
+              min-height: 42px;
+              font-size: 16px;
+            }
+            .sales-report-root input[type="checkbox"],
+            .sales-report-root input[type="radio"] {
+              min-height: 1.25rem;
+            }
+            .sales-report-root .overflow-auto:has(table),
+            .sales-report-root .overflow-x-auto:has(table),
+            .sales-report-root .sales-status-scroll,
+            .sales-report-root .item-profit-scroll {
+              max-width: 100%;
+              height: min(58dvh, 560px) !important;
+              overflow-x: auto !important;
+              overflow-y: auto !important;
+              scrollbar-gutter: auto;
+              touch-action: pan-x pan-y;
+              -webkit-overflow-scrolling: touch;
+            }
+            .sales-report-root table {
+              max-width: none;
+            }
+            .sales-report-root table th,
+            .sales-report-root table td {
+              white-space: nowrap;
+            }
+            .sales-report-root [class*="max-w-"] {
+              max-width: calc(100vw - 1.5rem);
+            }
+            .sales-report-root .fixed.inset-0 {
+              padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+            }
           }
 
         `}</style>
