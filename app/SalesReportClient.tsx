@@ -5320,8 +5320,18 @@ export default function SalesReportClient() {
               -webkit-overflow-scrolling: touch;
             }
             .sales-report-root .mobile-period-bar {
+              box-sizing: border-box;
+              min-height: 54px;
               scrollbar-width: none;
               -webkit-overflow-scrolling: touch;
+            }
+            .sales-report-root .mobile-period-bar-inner {
+              height: 36px;
+              min-height: 36px;
+            }
+            .sales-report-root .mobile-period-bar input {
+              min-height: 0 !important;
+              font-size: 16px;
             }
             .sales-report-root .mobile-period-bar::-webkit-scrollbar {
               display: none;
@@ -5725,16 +5735,16 @@ function MobilePeriodBar({
   const monthLabel = month ? `${month.slice(2, 4)}.${month.slice(5, 7)}` : "-";
   const dateLabel = date ? `${date.slice(5, 7)}.${date.slice(8, 10)}` : "-";
   return (
-    <div className="mobile-period-bar sticky top-0 z-30 mb-3 overflow-x-auto rounded-xl border border-slate-200 bg-white/95 px-2 py-2 shadow-sm backdrop-blur">
-      <div className="flex min-w-max items-center gap-1.5">
-        <label className="relative cursor-pointer rounded-lg bg-orange-50 px-2.5 py-2 text-center">
-          <span className="block text-[9px] font-bold text-orange-700">기준월</span>
-          <span className="block text-[12px] font-black text-slate-900">{monthLabel}</span>
+    <div className="mobile-period-bar sticky top-0 z-30 mb-3 overflow-x-auto overflow-y-hidden rounded-xl border border-slate-200 bg-white/95 px-2 py-2 shadow-sm backdrop-blur">
+      <div className="mobile-period-bar-inner flex min-w-max items-center gap-1.5">
+        <label className="relative flex h-9 cursor-pointer items-center gap-1 rounded-lg bg-orange-50 px-2.5 whitespace-nowrap">
+          <span className="text-[10px] font-bold text-orange-700">기준월</span>
+          <span className="text-[12px] font-black text-slate-900">{monthLabel}</span>
           <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="기준년월 변경" />
         </label>
-        <label className="relative cursor-pointer rounded-lg bg-orange-50 px-2.5 py-2 text-center">
-          <span className="block text-[9px] font-bold text-orange-700">기준일</span>
-          <span className="block text-[12px] font-black text-slate-900">{dateLabel}</span>
+        <label className="relative flex h-9 cursor-pointer items-center gap-1 rounded-lg bg-orange-50 px-2.5 whitespace-nowrap">
+          <span className="text-[10px] font-bold text-orange-700">기준일</span>
+          <span className="text-[12px] font-black text-slate-900">{dateLabel}</span>
           <input type="date" value={date} min={monthStart(month)} max={monthEnd(month)} onChange={(event) => setDate(event.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="기준일 변경" />
         </label>
         <MobilePeriodChip label="TG" value={pct(timeGone.timeGoneRate)} />
@@ -5748,9 +5758,9 @@ function MobilePeriodBar({
 
 function MobilePeriodChip({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-slate-50 px-2.5 py-2 text-center">
-      <span className="block text-[9px] font-bold text-slate-500">{label}</span>
-      <span className="block text-[12px] font-black text-slate-900">{value}</span>
+    <div className="flex h-9 items-center gap-1 rounded-lg bg-slate-50 px-2.5 whitespace-nowrap">
+      <span className="text-[10px] font-bold text-slate-500">{label}</span>
+      <span className="text-[12px] font-black text-slate-900">{value}</span>
     </div>
   );
 }
