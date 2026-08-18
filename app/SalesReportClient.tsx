@@ -4803,9 +4803,9 @@ export default function SalesReportClient() {
       style={{ fontFamily: '"Malgun Gothic", "맑은 고딕", sans-serif' }}
     >
       <header className="sticky top-0 z-40 border-b border-gray-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-5">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="text-lg font-extrabold tracking-tight text-orange-950">
+        <div className="mobile-header-inner flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-5">
+          <div className="mobile-header-main flex flex-wrap items-center gap-3">
+            <div className="mobile-report-title text-lg font-extrabold tracking-tight text-orange-950">
               에이비랩 코리아 Sales Report
             </div>
             <nav className="mobile-main-nav flex flex-wrap items-center gap-2">
@@ -4824,7 +4824,7 @@ export default function SalesReportClient() {
               ))}
             </nav>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="mobile-header-actions flex items-center gap-2">
             <button
               type="button"
               onClick={installApp}
@@ -5288,10 +5288,12 @@ export default function SalesReportClient() {
             }
             .sales-report-root input,
             .sales-report-root select,
-            .sales-report-root textarea,
-            .sales-report-root button {
-              min-height: 42px;
+            .sales-report-root textarea {
+              min-height: 40px;
               font-size: 16px;
+            }
+            .sales-report-root button {
+              min-height: 38px;
             }
             .sales-report-root input[type="checkbox"],
             .sales-report-root input[type="radio"] {
@@ -5322,6 +5324,135 @@ export default function SalesReportClient() {
             .sales-report-root .fixed.inset-0 {
               padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
             }
+            .sales-report-root .mobile-header-inner {
+              padding: 0.55rem 0.75rem 0.65rem !important;
+            }
+            .sales-report-root .mobile-header-main {
+              display: block !important;
+            }
+            .sales-report-root .mobile-report-title {
+              margin-bottom: 0.45rem;
+              font-size: 1rem !important;
+              line-height: 1.25rem;
+            }
+            .sales-report-root .mobile-main-nav button {
+              min-height: 36px !important;
+              border-radius: 0.7rem !important;
+              padding: 0.45rem 0.7rem !important;
+              font-size: 0.72rem !important;
+              line-height: 1rem;
+            }
+            .sales-report-root .mobile-header-actions {
+              width: 100%;
+              justify-content: flex-end;
+              gap: 0.4rem !important;
+            }
+            .sales-report-root .mobile-header-actions button {
+              min-height: 34px !important;
+              padding: 0.4rem 0.7rem !important;
+              font-size: 0.7rem !important;
+            }
+            .sales-report-root .report-controls {
+              display: grid !important;
+              grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+              align-items: stretch !important;
+              gap: 0.5rem !important;
+            }
+            .sales-report-root .report-controls > label {
+              width: auto !important;
+              min-width: 0;
+              font-size: 0.68rem !important;
+            }
+            .sales-report-root .report-controls > label input {
+              min-width: 0;
+              padding: 0.45rem 0.55rem !important;
+              font-size: 0.8rem !important;
+            }
+            .sales-report-root .report-controls > div:not(.est-header-summary):not(.target-header-kpi) {
+              min-width: 0 !important;
+              padding: 0.4rem 0.25rem !important;
+            }
+            .sales-report-root .report-controls > div:not(.est-header-summary):not(.target-header-kpi) p:first-child {
+              font-size: 0.62rem !important;
+              line-height: 0.85rem;
+            }
+            .sales-report-root .report-controls > div:not(.est-header-summary):not(.target-header-kpi) p:last-child {
+              font-size: 0.85rem !important;
+              line-height: 1.05rem;
+            }
+            .sales-report-root .report-controls > div:nth-of-type(1),
+            .sales-report-root .report-controls > div:nth-of-type(2),
+            .sales-report-root .report-controls > div:nth-of-type(3),
+            .sales-report-root .report-controls > div:nth-of-type(4) {
+              grid-column: span 1;
+            }
+            .sales-report-root .est-header-summary,
+            .sales-report-root .target-header-kpi {
+              grid-column: 1 / -1;
+              width: 100%;
+              min-width: 0 !important;
+              margin-left: 0 !important;
+            }
+            .sales-report-root .est-header-summary {
+              padding: 0.6rem 0.75rem !important;
+              text-align: left !important;
+              font-size: 0.68rem !important;
+              line-height: 1.15rem;
+            }
+            .sales-report-root .target-header-kpi {
+              overflow: hidden;
+              padding: 0.5rem !important;
+            }
+            .sales-report-root .target-header-kpi > div {
+              grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+              gap: 0.35rem !important;
+            }
+            .sales-report-root .target-header-kpi > div > div {
+              min-width: 0;
+              border-radius: 0.55rem;
+              padding: 0.45rem !important;
+            }
+            .sales-report-root .target-header-kpi > div > div:first-child {
+              grid-row: span 2;
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+            }
+            .sales-report-root .target-header-kpi > div > div:first-child div:last-child {
+              font-size: 1.4rem !important;
+            }
+            .sales-report-root .target-header-kpi > div > div:not(:first-child) div:first-child {
+              font-size: 0.62rem !important;
+            }
+            .sales-report-root .target-header-kpi > div > div:not(:first-child) div:last-child {
+              overflow: hidden;
+              text-overflow: ellipsis;
+              font-size: 0.78rem !important;
+            }
+            .sales-report-root[data-active="매출현황"] > section > div:first-of-type,
+            .sales-report-root[data-active="거래처별 상세"] > section > div:first-of-type,
+            .sales-report-root[data-active="품목분석"] > section > div:first-of-type {
+              margin-bottom: 0.6rem !important;
+            }
+            .sales-report-root[data-active="매출현황"] section > div.rounded-2xl {
+              padding: 0.75rem !important;
+            }
+            .sales-report-root[data-active="매출현황"] section h2 {
+              font-size: 1rem !important;
+            }
+            .sales-report-root[data-active="매출현황"] section select,
+            .sales-report-root[data-active="매출현황"] section input:not([type="checkbox"]) {
+              width: 100% !important;
+              min-width: 0;
+            }
+            .sales-report-root[data-active="매출현황"] section label:has(input[type="checkbox"]) {
+              min-height: 38px;
+              padding: 0.45rem 0.65rem !important;
+              font-size: 0.7rem !important;
+            }
+            .sales-report-root[data-active="매출현황"] section button {
+              font-size: 0.72rem !important;
+            }
           }
 
         `}</style>
@@ -5339,7 +5470,7 @@ export default function SalesReportClient() {
                 : "rounded-2xl border border-gray-200 bg-slate-50 p-3 shadow-sm"
             }
           >
-            <div className="flex flex-wrap items-end gap-2">
+            <div className="report-controls flex flex-wrap items-end gap-2">
               <label className="w-[135px] text-[12px] font-semibold text-slate-600">
                 기준년월
                 <input
@@ -5368,7 +5499,7 @@ export default function SalesReportClient() {
               <HeaderTimeInfo title="진행일수" value={tg.progressedDays} />
               <HeaderTimeInfo title="잔여일수" value={tg.remainingDays} />
               {active === "EST 입력" && !isEstEntryPeriodOpen(dashMonth) && estHeaderSummary && (
-                <div className="ml-auto rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-right text-[12px] font-extrabold text-slate-800 shadow-sm">
+                <div className="est-header-summary ml-auto rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-right text-[12px] font-extrabold text-slate-800 shadow-sm">
                   <div className="mb-0.5 text-[10px] text-orange-700">{estHeaderSummary.manager}</div>
                   <span>매장 EST 합계 : {won(estHeaderSummary.storeEst)}</span>
                   <span className="mx-2 text-slate-400">/</span>
@@ -7327,7 +7458,7 @@ function SalesTargetHeaderKpi({
   const rate = targetTotal ? (currentSales / targetTotal) * 100 : 0;
 
   return (
-    <div className="ml-auto min-w-[430px] rounded-xl border border-yellow-300 bg-yellow-100 px-4 py-2 shadow-sm">
+    <div className="target-header-kpi ml-auto min-w-[430px] rounded-xl border border-yellow-300 bg-yellow-100 px-4 py-2 shadow-sm">
       <div className="grid grid-cols-[1.25fr_1fr_1fr_1fr] items-center gap-2 text-black">
         <div className="rounded-lg bg-yellow-200 px-3 py-2 text-center">
           <div className="text-[12px] font-extrabold">TARGET 달성률</div>
