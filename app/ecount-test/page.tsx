@@ -57,7 +57,6 @@ export default function EcountTestPage() {
       });
     } finally {
       setLoadingMode(null);
-      setApiCertKey("");
     }
   }
 
