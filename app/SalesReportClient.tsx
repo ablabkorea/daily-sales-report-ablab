@@ -43,6 +43,31 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
+// ============================================================
+// ECOUNT 자동 동기화 상태
+// ============================================================
+
+type EcountSyncState = {
+  requestId?: string | null;
+  reason?: "manual" | "scheduled" | string;
+  requestedBy?: string | null;
+  requestedAt?: string | null;
+  status?: "IDLE" | "PENDING" | "CLAIMED" | "RUNNING" | "SUCCESS" | "FAILED" | string;
+  claimedBy?: string | null;
+  claimToken?: string | null;
+  claimedAt?: string | null;
+  leaseUntil?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  heartbeatAt?: string | null;
+  lastSuccessAt?: string | null;
+  lastSuccessPc?: string | null;
+  lastError?: string | null;
+  message?: string | null;
+};
+
+const ECOUNT_SYNC_STATE_KEY = "ecount_sync_state_v1";
+
 function urlBase64ToUint8Array(value: string) {
   const padding = "=".repeat((4 - (value.length % 4)) % 4);
   const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -3758,6 +3783,54 @@ async function saveSharedState<T>(key: string, value: T) {
   return row.updated_at || new Date().toISOString();
 }
 
+// ============================================================
+// ECOUNT 동기화 요청 / 상태 API
+// 기존 Cloudflare D1 settings 저장소를 그대로 사용합니다.
+// ============================================================
+
+async function loadEcountSyncState(): Promise<EcountSyncState | null> {
+  return loadSharedState<EcountSyncState>(ECOUNT_SYNC_STATE_KEY);
+}
+
+async function saveEcountSyncState(value: EcountSyncState) {
+  await saveSharedState(ECOUNT_SYNC_STATE_KEY, value);
+}
+
+function ecountSyncBusy(state: EcountSyncState | null) {
+  return ["PENDING", "CLAIMED", "RUNNING"].includes(String(state?.status || ""));
+}
+
+function ecountSyncStatusLabel(state: EcountSyncState | null) {
+  switch (state?.status) {
+    case "PENDING":
+      return "동기화 요청 대기중";
+    case "CLAIMED":
+      return "실행 PC 선택 중";
+    case "RUNNING":
+      return "ECOUNT 동기화 중";
+    case "SUCCESS":
+      return "최신 데이터 반영 완료";
+    case "FAILED":
+      return "최근 동기화 실패";
+    default:
+      return "동기화 대기";
+  }
+}
+
+function formatSyncTime(value?: string | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function reportSharedSaveError(error: unknown) {
   // 수정·자동저장 과정에서 팝업이 반복되지 않도록 콘솔 기록만 남깁니다.
   console.warn("공유 저장소(Cloudflare D1) 저장 실패", error);
@@ -4637,6 +4710,12 @@ export default function SalesReportClient() {
   const [notificationSupported, setNotificationSupported] = useState(false);
   const [notificationSubscribed, setNotificationSubscribed] = useState(false);
   const [notificationBusy, setNotificationBusy] = useState(false);
+  const [ecountSyncState, setEcountSyncState] = useState<EcountSyncState | null>(null);
+  const [ecountSyncLoading, setEcountSyncLoading] = useState(true);
+  const [ecountSyncRequesting, setEcountSyncRequesting] = useState(false);
+  const [ecountSyncError, setEcountSyncError] = useState("");
+  const lastObservedSyncSuccessRef = useRef<string | null>(null);
+  const salesRefreshRef = useRef<() => Promise<void>>(async () => undefined);
   const [estHeaderSummary, setEstHeaderSummary] = useState<EstHeaderSummary | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
@@ -4659,6 +4738,101 @@ export default function SalesReportClient() {
     initialSales,
     dashMonth,
   );
+
+  useEffect(() => {
+    salesRefreshRef.current = salesActions.refresh;
+  }, [salesActions.refresh]);
+
+  // ----------------------------------------------------------
+  // ECOUNT 동기화 상태를 5초마다 확인합니다.
+  // 동기화가 성공하면 D1 매출을 즉시 다시 읽어 화면에도 반영합니다.
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshSyncState = async () => {
+      try {
+        const next = await loadEcountSyncState();
+        if (cancelled) return;
+
+        setEcountSyncState(next);
+        setEcountSyncError("");
+
+        const successAt = next?.lastSuccessAt || null;
+        if (
+          successAt &&
+          lastObservedSyncSuccessRef.current &&
+          successAt !== lastObservedSyncSuccessRef.current
+        ) {
+          await salesRefreshRef.current().catch((error) =>
+            console.warn("동기화 완료 후 매출 최신화 실패", error),
+          );
+        }
+        if (successAt) lastObservedSyncSuccessRef.current = successAt;
+      } catch (error) {
+        if (cancelled) return;
+        setEcountSyncError(
+          error instanceof Error ? error.message : "동기화 상태를 확인하지 못했습니다.",
+        );
+      } finally {
+        if (!cancelled) setEcountSyncLoading(false);
+      }
+    };
+
+    refreshSyncState();
+    const timer = window.setInterval(refreshSyncState, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  async function requestLatestEcountSync() {
+    if (ecountSyncRequesting || ecountSyncBusy(ecountSyncState)) return;
+
+    setEcountSyncRequesting(true);
+    setEcountSyncError("");
+
+    try {
+      // 클릭 직전 서버 상태를 다시 확인하여 다른 PC가 처리 중인 요청을 덮어쓰지 않습니다.
+      const latest = await loadEcountSyncState();
+      if (ecountSyncBusy(latest)) {
+        setEcountSyncState(latest);
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const next: EcountSyncState = {
+        ...(latest || {}),
+        requestId: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        reason: "manual",
+        requestedBy: "Sales Report 웹",
+        requestedAt: now,
+        status: "PENDING",
+        claimedBy: null,
+        claimToken: null,
+        claimedAt: null,
+        leaseUntil: null,
+        startedAt: null,
+        completedAt: null,
+        heartbeatAt: null,
+        lastError: null,
+        message: "웹사이트에서 최신 데이터 동기화를 요청했습니다.",
+      };
+
+      await saveEcountSyncState(next);
+      setEcountSyncState(next);
+    } catch (error) {
+      setEcountSyncError(
+        error instanceof Error ? error.message : "동기화 요청에 실패했습니다.",
+      );
+    } finally {
+      setEcountSyncRequesting(false);
+    }
+  }
+
   const [targets, setTargets] = useLocal<TargetRecord[]>(
     "ablab_targets_v14",
     initialTargets,
@@ -4968,22 +5142,66 @@ export default function SalesReportClient() {
               ))}
             </nav>
           </div>
-          <div className="mobile-header-actions flex items-center gap-2">
+          <div className="mobile-header-actions flex flex-wrap items-center justify-end gap-2">
             {!isAppInstalled && (
               <button
                 type="button"
                 onClick={installApp}
-                className="install-app-button rounded-xl border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-50"
+                className="install-app-button shrink-0 rounded-xl border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-50"
               >
                 앱 설치
               </button>
             )}
+
+            <div className="sync-control flex shrink-0 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5">
+              <button
+                type="button"
+                onClick={requestLatestEcountSync}
+                disabled={ecountSyncRequesting || ecountSyncBusy(ecountSyncState)}
+                className="sync-button shrink-0 rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-extrabold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                title={
+                  ecountSyncState?.status === "RUNNING" && ecountSyncState.claimedBy
+                    ? `${ecountSyncState.claimedBy} PC에서 동기화 중`
+                    : "ECOUNT 최신 데이터를 즉시 Sales Report에 반영합니다."
+                }
+              >
+                {ecountSyncState?.status === "RUNNING"
+                  ? "동기화 중"
+                  : ecountSyncState?.status === "PENDING" || ecountSyncState?.status === "CLAIMED"
+                    ? "요청 대기"
+                    : ecountSyncRequesting
+                      ? "요청 중"
+                      : "최신 데이터 동기화"}
+              </button>
+
+              <div className="sync-status min-w-0 leading-tight">
+                <div className={`whitespace-nowrap text-[10px] font-extrabold ${
+                  ecountSyncState?.status === "FAILED"
+                    ? "text-red-700"
+                    : ecountSyncBusy(ecountSyncState)
+                      ? "text-amber-700"
+                      : "text-emerald-800"
+                }`}>
+                  {ecountSyncLoading ? "상태 확인 중" : ecountSyncStatusLabel(ecountSyncState)}
+                </div>
+                <div className="mt-0.5 whitespace-nowrap text-[9px] font-semibold text-slate-500">
+                  마지막 성공 {formatSyncTime(ecountSyncState?.lastSuccessAt)}
+                  {ecountSyncState?.lastSuccessPc ? ` · ${ecountSyncState.lastSuccessPc}` : ""}
+                </div>
+                {ecountSyncError && (
+                  <div className="mt-0.5 max-w-[220px] truncate text-[9px] font-semibold text-red-600">
+                    {ecountSyncError}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {notificationSupported && (
               <button
                 type="button"
                 disabled={notificationBusy}
                 onClick={notificationSubscribed ? disableNotifications : enableNotifications}
-                className="notification-button rounded-xl border border-sky-300 bg-sky-50 px-4 py-2 text-xs font-bold text-sky-800 hover:bg-sky-100 disabled:opacity-50"
+                className="notification-button shrink-0 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2 text-xs font-bold text-sky-800 hover:bg-sky-100 disabled:opacity-50"
               >
                 {notificationSubscribed ? "알림 끄기" : "알림 받기"}
               </button>
@@ -5388,6 +5606,16 @@ export default function SalesReportClient() {
           }
 
           @media (min-width: 768px) {
+            .sales-report-root .mobile-header-actions {
+              flex-wrap: wrap !important;
+              justify-content: flex-end;
+              overflow: visible !important;
+            }
+            .sales-report-root .sync-control,
+            .sales-report-root .install-app-button,
+            .sales-report-root .notification-button {
+              flex: 0 0 auto;
+            }
             .sales-report-root {
               display: flex;
               min-width: 1180px;
@@ -5584,6 +5812,7 @@ export default function SalesReportClient() {
             }
             .sales-report-root .mobile-header-actions {
               width: 100%;
+              flex-wrap: wrap !important;
               justify-content: flex-end;
               gap: 0.4rem !important;
             }
@@ -5592,8 +5821,21 @@ export default function SalesReportClient() {
               padding: 0.4rem 0.7rem !important;
               font-size: 0.7rem !important;
             }
-            .sales-report-root .mobile-header-actions button:not(.install-app-button):not(.notification-button) {
+            .sales-report-root .mobile-header-actions button:not(.install-app-button):not(.notification-button):not(.sync-button) {
               display: none !important;
+            }
+            .sales-report-root .mobile-header-actions .sync-control {
+              max-width: 100%;
+              padding: 0.3rem 0.4rem !important;
+            }
+            .sales-report-root .mobile-header-actions .sync-status {
+              display: none;
+            }
+            .sales-report-root .mobile-header-actions .sync-button {
+              min-height: 34px !important;
+              white-space: nowrap;
+              padding: 0.4rem 0.65rem !important;
+              font-size: 0.68rem !important;
             }
             .sales-report-root .mobile-main-nav {
               display: grid !important;
