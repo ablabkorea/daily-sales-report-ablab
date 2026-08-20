@@ -10480,6 +10480,14 @@ function itemCategoryFromName(itemName: string) {
   return "기타";
 }
 
+function itemSpecificationFromName(itemName: string) {
+  const name = String(itemName || "").trim();
+  // 신규 품목은 품목명 끝의 [규격] 값을 자동으로 사용합니다.
+  // 예: "슈레이버 치즈 [2.27kg*4ea]" -> "2.27kg*4ea"
+  const match = name.match(/\[([^\[\]]+)\]\s*$/);
+  return match?.[1]?.trim() || "";
+}
+
 function ItemShipmentAnalysis({
   stores,
   sales,
@@ -10545,6 +10553,7 @@ function ItemShipmentAnalysis({
       {
         itemCode: string;
         itemName: string;
+        specification: string;
         category: string;
         current: ItemMetric;
         prevMonth: ItemMetric;
@@ -10556,10 +10565,17 @@ function ItemShipmentAnalysis({
     const ensure = (row: SalesRecord) => {
       const key = row.itemCode || row.itemName || "미지정";
       if (!map.has(key)) {
+        const itemMaster = itemMasterByCode.get(row.itemCode);
+        const resolvedItemName = itemMaster?.itemName || row.itemName || "미지정";
+        const resolvedSpecification =
+          itemMaster?.specification?.trim() ||
+          itemSpecificationFromName(row.itemName || resolvedItemName) ||
+          "-";
         map.set(key, {
           itemCode: row.itemCode || "-",
-          itemName: itemMasterByCode.get(row.itemCode)?.itemName || row.itemName || "미지정",
-          category: itemMasterByCode.get(row.itemCode)?.category || "미지정",
+          itemName: resolvedItemName,
+          specification: resolvedSpecification,
+          category: itemMaster?.category || "미지정",
           current: emptyItemMetric(),
           prevMonth: emptyItemMetric(),
           storeCodes: new Set<string>(),
@@ -10576,6 +10592,8 @@ function ItemShipmentAnalysis({
       const haystack = [
         row.itemCode,
         row.itemName,
+        itemMasterByCode.get(row.itemCode)?.specification,
+        itemSpecificationFromName(row.itemName),
         row.storeCode,
         row.storeName,
         store?.name,
@@ -10851,7 +10869,8 @@ function ItemShipmentAnalysis({
               <table className="item-profit-table text-center text-black whitespace-nowrap">
                 <colgroup>
                   <col style={{ width: "5%" }} />
-                  <col style={{ width: "20.5%" }} />
+                  <col style={{ width: "16.5%" }} />
+                  <col style={{ width: "7%" }} />
                   <col style={{ width: "6%" }} />
                   <col style={{ width: "4%" }} />
                   <col style={{ width: "6.5%" }} />
@@ -10870,6 +10889,7 @@ function ItemShipmentAnalysis({
                   <tr className="bg-slate-100">
                     <th rowSpan={2} className="bg-white px-2 py-2 font-bold text-black">품목코드</th>
                     <th rowSpan={2} className="bg-white px-3 py-2 font-bold text-black">품목명</th>
+                    <th rowSpan={2} className="bg-white px-2 py-2 font-bold text-black">규격</th>
                     <th rowSpan={2} className="bg-white px-1 py-2 text-[11px] font-bold text-black">
                       <div className="flex w-full flex-col items-center gap-1">
                         <span>카테고리</span>
@@ -10936,7 +10956,7 @@ function ItemShipmentAnalysis({
                     </th>
                   </tr>
                   <tr className="item-profit-subtotal font-extrabold text-black">
-                    <th colSpan={4} className="subtotal-label font-extrabold">SUBTOTAL</th>
+                    <th colSpan={5} className="subtotal-label font-extrabold">SUBTOTAL</th>
                     <th className="subtotal-number sales-value-cell font-extrabold">{won(subtotal.prevMonth.sales)}</th>
                     <th className="subtotal-number">{won(subtotal.prevMonthUnitCost)}</th>
                     <th className="subtotal-number">{won(subtotal.prevMonth.profit)}</th>
@@ -10961,6 +10981,12 @@ function ItemShipmentAnalysis({
                         title={r.itemName}
                       >
                         {r.itemName}
+                      </td>
+                      <td
+                        className="px-1.5 py-2 text-center text-[10px] font-semibold"
+                        title={r.specification}
+                      >
+                        {r.specification}
                       </td>
                       <td className="item-profit-category-cell font-semibold">{r.category}</td>
                       <td className="p-2 text-center">
@@ -10992,14 +11018,14 @@ function ItemShipmentAnalysis({
                   ))}
                   {!itemRows.length && (
                     <tr>
-                      <td colSpan={15} className="p-8 text-center text-black">
+                      <td colSpan={16} className="p-8 text-center text-black">
                         표시할 품목이 없습니다.
                       </td>
                     </tr>
                   )}
                   {!!itemRows.length && (
                     <tr aria-hidden="true">
-                      <td colSpan={15} className="h-20 border-0 bg-white p-0" />
+                      <td colSpan={16} className="h-20 border-0 bg-white p-0" />
                     </tr>
                   )}
                 </tbody>
