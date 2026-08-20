@@ -67,6 +67,7 @@ type EcountSyncState = {
 };
 
 const ECOUNT_SYNC_STATE_KEY = "ecount_sync_state_v1";
+const PUSH_OPT_OUT_KEY = "ablab_push_opt_out_v1";
 
 function urlBase64ToUint8Array(value: string) {
   const padding = "=".repeat((4 - (value.length % 4)) % 4);
@@ -4887,37 +4888,98 @@ export default function SalesReportClient() {
       "Notification" in window;
     setNotificationSupported(supported);
     if (!supported) return;
+
     navigator.serviceWorker.ready
       .then((registration) => registration.pushManager.getSubscription())
       .then((subscription) => setNotificationSubscribed(Boolean(subscription)))
       .catch(() => setNotificationSubscribed(false));
   }, []);
 
+  async function ensurePushSubscription(options?: { requestPermission?: boolean }) {
+    if (!notificationSupported) return false;
+
+    const optedOut = window.localStorage.getItem(PUSH_OPT_OUT_KEY) === "1";
+    if (optedOut && !options?.requestPermission) return false;
+
+    let permission = Notification.permission;
+    if (permission === "default" && options?.requestPermission) {
+      permission = await Notification.requestPermission();
+    }
+
+    if (permission !== "granted") return false;
+
+    const keyResponse = await fetch("/api/d1/push/public-key", { cache: "no-store" });
+    if (!keyResponse.ok) throw new Error("푸시 공개키를 불러오지 못했습니다.");
+    const { publicKey } = await keyResponse.json() as { publicKey: string };
+
+    const registration = await navigator.serviceWorker.ready;
+    const existing = await registration.pushManager.getSubscription();
+    const subscription = existing || await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+
+    const response = await fetch("/api/d1/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: subscription.toJSON() }),
+    });
+    if (!response.ok) throw new Error("알림 구독을 저장하지 못했습니다.");
+
+    window.localStorage.removeItem(PUSH_OPT_OUT_KEY);
+    setNotificationSubscribed(true);
+    return true;
+  }
+
+  // 이미 알림 권한을 허용한 기기는 별도의 '알림 받기' 설정 없이 자동 등록합니다.
+  // 사용자가 명시적으로 '알림 끄기'를 누른 기기는 다시 자동 등록하지 않습니다.
+  useEffect(() => {
+    if (!notificationSupported || Notification.permission !== "granted") return;
+    if (window.localStorage.getItem(PUSH_OPT_OUT_KEY) === "1") return;
+
+    ensurePushSubscription().catch((error) =>
+      console.warn("푸시 자동 구독 확인 실패", error),
+    );
+  }, [notificationSupported]);
+
+  // 권한이 아직 결정되지 않은 사용자는 사이트에서 첫 상호작용을 할 때
+  // 브라우저의 알림 허용 창을 한 번 띄웁니다. 별도 설정 메뉴를 찾을 필요가 없습니다.
+  useEffect(() => {
+    if (!notificationSupported) return;
+    if (Notification.permission !== "default") return;
+    if (window.localStorage.getItem(PUSH_OPT_OUT_KEY) === "1") return;
+
+    let handled = false;
+    const requestOnFirstInteraction = () => {
+      if (handled) return;
+      handled = true;
+      cleanup();
+
+      ensurePushSubscription({ requestPermission: true }).catch((error) =>
+        console.warn("푸시 자동 권한 요청 실패", error),
+      );
+    };
+
+    const cleanup = () => {
+      window.removeEventListener("pointerdown", requestOnFirstInteraction);
+      window.removeEventListener("keydown", requestOnFirstInteraction);
+    };
+
+    window.addEventListener("pointerdown", requestOnFirstInteraction, { once: true });
+    window.addEventListener("keydown", requestOnFirstInteraction, { once: true });
+
+    return cleanup;
+  }, [notificationSupported]);
+
   async function enableNotifications() {
     if (!notificationSupported || notificationBusy) return;
     setNotificationBusy(true);
     try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
+      const enabled = await ensurePushSubscription({ requestPermission: true });
+      if (!enabled) {
         alert("알림 권한이 허용되지 않았습니다. 브라우저 또는 앱 설정에서 알림을 허용해주세요.");
         return;
       }
-      const keyResponse = await fetch("/api/d1/push/public-key", { cache: "no-store" });
-      if (!keyResponse.ok) throw new Error("푸시 공개키를 불러오지 못했습니다.");
-      const { publicKey } = await keyResponse.json() as { publicKey: string };
-      const registration = await navigator.serviceWorker.ready;
-      const existing = await registration.pushManager.getSubscription();
-      const subscription = existing || await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      });
-      const response = await fetch("/api/d1/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscription: subscription.toJSON() }),
-      });
-      if (!response.ok) throw new Error("알림 구독을 저장하지 못했습니다.");
-      setNotificationSubscribed(true);
       alert("업데이트 알림을 받도록 설정되었습니다.");
     } catch (error) {
       alert(error instanceof Error ? error.message : "알림 설정 중 오류가 발생했습니다.");
@@ -4940,6 +5002,7 @@ export default function SalesReportClient() {
         });
         await subscription.unsubscribe();
       }
+      window.localStorage.setItem(PUSH_OPT_OUT_KEY, "1");
       setNotificationSubscribed(false);
       alert("업데이트 알림을 해제했습니다.");
     } catch {
@@ -4956,7 +5019,7 @@ export default function SalesReportClient() {
       const response = await fetch("/api/d1/push/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ baseMonth: dashMonth, reportDate: dashDate }),
+        body: JSON.stringify({ baseMonth: dashMonth, reportDate: dashDate, syncSlot: "manual" }),
       });
       const payload = await response.json() as { sent?: number; duplicate?: boolean; error?: string };
       if (!response.ok) throw new Error(payload.error || "알림 발송에 실패했습니다.");

@@ -261,6 +261,16 @@ async function ensurePushTables(env: Env) {
         created_at TEXT NOT NULL
       )`,
     ),
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS push_notifications_v2 (
+        notification_key TEXT PRIMARY KEY,
+        report_date TEXT NOT NULL,
+        base_month TEXT NOT NULL,
+        sync_slot TEXT NOT NULL,
+        sent_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      )`,
+    ),
   ]);
 }
 
@@ -294,37 +304,77 @@ async function deletePushSubscription(request: Request, env: Env) {
 }
 
 async function sendUpdatePush(request: Request, env: Env) {
-  const payload = await request.json<{ baseMonth?: string; reportDate?: string }>();
+  const payload = await request.json<{
+    baseMonth?: string;
+    reportDate?: string;
+    syncSlot?: string;
+    changedRanges?: string[];
+  }>();
+
   const baseMonth = payload.baseMonth || "";
   const reportDate = payload.reportDate || "";
-  if (!/^\d{4}-\d{2}$/.test(baseMonth) || !/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) {
-    return json({ error: "Invalid update date" }, 400);
+  const syncSlot = String(payload.syncSlot || "manual").trim();
+  const changedRanges = Array.isArray(payload.changedRanges)
+    ? payload.changedRanges.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+
+  if (
+    !/^\d{4}-\d{2}$/.test(baseMonth) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(reportDate) ||
+    !/^[A-Za-z0-9_-]{1,32}$/.test(syncSlot)
+  ) {
+    return json({ error: "Invalid update notification payload" }, 400);
   }
+
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
     return json({ error: "VAPID secrets are not configured" }, 503);
   }
+
   await ensurePushTables(env);
+
+  // 같은 날짜라도 08:00 / 16:30 / manual은 각각 별개의 알림입니다.
+  const notificationKey = `${reportDate}:${syncSlot}`;
   const existing = await env.DB.prepare(
-    "SELECT report_date FROM push_notifications WHERE report_date = ? LIMIT 1",
-  ).bind(reportDate).first();
-  if (existing) return json({ ok: true, duplicate: true, sent: 0 });
+    "SELECT notification_key FROM push_notifications_v2 WHERE notification_key = ? LIMIT 1",
+  ).bind(notificationKey).first();
+
+  if (existing) {
+    return json({ ok: true, duplicate: true, sent: 0, notificationKey });
+  }
 
   const subscriptions = await env.DB.prepare(
     "SELECT endpoint, p256dh, auth FROM push_subscriptions ORDER BY created_at",
   ).all<{ endpoint: string; p256dh: string; auth: string }>();
+
   webpush.setVapidDetails(
     env.VAPID_SUBJECT || "mailto:admin@ablab.co.kr",
     env.VAPID_PUBLIC_KEY,
     env.VAPID_PRIVATE_KEY,
   );
+
+  const slotLabel =
+    syncSlot === "0800"
+      ? "오전 8시"
+      : syncSlot === "1630"
+        ? "오후 4시 30분"
+        : "수동";
+
+  const rangeText = changedRanges.length
+    ? ` 변경 범위: ${changedRanges.join(", ")}`
+    : "";
+
   const notification = JSON.stringify({
     title: "Sales Report 업데이트 완료",
-    body: `${reportDate} 매출 자료가 업데이트되었습니다.`,
-    tag: `sales-report-${reportDate}`,
+    body: `${slotLabel} 매출 데이터가 최신 정보로 반영되었습니다.${rangeText}`,
+    tag: `sales-report-${reportDate}-${syncSlot}`,
     url: "/",
+    syncSlot,
+    reportDate,
   });
+
   let sent = 0;
   const expired: string[] = [];
+
   for (const row of subscriptions.results || []) {
     try {
       await webpush.sendNotification(
@@ -338,6 +388,7 @@ async function sendUpdatePush(request: Request, env: Env) {
       if (statusCode === 404 || statusCode === 410) expired.push(row.endpoint);
     }
   }
+
   if (expired.length) {
     await env.DB.batch(
       expired.map((endpoint) =>
@@ -345,10 +396,27 @@ async function sendUpdatePush(request: Request, env: Env) {
       ),
     );
   }
+
   await env.DB.prepare(
-    "INSERT INTO push_notifications (report_date, base_month, sent_count, created_at) VALUES (?, ?, ?, ?)",
-  ).bind(reportDate, baseMonth, sent, new Date().toISOString()).run();
-  return json({ ok: true, duplicate: false, sent, removed: expired.length });
+    `INSERT INTO push_notifications_v2
+     (notification_key, report_date, base_month, sync_slot, sent_count, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    notificationKey,
+    reportDate,
+    baseMonth,
+    syncSlot,
+    sent,
+    new Date().toISOString(),
+  ).run();
+
+  return json({
+    ok: true,
+    duplicate: false,
+    sent,
+    removed: expired.length,
+    notificationKey,
+  });
 }
 
 export default {
