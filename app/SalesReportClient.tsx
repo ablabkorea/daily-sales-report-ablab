@@ -8909,6 +8909,8 @@ function Dashboard({
     );
   if (hasUnassigned) managers.push("미지정");
 
+  const DASHBOARD_MANAGER_PRIORITY = ["SY", "KT", "NH", "BM"];
+
   const rows = managers.map((manager) => {
     const currentRows = current.filter((s) => managerOfSale(s) === manager);
     const currentFullRows = currentFullMonth.filter(
@@ -8986,6 +8988,23 @@ function Dashboard({
       pausedCount,
       newStoreCount: newStoreCodes.size,
     };
+  }).sort((a, b) => {
+    const aPriority = DASHBOARD_MANAGER_PRIORITY.indexOf(a.manager);
+    const bPriority = DASHBOARD_MANAGER_PRIORITY.indexOf(b.manager);
+
+    // 지정 담당자는 매출액과 관계없이 항상 SY -> KT -> NH -> BM 순서를 우선합니다.
+    if (aPriority !== -1 || bPriority !== -1) {
+      if (aPriority === -1) return 1;
+      if (bPriority === -1) return -1;
+      return aPriority - bPriority;
+    }
+
+    // 그 외 담당자는 당월 전체 매출 금액이 큰 순서대로 자동 정렬합니다.
+    // 매출액이 같으면 담당자명 순으로 정렬해 표시 순서가 흔들리지 않게 합니다.
+    return (
+      b.fullMonthSales - a.fullMonthSales ||
+      a.manager.localeCompare(b.manager, "ko")
+    );
   });
 
   const total = rows.reduce(
