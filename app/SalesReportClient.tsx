@@ -3798,21 +3798,25 @@ async function saveEcountSyncState(value: EcountSyncState) {
 }
 
 function ecountSyncBusy(state: EcountSyncState | null) {
-  return ["PENDING", "CLAIMED", "RUNNING"].includes(String(state?.status || ""));
+  const status = String(state?.status || "");
+  if (status === "PENDING") return true;
+  if (status !== "CLAIMED" && status !== "RUNNING") return false;
+
+  const leaseTime = state?.leaseUntil ? new Date(state.leaseUntil).getTime() : NaN;
+  if (Number.isFinite(leaseTime) && leaseTime <= Date.now()) return false;
+  return true;
 }
 
 function ecountSyncStatusLabel(state: EcountSyncState | null) {
+  if (!ecountSyncBusy(state)) return "동기화 대기";
+
   switch (state?.status) {
     case "PENDING":
       return "동기화 요청 대기중";
     case "CLAIMED":
-      return "실행 PC 선택 중";
+      return "동기화 준비 중";
     case "RUNNING":
       return "ECOUNT 동기화 중";
-    case "SUCCESS":
-      return "최신 데이터 반영 완료";
-    case "FAILED":
-      return "최근 동기화 실패";
     default:
       return "동기화 대기";
   }
@@ -5234,7 +5238,7 @@ export default function SalesReportClient() {
                     ? "요청 대기"
                     : ecountSyncRequesting
                       ? "요청 중"
-                      : "최신 데이터 동기화"}
+                      : "동기화"}
               </button>
 
               <div className="sync-status min-w-0 leading-tight">
