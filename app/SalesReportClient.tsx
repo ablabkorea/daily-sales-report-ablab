@@ -9398,6 +9398,85 @@ function itemMarginRate(metric: ItemMetric) {
   return 0;
 }
 
+type ItemSalePricePoint = {
+  saleDate: string;
+  saleUnitPrice: number;
+};
+
+function itemSalePriceTimeline(points: ItemSalePricePoint[]) {
+  const byDate = new Map<string, number[]>();
+
+  points
+    .filter(
+      (point) =>
+        Boolean(point.saleDate) &&
+        Number.isFinite(Number(point.saleUnitPrice)) &&
+        Number(point.saleUnitPrice) > 0,
+    )
+    .forEach((point) => {
+      const date = String(point.saleDate);
+      const price = Number(point.saleUnitPrice);
+      const current = byDate.get(date) || [];
+      if (!current.includes(price)) current.push(price);
+      byDate.set(date, current);
+    });
+
+  const daily = Array.from(byDate.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, prices]) => ({
+      date,
+      prices: prices.slice().sort((a, b) => a - b),
+    }));
+
+  if (!daily.length) {
+    return {
+      label: "-",
+      title: "판매단가 데이터 없음",
+      sortValue: 0,
+    };
+  }
+
+  // 같은 가격 구성이 이어지는 날짜는 한 구간으로 묶습니다.
+  // 거래처별로 같은 날 서로 다른 가격이 있으면 "7,250 / 7,500"처럼 모두 보존합니다.
+  const groups: {
+    start: string;
+    end: string;
+    prices: number[];
+  }[] = [];
+
+  for (const day of daily) {
+    const last = groups[groups.length - 1];
+    const key = day.prices.join("|");
+    const lastKey = last?.prices.join("|");
+
+    if (last && key === lastKey) {
+      last.end = day.date;
+    } else {
+      groups.push({
+        start: day.date,
+        end: day.date,
+        prices: day.prices,
+      });
+    }
+  }
+
+  const priceLabel = (prices: number[]) =>
+    prices.map((price) => won(price)).join(" / ");
+
+  return {
+    label: groups.map((group) => priceLabel(group.prices)).join(" → "),
+    title: groups
+      .map((group) => {
+        const start = group.start.slice(5).replace("-", "/");
+        const end = group.end.slice(5).replace("-", "/");
+        const period = start === end ? start : `${start}~${end}`;
+        return `${period}  ${priceLabel(group.prices)}원`;
+      })
+      .join("\n"),
+    sortValue: groups[groups.length - 1]?.prices[0] || 0,
+  };
+}
+
 function itemStoreMatches(store: Store, search: string) {
   const q = search.trim().toLowerCase();
   if (!q) return true;
@@ -10604,6 +10683,8 @@ function ItemShipmentAnalysis({
         category: string;
         current: ItemMetric;
         prevMonth: ItemMetric;
+        currentSalePricePoints: ItemSalePricePoint[];
+        prevMonthSalePricePoints: ItemSalePricePoint[];
         storeCodes: Set<string>;
         isNewItem: boolean;
       }
@@ -10625,6 +10706,8 @@ function ItemShipmentAnalysis({
           category: itemMaster?.category || "미지정",
           current: emptyItemMetric(),
           prevMonth: emptyItemMetric(),
+          currentSalePricePoints: [],
+          prevMonthSalePricePoints: [],
           storeCodes: new Set<string>(),
           isNewItem:
             itemMasterByCode.get(row.itemCode)?.source === "sales" &&
@@ -10654,10 +10737,22 @@ function ItemShipmentAnalysis({
       const item = ensure(row);
       if (inRange(row.saleDate, currentStart, currentEnd)) {
         addItemMetric(item.current, row);
+        if (Number(row.saleUnitPrice || 0) > 0) {
+          item.currentSalePricePoints.push({
+            saleDate: row.saleDate,
+            saleUnitPrice: Number(row.saleUnitPrice || 0),
+          });
+        }
         item.storeCodes.add(row.storeCode);
       }
       if (inRange(row.saleDate, prevStart, prevEnd)) {
         addItemMetric(item.prevMonth, row);
+        if (Number(row.saleUnitPrice || 0) > 0) {
+          item.prevMonthSalePricePoints.push({
+            saleDate: row.saleDate,
+            saleUnitPrice: Number(row.saleUnitPrice || 0),
+          });
+        }
         item.storeCodes.add(row.storeCode);
       }
     });
@@ -10681,12 +10776,20 @@ function ItemShipmentAnalysis({
           : 0;
         const prevMonthProfitRate = itemMarginRate(r.prevMonth);
         const currentProfitRate = itemMarginRate(r.current);
+        const prevMonthSaleUnitPrice = itemSalePriceTimeline(
+          r.prevMonthSalePricePoints,
+        );
+        const currentSaleUnitPrice = itemSalePriceTimeline(
+          r.currentSalePricePoints,
+        );
         return {
           ...r,
           prevMonthUnitCost,
           currentUnitCost,
           prevMonthProfitRate,
           currentProfitRate,
+          prevMonthSaleUnitPrice,
+          currentSaleUnitPrice,
           profitRateChange: currentProfitRate - prevMonthProfitRate,
         };
       })
@@ -10920,10 +11023,12 @@ function ItemShipmentAnalysis({
                   <col style={{ width: "7%" }} />
                   <col style={{ width: "6%" }} />
                   <col style={{ width: "4%" }} />
+                  <col style={{ width: "7%" }} />
                   <col style={{ width: "6.5%" }} />
                   <col style={{ width: "6%" }} />
                   <col style={{ width: "6.5%" }} />
                   <col style={{ width: "4.5%" }} />
+                  <col style={{ width: "7%" }} />
                   <col style={{ width: "6.5%" }} />
                   <col style={{ width: "6%" }} />
                   <col style={{ width: "6.5%" }} />
@@ -10970,6 +11075,7 @@ function ItemShipmentAnalysis({
                         </select>
                       </div>
                     </th>
+                    <th rowSpan={2} className="bg-[#F3FAFD] px-2 py-2 font-bold text-blue-800">전월 판매단가</th>
                     <th colSpan={4} className="bg-[#F3FAFD] px-3 py-1 text-[15px] font-extrabold text-black">전월</th>
                     <th colSpan={4} className="bg-[#FFF7FA] px-3 py-1 text-[15px] font-extrabold text-black">당월</th>
                     <th rowSpan={2} className="bg-[#FFF9F3] px-1 py-2 font-bold text-black">이익률변동</th>
@@ -10981,6 +11087,7 @@ function ItemShipmentAnalysis({
                     <th className="bg-[#F3FAFD] px-2 py-2 font-bold text-black">매입단가</th>
                     <th className="bg-[#F3FAFD] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
                     <th className="bg-[#F3FAFD] px-1 py-2 font-bold text-black">이익률</th>
+                    <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-blue-800">당월 판매단가</th>
                     <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-black">매출</th>
                     <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-black">매입단가</th>
                     <th className="bg-[#FFF7FA] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
@@ -11004,10 +11111,12 @@ function ItemShipmentAnalysis({
                   </tr>
                   <tr className="item-profit-subtotal font-extrabold text-black">
                     <th colSpan={5} className="subtotal-label font-extrabold">SUBTOTAL</th>
+                    <th className="subtotal-number text-center">-</th>
                     <th className="subtotal-number sales-value-cell font-extrabold">{won(subtotal.prevMonth.sales)}</th>
                     <th className="subtotal-number">{won(subtotal.prevMonthUnitCost)}</th>
                     <th className="subtotal-number">{won(subtotal.prevMonth.profit)}</th>
                     <th className="subtotal-number">{pct(subtotal.prevRate)}</th>
+                    <th className="subtotal-number text-center">-</th>
                     <th className="subtotal-number sales-value-cell font-extrabold">{won(subtotal.current.sales)}</th>
                     <th className="subtotal-number">{won(subtotal.currentUnitCost)}</th>
                     <th className="subtotal-number">{won(subtotal.current.profit)}</th>
@@ -11041,10 +11150,22 @@ function ItemShipmentAnalysis({
                           <span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-amber-100 px-1 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">Y</span>
                         ) : "-"}
                       </td>
+                      <td
+                        className="item-profit-number-cell p-2 font-bold text-blue-700"
+                        title={r.prevMonthSaleUnitPrice.title}
+                      >
+                        {r.prevMonthSaleUnitPrice.label}
+                      </td>
                       <td className="item-profit-number-cell sales-value-cell p-2 font-bold">{won(r.prevMonth.sales)}</td>
                       <td className="item-profit-number-cell p-2">{won(r.prevMonthUnitCost)}</td>
                       <td className="item-profit-number-cell p-2">{won(r.prevMonth.profit)}</td>
                       <td className="item-profit-number-cell p-2 font-bold">{pct(r.prevMonthProfitRate)}</td>
+                      <td
+                        className="item-profit-number-cell p-2 font-extrabold text-blue-700"
+                        title={r.currentSaleUnitPrice.title}
+                      >
+                        {r.currentSaleUnitPrice.label}
+                      </td>
                       <td className="item-profit-number-cell sales-value-cell p-2 font-extrabold">{won(r.current.sales)}</td>
                       <td className="item-profit-number-cell p-2">{won(r.currentUnitCost)}</td>
                       <td className="item-profit-number-cell p-2 font-bold">{won(r.current.profit)}</td>
