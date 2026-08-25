@@ -6563,6 +6563,27 @@ function MobileProgressMetric({ title, value, amount, tone, bordered = false }: 
   );
 }
 
+const KOREAN_INITIALS = ["ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
+
+function koreanInitials(value: string) {
+  return Array.from(value).map((char) => {
+    const code = char.charCodeAt(0);
+    if (code < 0xac00 || code > 0xd7a3) return char;
+    return KOREAN_INITIALS[Math.floor((code - 0xac00) / 588)] || char;
+  }).join("");
+}
+
+function mobileStoreSearchMatches(name: string, keyword: string) {
+  const q = keyword.trim().toLowerCase().replace(/\s+/g, "");
+  if (!q) return true;
+
+  const normalizedName = name.toLowerCase().replace(/\s+/g, "");
+  if (normalizedName.includes(q)) return true;
+
+  // 거래처명의 한글 음절을 초성 문자열로 바꿔서 ㄱㄴㄷ 형태 검색을 지원합니다.
+  return koreanInitials(normalizedName).includes(q);
+}
+
 function MobileSalesStatus({
   stores,
   sales,
@@ -6632,9 +6653,9 @@ function MobileSalesStatus({
   }, [stores, sales, ests, month, date, history]);
 
   const rows = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = search.trim();
     return allRows
-      .filter((row) => !keyword || row.name.toLowerCase().includes(keyword))
+      .filter((row) => mobileStoreSearchMatches(row.name, keyword))
       .filter((row) => manager === "전체" || row.manager === manager)
       .filter((row) => !newOnly || row.isNew)
       .filter((row) => {
@@ -6669,10 +6690,6 @@ function MobileSalesStatus({
             <option value="7~13일">7~13일</option>
             <option value="14일 이상">14일 이상</option>
           </select>
-          <label className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm">
-            <span className="text-[17px]">⌕</span>
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="검색" className="absolute inset-0 h-full w-full cursor-text opacity-0" aria-label="거래처명 검색" />
-          </label>
         </div>
       </div>
 
@@ -6687,6 +6704,28 @@ function MobileSalesStatus({
           <option>전체</option>
           {managers.map((item) => <option key={item}>{item}</option>)}
         </select>
+      </div>
+
+      <div className="relative mb-2">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-slate-400">⌕</span>
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="거래처명 검색 · 초성 가능 (예: ㅁㅅㅌㅊ)"
+          className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-8 pr-9 text-[10.5px] font-bold text-slate-800 outline-none transition placeholder:font-semibold placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          aria-label="거래처명 검색"
+          autoComplete="off"
+        />
+        {search && (
+          <button
+            type="button"
+            onClick={() => setSearch("")}
+            className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[12px] font-black text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="검색어 지우기"
+          >
+            ×
+          </button>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm">
