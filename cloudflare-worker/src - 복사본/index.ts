@@ -23,8 +23,6 @@ type SalesRow = {
   itemCode: string;
   itemName: string;
   quantity: number;
-  saleUnitPrice: number;
-  costUnitPrice: number;
   salesAmount: number;
   costAmount: number;
   profitAmount: number;
@@ -57,26 +55,6 @@ function chunks<T>(items: T[], size: number) {
   return result;
 }
 
-async function ensureExactUnitPriceColumns(env: Env) {
-  try {
-    await env.DB.prepare(
-      "ALTER TABLE sales_records ADD COLUMN sales_unit_price REAL NOT NULL DEFAULT 0",
-    ).run();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!/duplicate column|already exists/i.test(message)) throw error;
-  }
-
-  try {
-    await env.DB.prepare(
-      "ALTER TABLE sales_records ADD COLUMN purchase_unit_price REAL NOT NULL DEFAULT 0",
-    ).run();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!/duplicate column|already exists/i.test(message)) throw error;
-  }
-}
-
 async function getSetting(env: Env, key: string) {
   const row = await env.DB.prepare("SELECT key, data, updated_at FROM app_settings WHERE key = ? LIMIT 1").bind(key).first<{ key: string; data: string; updated_at: string }>();
   if (!row) return json(null, 404);
@@ -96,7 +74,6 @@ async function putSetting(request: Request, env: Env, key: string) {
 }
 
 async function getSales(url: URL, env: Env) {
-  await ensureExactUnitPriceColumns(env);
   const baseMonth = url.searchParams.get("baseMonth") || "";
   if (!/^\d{4}-\d{2}$/.test(baseMonth)) return json({ error: "Invalid baseMonth" }, 400);
   const requestedPeriod = url.searchParams.get("period") || "";
@@ -108,10 +85,7 @@ async function getSales(url: URL, env: Env) {
     `SELECT r.id AS row_key, r.period_type AS period, r.base_month AS ref_month,
       r.sales_date AS sale_date, r.customer_code AS store_code, r.customer_name AS store_name,
       r.manager, r.store_type, r.brand, r.item_code, r.item_name, r.category,
-      r.quantity,
-      COALESCE(r.sales_unit_price, 0) AS sale_unit_price,
-      COALESCE(r.purchase_unit_price, 0) AS cost_unit_price,
-      r.sales_amount, r.purchase_amount AS cost_amount,
+      r.quantity, r.sales_amount, r.purchase_amount AS cost_amount,
       r.profit_amount,
       CASE WHEN r.sales_amount != 0 THEN (r.profit_amount / r.sales_amount) * 100 ELSE 0 END AS profit_rate,
       '' AS channel
@@ -182,7 +156,6 @@ async function getPriorYearStoreHistory(url: URL, env: Env) {
 }
 
 async function replaceSales(request: Request, env: Env) {
-  await ensureExactUnitPriceColumns(env);
   const payload = await request.json<ReplacePayload>();
   if (!payload || !["current", "prevMonth", "prevYear"].includes(payload.period) || !/^\d{4}-\d{2}$/.test(payload.refMonth) || !Array.isArray(payload.rows)) {
     return json({ error: "Invalid upload payload" }, 400);
@@ -200,9 +173,8 @@ async function replaceSales(request: Request, env: Env) {
     const insertSql = `INSERT INTO sales_records
       (batch_id, period_type, base_month, sales_date, customer_code, customer_name,
        manager, store_type, brand, item_code, item_name, category, quantity,
-       sales_unit_price, sales_amount, purchase_unit_price, purchase_amount,
-       profit_amount, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+       sales_amount, purchase_unit_price, purchase_amount, profit_amount, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
     for (const group of chunks(payload.rows, 75)) {
       const statements = group.map((row) => {
@@ -212,11 +184,8 @@ async function replaceSales(request: Request, env: Env) {
           newBatchId, payload.period, payload.refMonth, row.saleDate || "",
           row.storeCode || "", row.storeName || "", row.manager || "",
           row.storeType || "", row.brand || "", row.itemCode || "",
-          row.itemName || "", "", quantity,
-          Number(row.saleUnitPrice || 0),
-          Number(row.salesAmount || 0),
-          Number(row.costUnitPrice || 0),
-          costAmount,
+          row.itemName || "", "", quantity, Number(row.salesAmount || 0),
+          quantity ? costAmount / quantity : 0, costAmount,
           Number(row.profitAmount || 0), createdAt,
         );
       });

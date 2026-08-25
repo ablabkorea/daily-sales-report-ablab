@@ -109,6 +109,8 @@ type SalesRecord = {
   itemCode: string;
   itemName: string;
   quantity: number;
+  saleUnitPrice: number;
+  costUnitPrice: number;
   salesAmount: number;
   costAmount: number;
   profitAmount: number;
@@ -3626,7 +3628,9 @@ function makeSale(
   itemCode: string,
   itemName: string,
   quantity: number,
+  saleUnitPrice: number,
   salesAmount: number,
+  costUnitPrice: number,
   costAmount: number,
   profitAmount: number,
   stores: Store[],
@@ -3655,6 +3659,8 @@ function makeSale(
     itemCode,
     itemName,
     quantity,
+    saleUnitPrice,
+    costUnitPrice,
     salesAmount,
     costAmount,
     profitAmount,
@@ -4116,7 +4122,9 @@ type V3SalesRecordRow = {
   item_code: string;
   item_name: string;
   quantity: number | string;
+  sale_unit_price: number | string;
   sales_amount: number | string;
+  cost_unit_price: number | string;
   cost_amount: number | string;
   profit_amount: number | string;
   profit_rate: number | string;
@@ -4150,7 +4158,9 @@ function toV3Payload(row: SalesRecord) {
     item_code: row.itemCode,
     item_name: row.itemName,
     quantity: Number(row.quantity || 0),
+    sale_unit_price: Number(row.saleUnitPrice || 0),
     sales_amount: Number(row.salesAmount || 0),
+    cost_unit_price: Number(row.costUnitPrice || 0),
     cost_amount: Number(row.costAmount || 0),
     profit_amount: Number(row.profitAmount || 0),
     profit_rate: Number(row.profitRate || 0),
@@ -4172,7 +4182,9 @@ function fromV3Row(row: V3SalesRecordRow): SalesRecord {
     itemCode: row.item_code,
     itemName: row.item_name,
     quantity: Number(row.quantity || 0),
+    saleUnitPrice: Number(row.sale_unit_price || 0),
     salesAmount: Number(row.sales_amount || 0),
+    costUnitPrice: Number(row.cost_unit_price || 0),
     costAmount: Number(row.cost_amount || 0),
     profitAmount: Number(row.profit_amount || 0),
     profitRate: Number(row.profit_rate || 0),
@@ -4684,7 +4696,9 @@ function orderRowsForExcel(rows: SalesRecord[]) {
     상품코드: r.itemCode,
     상품명: r.itemName,
     수량: r.quantity,
+    판매단가: r.saleUnitPrice,
     매출금액: r.salesAmount,
+    매입단가: r.costUnitPrice,
     원가금액: r.costAmount,
     이익금액: r.profitAmount,
     이익률: pct(r.profitRate),
@@ -9284,7 +9298,9 @@ type ItemDetailSortKey =
   | "itemCode"
   | "itemName"
   | "quantity"
+  | "saleUnitPrice"
   | "salesAmount"
+  | "costUnitPrice"
   | "costAmount"
   | "profitAmount"
   | "profitRate";
@@ -10011,7 +10027,7 @@ function ItemAnalysis({
             브랜드별 요약
           </div>
           <div className="h-[clamp(300px,calc(100vh-430px),600px)] overflow-y-scroll overflow-x-hidden isolate" style={{ scrollbarGutter: "stable" }}>
-            <table className="w-full min-w-[1100px] connected-two-tier border-separate border-spacing-0 text-center text-[15px] leading-none whitespace-nowrap">
+            <table className="w-full min-w-[1320px] connected-two-tier border-separate border-spacing-0 text-center text-[15px] leading-none whitespace-nowrap">
               <thead>
                 <tr>
                   <ItemAnalysisSortableTh rowSpan={2} sortKey="brand" sortConfig={brandSortConfig} onSort={requestBrandSort}>브랜드</ItemAnalysisSortableTh>
@@ -10415,7 +10431,9 @@ function ItemAnalysis({
                           ["itemCode", "상품코드", false],
                           ["itemName", "상품명", false],
                           ["quantity", "수량", true],
+                          ["saleUnitPrice", "판매단가", true],
                           ["salesAmount", "매출금액", true],
+                          ["costUnitPrice", "매입단가", true],
                           ["costAmount", "원가금액", true],
                           ["profitAmount", "이익금액", true],
                           ["profitRate", "이익률", true],
@@ -10458,8 +10476,14 @@ function ItemAnalysis({
                         <td className="border border-gray-300 p-2 text-right">
                           {won(r.quantity)}
                         </td>
+                        <td className="border border-gray-300 p-2 text-right font-semibold text-blue-700">
+                          {r.saleUnitPrice ? won(r.saleUnitPrice) : "-"}
+                        </td>
                         <td className="border border-gray-300 p-2 text-right font-bold text-slate-900">
                           {won(r.salesAmount)}
+                        </td>
+                        <td className="border border-gray-300 p-2 text-right font-semibold text-amber-700">
+                          {r.costUnitPrice ? won(r.costUnitPrice) : "-"}
                         </td>
                         <td className="border border-gray-300 p-2 text-right">
                           {won(r.costAmount)}
@@ -10475,7 +10499,7 @@ function ItemAnalysis({
                     {!sortedDetailRows.length && (
                       <tr>
                         <td
-                          colSpan={9}
+                          colSpan={11}
                           className="border border-gray-300 p-8 text-center text-slate-500"
                         >
                           상세 데이터가 없습니다.
@@ -16476,6 +16500,12 @@ function UploadPage({
         const itemCode = norm(r["품목 코드"] ?? r["품목코드"] ?? r["상품코드"]);
         const itemName = norm(r["품목명[규격]"] ?? r["품목명"] ?? r["상품명"]);
         const quantity = num(r["판매 수량"] ?? r["수량"]);
+        const saleUnitPrice = num(
+          r["판매 단가"] ?? r["판매단가"] ?? r["판매가"],
+        );
+        const costUnitPrice = num(
+          r["원가 단가"] ?? r["원가단가"] ?? r["매입 단가"] ?? r["매입단가"],
+        );
         const rawSalesAmount =
           r["판매 금액"] ??
           r["판매금액"] ??
@@ -16522,7 +16552,9 @@ function UploadPage({
           itemCode || `ITEM-${index}`,
           itemName,
           quantity,
+          saleUnitPrice,
           salesAmount,
+          costUnitPrice,
           costAmount,
           profitAmount,
           stores,
