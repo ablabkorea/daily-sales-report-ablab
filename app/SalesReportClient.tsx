@@ -10902,6 +10902,8 @@ function ItemShipmentAnalysis({
         storeName: string;
         manager: string;
         channel: string;
+        currentSalePricePoints: ItemSalePricePoint[];
+        prevMonthSalePricePoints: ItemSalePricePoint[];
         current: ItemMetric;
         prevMonth: ItemMetric;
       }
@@ -10915,6 +10917,8 @@ function ItemShipmentAnalysis({
           storeName: store?.name || row.storeName || "미지정",
           manager: store?.manager || row.manager || "미지정",
           channel: store?.channel || row.channel || "미지정",
+          currentSalePricePoints: [],
+          prevMonthSalePricePoints: [],
           current: emptyItemMetric(),
           prevMonth: emptyItemMetric(),
         });
@@ -10926,10 +10930,24 @@ function ItemShipmentAnalysis({
       .filter((row) => (row.itemCode || row.itemName || "미지정") === selectedItemCode)
       .forEach((row) => {
         const storeRow = ensure(row);
-        if (inRange(row.saleDate, currentStart, currentEnd))
+        if (inRange(row.saleDate, currentStart, currentEnd)) {
           addItemMetric(storeRow.current, row);
-        if (inRange(row.saleDate, prevStart, prevEnd))
+          if (Number(row.saleUnitPrice || 0) > 0) {
+            storeRow.currentSalePricePoints.push({
+              saleDate: row.saleDate,
+              saleUnitPrice: Number(row.saleUnitPrice || 0),
+            });
+          }
+        }
+        if (inRange(row.saleDate, prevStart, prevEnd)) {
           addItemMetric(storeRow.prevMonth, row);
+          if (Number(row.saleUnitPrice || 0) > 0) {
+            storeRow.prevMonthSalePricePoints.push({
+              saleDate: row.saleDate,
+              saleUnitPrice: Number(row.saleUnitPrice || 0),
+            });
+          }
+        }
       });
 
     return Array.from(map.values())
@@ -10942,6 +10960,15 @@ function ItemShipmentAnalysis({
           r.prevMonth.cost ||
           r.prevMonth.profit,
       )
+      .map((r) => ({
+        ...r,
+        prevMonthSaleUnitPrice: itemSalePriceTimeline(
+          r.prevMonthSalePricePoints,
+        ),
+        currentSaleUnitPrice: itemSalePriceTimeline(
+          r.currentSalePricePoints,
+        ),
+      }))
       .sort((a, b) => b.current.sales - a.current.sales);
   }, [sales, selectedItemCode, storeByCode, currentStart, currentEnd, prevStart, prevEnd]);
 
@@ -11020,10 +11047,8 @@ function ItemShipmentAnalysis({
                 <colgroup>
                   <col style={{ width: "5%" }} />
                   <col style={{ width: "16.5%" }} />
-                  <col style={{ width: "7%" }} />
                   <col style={{ width: "6%" }} />
                   <col style={{ width: "4%" }} />
-                  <col style={{ width: "7%" }} />
                   <col style={{ width: "6.5%" }} />
                   <col style={{ width: "6%" }} />
                   <col style={{ width: "6.5%" }} />
@@ -11075,7 +11100,6 @@ function ItemShipmentAnalysis({
                         </select>
                       </div>
                     </th>
-                    <th rowSpan={2} className="bg-[#F3FAFD] px-2 py-2 font-bold text-blue-800">전월 판매단가</th>
                     <th colSpan={4} className="bg-[#F3FAFD] px-3 py-1 text-[15px] font-extrabold text-black">전월</th>
                     <th colSpan={4} className="bg-[#FFF7FA] px-3 py-1 text-[15px] font-extrabold text-black">당월</th>
                     <th rowSpan={2} className="bg-[#FFF9F3] px-1 py-2 font-bold text-black">이익률변동</th>
@@ -11087,7 +11111,6 @@ function ItemShipmentAnalysis({
                     <th className="bg-[#F3FAFD] px-2 py-2 font-bold text-black">매입단가</th>
                     <th className="bg-[#F3FAFD] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
                     <th className="bg-[#F3FAFD] px-1 py-2 font-bold text-black">이익률</th>
-                    <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-blue-800">당월 판매단가</th>
                     <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-black">매출</th>
                     <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-black">매입단가</th>
                     <th className="bg-[#FFF7FA] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
@@ -11111,12 +11134,10 @@ function ItemShipmentAnalysis({
                   </tr>
                   <tr className="item-profit-subtotal font-extrabold text-black">
                     <th colSpan={5} className="subtotal-label font-extrabold">SUBTOTAL</th>
-                    <th className="subtotal-number text-center">-</th>
                     <th className="subtotal-number sales-value-cell font-extrabold">{won(subtotal.prevMonth.sales)}</th>
                     <th className="subtotal-number">{won(subtotal.prevMonthUnitCost)}</th>
                     <th className="subtotal-number">{won(subtotal.prevMonth.profit)}</th>
                     <th className="subtotal-number">{pct(subtotal.prevRate)}</th>
-                    <th className="subtotal-number text-center">-</th>
                     <th className="subtotal-number sales-value-cell font-extrabold">{won(subtotal.current.sales)}</th>
                     <th className="subtotal-number">{won(subtotal.currentUnitCost)}</th>
                     <th className="subtotal-number">{won(subtotal.current.profit)}</th>
@@ -11150,22 +11171,10 @@ function ItemShipmentAnalysis({
                           <span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-amber-100 px-1 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">Y</span>
                         ) : "-"}
                       </td>
-                      <td
-                        className="item-profit-number-cell p-2 font-bold text-blue-700"
-                        title={r.prevMonthSaleUnitPrice.title}
-                      >
-                        {r.prevMonthSaleUnitPrice.label}
-                      </td>
                       <td className="item-profit-number-cell sales-value-cell p-2 font-bold">{won(r.prevMonth.sales)}</td>
                       <td className="item-profit-number-cell p-2">{won(r.prevMonthUnitCost)}</td>
                       <td className="item-profit-number-cell p-2">{won(r.prevMonth.profit)}</td>
                       <td className="item-profit-number-cell p-2 font-bold">{pct(r.prevMonthProfitRate)}</td>
-                      <td
-                        className="item-profit-number-cell p-2 font-extrabold text-blue-700"
-                        title={r.currentSaleUnitPrice.title}
-                      >
-                        {r.currentSaleUnitPrice.label}
-                      </td>
                       <td className="item-profit-number-cell sales-value-cell p-2 font-extrabold">{won(r.current.sales)}</td>
                       <td className="item-profit-number-cell p-2">{won(r.currentUnitCost)}</td>
                       <td className="item-profit-number-cell p-2 font-bold">{won(r.current.profit)}</td>
@@ -11186,14 +11195,14 @@ function ItemShipmentAnalysis({
                   ))}
                   {!itemRows.length && (
                     <tr>
-                      <td colSpan={16} className="p-8 text-center text-black">
+                      <td colSpan={14} className="p-8 text-center text-black">
                         표시할 품목이 없습니다.
                       </td>
                     </tr>
                   )}
                   {!!itemRows.length && (
                     <tr aria-hidden="true">
-                      <td colSpan={16} className="h-20 border-0 bg-white p-0" />
+                      <td colSpan={14} className="h-20 border-0 bg-white p-0" />
                     </tr>
                   )}
                 </tbody>
@@ -11222,16 +11231,18 @@ function ItemShipmentAnalysis({
             </button>
           </div>
           <div className="max-h-[68vh] overflow-auto isolate">
-            <table className="w-full min-w-[1450px] border-separate border-spacing-0 text-center text-[12px] text-black whitespace-nowrap">
+            <table className="w-full min-w-[1680px] border-separate border-spacing-0 text-center text-[12px] text-black whitespace-nowrap">
               <thead>
                 <tr>
                   <PopupTh>거래처코드</PopupTh>
                   <PopupTh>거래처명</PopupTh>
                   <PopupTh>담당자</PopupTh>
                   <PopupTh>채널</PopupTh>
+                  <PopupTh right>전월 판매단가</PopupTh>
                   <PopupTh right>전월매출</PopupTh>
                   <PopupTh right>전월이익금액</PopupTh>
                   <PopupTh right>전월이익률</PopupTh>
+                  <PopupTh right>당월 판매단가</PopupTh>
                   <PopupTh right>당월매출</PopupTh>
                   <PopupTh right>당월이익금액</PopupTh>
                   <PopupTh right>당월이익률</PopupTh>
@@ -11249,9 +11260,21 @@ function ItemShipmentAnalysis({
                       <td className="border border-slate-300 p-2 text-left font-semibold">{r.storeName}</td>
                       <td className="border border-slate-300 p-2">{r.manager}</td>
                       <td className="border border-slate-300 p-2">{r.channel}</td>
+                      <td
+                        className="border border-slate-300 p-2 text-right font-semibold text-blue-700"
+                        title={r.prevMonthSaleUnitPrice.title}
+                      >
+                        {r.prevMonthSaleUnitPrice.label}
+                      </td>
                       <td className="border border-slate-300 p-2 text-right text-[14px] font-bold">{won(r.prevMonth.sales)}</td>
                       <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.profit)}</td>
                       <td className="border border-slate-300 p-2 text-right">{pct(prevRate)}</td>
+                      <td
+                        className="border border-slate-300 p-2 text-right font-semibold text-blue-700"
+                        title={r.currentSaleUnitPrice.title}
+                      >
+                        {r.currentSaleUnitPrice.label}
+                      </td>
                       <td className="border border-slate-300 p-2 text-right text-[14px] font-extrabold">{won(r.current.sales)}</td>
                       <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.profit)}</td>
                       <td className="border border-slate-300 p-2 text-right font-extrabold">{pct(currentRate)}</td>
@@ -11263,7 +11286,7 @@ function ItemShipmentAnalysis({
                 })}
                 {!storeRows.length && (
                   <tr>
-                    <td colSpan={11} className="border border-slate-300 p-8 text-center text-black">
+                    <td colSpan={13} className="border border-slate-300 p-8 text-center text-black">
                       표시할 거래처가 없습니다.
                     </td>
                   </tr>
