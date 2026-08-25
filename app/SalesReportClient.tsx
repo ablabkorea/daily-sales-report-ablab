@@ -5201,6 +5201,38 @@ export default function SalesReportClient() {
       data-active={active}
       style={{ fontFamily: '"Malgun Gothic", "맑은 고딕", sans-serif' }}
     >
+      {isMobile && (
+        <header className="mobile-app-header sticky top-0 z-[90] border-b border-slate-100 bg-white">
+          <div className="flex h-[58px] items-center justify-between px-4">
+            <button type="button" aria-label="메뉴" className="flex h-10 w-10 items-center justify-start text-slate-700">
+              <span className="text-[22px] leading-none">☰</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="flex items-end gap-[2px]" aria-hidden="true">
+                <i className="block h-2 w-1.5 rounded-sm bg-blue-500" />
+                <i className="block h-3.5 w-1.5 rounded-sm bg-blue-500" />
+                <i className="block h-5 w-1.5 rounded-sm bg-blue-600" />
+              </span>
+              <span className="text-[16px] font-black tracking-tight text-slate-900">Sales Report</span>
+            </div>
+            <button
+              type="button"
+              aria-label="알림"
+              onClick={() => {
+                if (!notificationSupported || notificationBusy) return;
+                if (notificationSubscribed) disableNotifications();
+                else enableNotifications();
+              }}
+              className="relative flex h-10 w-10 items-center justify-end text-slate-700"
+            >
+              <span className="text-[20px]">♧</span>
+              {notificationSubscribed && <span className="absolute right-0 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black text-white">2</span>}
+            </button>
+          </div>
+        </header>
+      )}
+
+      {!isMobile && (
       <header className="sticky top-0 z-40 border-b border-gray-200 bg-white shadow-sm">
         <div className="mobile-header-inner flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-5">
           <div className="mobile-header-main flex flex-wrap items-center gap-3">
@@ -5326,6 +5358,8 @@ export default function SalesReportClient() {
           </div>
         </div>
       </header>
+
+      )}
 
       {showIosInstallGuide && (
         <div className="fixed inset-0 z-[220] flex items-end justify-center bg-black/45 p-3 sm:items-center" onMouseDown={() => setShowIosInstallGuide(false)}>
@@ -6029,6 +6063,24 @@ export default function SalesReportClient() {
             .sales-report-root[data-active="매출현황"] section button {
               font-size: 0.72rem !important;
             }
+            .sales-report-root > section {
+              padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)) !important;
+            }
+            .sales-report-root .mobile-app-header {
+              padding-top: env(safe-area-inset-top);
+            }
+            .sales-report-root .mobile-period-sticky {
+              top: -12px !important;
+            }
+            .sales-report-root .mobile-dashboard-view,
+            .sales-report-root .mobile-sales-view {
+              max-width: 520px;
+              margin-left: auto;
+              margin-right: auto;
+            }
+            .sales-report-root .mobile-sales-grid {
+              min-width: 0;
+            }
           }
 
         `}</style>
@@ -6245,6 +6297,16 @@ export default function SalesReportClient() {
           />
         )}
       </section>
+      {isMobile && (
+        <nav className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-[100] grid grid-cols-2 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+          <button type="button" onClick={() => setActive("대시보드")} className={`flex h-[58px] flex-col items-center justify-center gap-0.5 text-[9px] font-black ${active === "대시보드" ? "text-blue-600" : "text-slate-500"}`}>
+            <span className="text-[18px]">◔</span><span>대시보드</span>
+          </button>
+          <button type="button" onClick={() => setActive("매출현황")} className={`flex h-[58px] flex-col items-center justify-center gap-0.5 text-[9px] font-black ${active === "매출현황" ? "text-blue-600" : "text-slate-500"}`}>
+            <span className="text-[18px]">▤</span><span>매출현황</span>
+          </button>
+        </nav>
+      )}
     </main>
   );
 }
@@ -6270,37 +6332,51 @@ function MobilePeriodBar({
   setDate: (value: string) => void;
   timeGone: ReturnType<typeof getTimeGone>;
 }) {
-  const monthLabel = month ? `${month.slice(2, 4)}.${month.slice(5, 7)}` : "-";
-  const dateLabel = date ? `${date.slice(5, 7)}.${date.slice(8, 10)}` : "-";
+  const [open, setOpen] = useState(true);
+  const monthLabel = month ? `${month.slice(0, 4)}년 ${month.slice(5, 7)}월` : "-";
+  const dateLabel = date ? `${date.slice(5, 7)}/${date.slice(8, 10)}` : "-";
+  const dayName = date ? ["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T00:00:00`).getDay()] : "";
+  const dayValue = (value: number) => `${Number.isInteger(value) ? value : value.toFixed(1)}일`;
+
   return (
-    <div className="mobile-period-sticky sticky top-0 z-50 -mx-3 mb-3 bg-white px-3 pb-3">
-      <div className="mobile-period-bar isolate overflow-x-auto overflow-y-hidden rounded-xl border border-slate-200 bg-white px-2 py-2 shadow-sm">
-        <div className="mobile-period-bar-inner flex min-w-max items-center gap-1.5">
-        <label className="relative flex h-9 cursor-pointer items-center gap-1 rounded-lg bg-orange-50 px-2.5 whitespace-nowrap">
-          <span className="text-[10px] font-bold text-orange-700">기준월</span>
-          <span className="text-[12px] font-black text-slate-900">{monthLabel}</span>
-          <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="기준년월 변경" />
-        </label>
-        <label className="relative flex h-9 cursor-pointer items-center gap-1 rounded-lg bg-orange-50 px-2.5 whitespace-nowrap">
-          <span className="text-[10px] font-bold text-orange-700">기준일</span>
-          <span className="text-[12px] font-black text-slate-900">{dateLabel}</span>
-          <input type="date" value={date} min={monthStart(month)} max={monthEnd(month)} onChange={(event) => setDate(event.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="기준일 변경" />
-        </label>
-        <MobilePeriodChip label="TG" value={pct(timeGone.timeGoneRate)} />
-        <MobilePeriodChip label="총" value={`${Number.isInteger(timeGone.totalDays) ? timeGone.totalDays : timeGone.totalDays.toFixed(1)}일`} />
-        <MobilePeriodChip label="진행" value={`${Number.isInteger(timeGone.progressedDays) ? timeGone.progressedDays : timeGone.progressedDays.toFixed(1)}일`} />
-          <MobilePeriodChip label="잔여" value={`${Number.isInteger(timeGone.remainingDays) ? timeGone.remainingDays : timeGone.remainingDays.toFixed(1)}일`} />
+    <div className="mobile-period-sticky sticky top-0 z-[70] -mx-3 mb-3 bg-white px-3 pb-2">
+      <div className="mobile-period-card rounded-2xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+        <div className="grid grid-cols-[1fr_auto_1fr_auto_1.15fr] items-center gap-1 text-center">
+          <label className="relative cursor-pointer">
+            <div className="text-[8px] font-bold text-slate-500">기준년월</div>
+            <div className="mt-1 whitespace-nowrap text-[11px] font-black text-slate-900">▣ {monthLabel}</div>
+            <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="기준년월 변경" />
+          </label>
+          <span className="text-slate-300">·</span>
+          <label className="relative cursor-pointer">
+            <div className="text-[8px] font-bold text-slate-500">기준일</div>
+            <div className="mt-1 whitespace-nowrap text-[11px] font-black text-slate-900">▣ {dateLabel} ({dayName})</div>
+            <input type="date" value={date} min={monthStart(month)} max={monthEnd(month)} onChange={(event) => setDate(event.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="기준일 변경" />
+          </label>
+          <span className="text-slate-300">|</span>
+          <div>
+            <div className="text-[8px] font-bold uppercase text-slate-500">TIME GONE</div>
+            <div className="mt-1 text-[12px] font-black text-blue-600">{pct(timeGone.timeGoneRate)}</div>
+          </div>
         </div>
+        {open && (
+          <div className="mt-2 grid grid-cols-3 border-t border-slate-100 pt-2 text-center">
+            <MobileDayMetric label="총일수" value={dayValue(timeGone.totalDays)} />
+            <MobileDayMetric label="진행일수" value={dayValue(timeGone.progressedDays)} bordered />
+            <MobileDayMetric label="잔여일수" value={dayValue(timeGone.remainingDays)} bordered />
+          </div>
+        )}
+        <button type="button" onClick={() => setOpen((prev) => !prev)} className="absolute right-5 mt-[-24px] flex h-7 w-7 items-center justify-center text-[15px] text-slate-500" aria-label="기간 정보 접기/펼치기">{open ? "⌄" : "⌃"}</button>
       </div>
     </div>
   );
 }
 
-function MobilePeriodChip({ label, value }: { label: string; value: string }) {
+function MobileDayMetric({ label, value, bordered = false }: { label: string; value: string; bordered?: boolean }) {
   return (
-    <div className="flex h-9 items-center gap-1 rounded-lg bg-slate-50 px-2.5 whitespace-nowrap">
-      <span className="text-[10px] font-bold text-slate-500">{label}</span>
-      <span className="text-[12px] font-black text-slate-900">{value}</span>
+    <div className={bordered ? "border-l border-slate-200" : ""}>
+      <div className="text-[8px] font-semibold text-slate-500">{label}</div>
+      <div className="mt-1 text-[12px] font-black text-slate-900">{value}</div>
     </div>
   );
 }
@@ -6322,32 +6398,24 @@ function MobileDashboard({
 }) {
   const data = useMemo(() => {
     const storesByCode = storeMap(stores);
-    const currentRows = sales.filter(
-      (row) => row.period === "current" && inRange(row.saleDate, monthStart(month), date),
+    const allMonthRows = sales.filter(
+      (row) => row.period === "current" && inRange(row.saleDate, monthStart(month), monthEnd(month)),
     );
-    const { storeTarget, nonStoreTarget, storeEst, nonStoreEst } = metricsByStoreType(
-      stores,
-      targets,
-      ests,
-      month,
-    );
+    const currentRows = allMonthRows.filter((row) => row.saleDate <= date);
+    const { storeTarget, nonStoreTarget, storeEst, nonStoreEst } = metricsByStoreType(stores, targets, ests, month);
     const target = storeTarget + nonStoreTarget;
     const est = storeEst + nonStoreEst;
-    let storeSales = 0;
-    let nonStoreSales = 0;
-    let profit = 0;
+    const fullMonthSales = sum(allMonthRows, "salesAmount");
+    const currentSales = sum(currentRows, "salesAmount");
+    const profit = sum(currentRows, "profitAmount");
+    const profitRate = currentSales ? (profit / currentSales) * 100 : 0;
     const managerMap = new Map<string, { sales: number; est: number }>();
 
     currentRows.forEach((row) => {
       const store = storesByCode.get(row.storeCode);
-      const storeType = store?.storeType || row.storeType;
-      const amount = Number(row.salesAmount || 0);
-      if (storeType === "매장") storeSales += amount;
-      else nonStoreSales += amount;
-      profit += Number(row.profitAmount || 0);
       const manager = store?.manager || row.manager || "미지정";
       const item = managerMap.get(manager) || { sales: 0, est: 0 };
-      item.sales += amount;
+      item.sales += Number(row.salesAmount || 0);
       managerMap.set(manager, item);
     });
     ests.filter((row) => row.month === month).forEach((row) => {
@@ -6361,91 +6429,99 @@ function MobileDashboard({
     return {
       target,
       est,
-      storeSales,
-      nonStoreSales,
-      totalSales: storeSales + nonStoreSales,
+      fullMonthSales,
+      currentSales,
+      currentToFullRate: fullMonthSales ? (currentSales / fullMonthSales) * 100 : 0,
+      estRate: est ? (currentSales / est) * 100 : 0,
+      targetRate: target ? (currentSales / target) * 100 : 0,
       profit,
+      profitRate,
       managers: Array.from(managerMap.entries())
-        .map(([manager, value]) => ({
-          manager,
-          ...value,
-          rate: value.est ? (value.sales / value.est) * 100 : 0,
-        }))
+        .map(([manager, value]) => ({ manager, ...value, rate: value.est ? (value.sales / value.est) * 100 : 0 }))
         .filter((row) => row.sales || row.est)
         .sort((a, b) => b.sales - a.sales),
     };
   }, [stores, sales, targets, ests, month, date]);
 
   return (
-    <div className="mobile-dashboard-view space-y-3 pb-6">
-      <div className="grid grid-cols-2 gap-2">
-        <MobileKpiCard title="당일까지 매출" value={won(data.totalSales)} tone="orange" />
-        <MobileKpiCard title="Target 달성률" value={data.target ? pct((data.totalSales / data.target) * 100) : "-"} tone="yellow" />
-        <MobileKpiCard title="당월 EST" value={won(data.est)} tone="blue" />
-        <MobileKpiCard title="EST 달성률" value={data.est ? pct((data.totalSales / data.est) * 100) : "-"} tone="green" />
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <h2 className="text-sm font-extrabold text-slate-900">매출 요약</h2>
-        <div className="mt-2 divide-y divide-slate-100">
-          <MobileValueRow label="매장 매출" value={won(data.storeSales)} />
-          <MobileValueRow label="비매장 매출" value={won(data.nonStoreSales)} />
-          <MobileValueRow label="이익금액" value={won(data.profit)} />
+    <div className="mobile-dashboard-view space-y-2.5 pb-24">
+      <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <h2 className="text-[13px] font-black text-slate-900">매출 현황</h2>
+        <div className="mt-2 divide-y divide-dashed divide-slate-200">
+          <MobileHeroMetric icon="▥" label="당월 전체 매출" value={`${won(data.fullMonthSales)}원`} />
+          <MobileHeroMetric icon="⌁" label="당일까지 매출" value={`${won(data.currentSales)}원`} side={pct(data.currentToFullRate)} />
         </div>
-      </div>
+      </section>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <h2 className="text-sm font-extrabold text-slate-900">담당자별 매출 · EST</h2>
-        <div className="mt-2 space-y-2">
-          {data.managers.map((row) => (
-            <div key={row.manager} className="rounded-xl bg-slate-50 p-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-extrabold text-slate-800">{row.manager}</span>
-                <span className="text-xs font-black text-orange-700">{row.est ? pct(row.rate) : "-"}</span>
-              </div>
-              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-200">
-                <div className="h-full rounded-full bg-orange-500" style={{ width: `${Math.min(100, Math.max(0, row.rate))}%` }} />
-              </div>
-              <div className="mt-1.5 flex justify-between text-[10px] font-semibold text-slate-500">
-                <span>매출 {won(row.sales)}</span>
-                <span>EST {won(row.est)}</span>
-              </div>
-            </div>
-          ))}
-          {!data.managers.length && <p className="py-6 text-center text-xs text-slate-400">표시할 실적이 없습니다.</p>}
+      <section className="grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <MobileProgressMetric title="EST 달성률" value={data.estRate} amount={data.est} tone="purple" />
+        <MobileProgressMetric title="Target 달성률" value={data.targetRate} amount={data.target} tone="orange" bordered />
+      </section>
+
+      <section className="grid grid-cols-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex items-center gap-2 border-r border-slate-200 pr-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-lg">◉</div>
+          <div>
+            <div className="text-[9px] font-bold text-emerald-700">이익금</div>
+            <div className="mt-0.5 text-[15px] font-black text-emerald-600">{won(data.profit)}원</div>
+          </div>
         </div>
-      </div>
+        <div className="flex flex-col justify-center pl-3">
+          <div className="text-[9px] font-bold text-slate-500">이익률</div>
+          <div className="mt-0.5 text-[16px] font-black text-emerald-600">{pct(data.profitRate)}</div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[12px] font-black text-slate-900">담당자별 현황 <span className="text-[8px] font-semibold text-slate-400">(당월 전체 매출 기준)</span></h2>
+          <span className="text-[9px] font-bold text-blue-600">전체보기 ›</span>
+        </div>
+        <div className="mt-2 space-y-1.5">
+          {data.managers.slice(0, 6).map((row, index) => {
+            const managerTones = ["bg-blue-50 text-blue-600", "bg-emerald-50 text-emerald-600", "bg-purple-50 text-purple-600", "bg-orange-50 text-orange-600", "bg-slate-100 text-slate-600"];
+            const barTones = ["bg-blue-500", "bg-emerald-500", "bg-purple-500", "bg-orange-500", "bg-slate-400"];
+            return (
+              <div key={row.manager} className="grid grid-cols-[32px_1fr_auto_76px_12px] items-center gap-2 py-1">
+                <span className={`flex h-7 w-7 items-center justify-center rounded-full text-[9px] font-black ${managerTones[index % managerTones.length]}`}>{row.manager}</span>
+                <span className="text-right text-[10px] font-black text-slate-800">{won(row.sales)}원</span>
+                <span className="text-[9px] font-bold text-slate-500">EST&nbsp; {row.est ? pct(row.rate) : "-"}</span>
+                <span className="h-1.5 overflow-hidden rounded-full bg-slate-200"><i className={`block h-full rounded-full ${barTones[index % barTones.length]}`} style={{ width: `${Math.min(100, Math.max(0, row.rate))}%` }} /></span>
+                <span className="text-slate-400">›</span>
+              </div>
+            );
+          })}
+          {!data.managers.length && <p className="py-5 text-center text-xs text-slate-400">표시할 실적이 없습니다.</p>}
+        </div>
+      </section>
+
+      <p className="px-1 text-[9px] font-semibold text-slate-400">ⓘ 매출 금액은 공급가액 기준입니다.</p>
     </div>
   );
 }
 
-function MobileKpiCard({
-  title,
-  value,
-  tone,
-}: {
-  title: string;
-  value: string;
-  tone: "orange" | "yellow" | "blue" | "green";
-}) {
-  const toneClass =
-    tone === "orange" ? "border-orange-200 bg-orange-50" :
-    tone === "yellow" ? "border-amber-200 bg-amber-50" :
-    tone === "blue" ? "border-sky-200 bg-sky-50" :
-    "border-emerald-200 bg-emerald-50";
+function MobileHeroMetric({ icon, label, value, side }: { icon: string; label: string; value: string; side?: string }) {
   return (
-    <div className={`rounded-2xl border p-3 shadow-sm ${toneClass}`}>
-      <div className="text-[10px] font-bold text-slate-500">{title}</div>
-      <div className="mt-1 break-all text-[15px] font-black leading-tight text-slate-900">{value}</div>
+    <div className="flex items-center gap-3 py-2.5 first:pt-1">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-lg font-black text-blue-600">{icon}</div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[17px] font-black leading-none tracking-tight text-slate-900">{value}</div>
+        <div className="mt-1 text-[9px] font-semibold text-slate-500">{label}</div>
+      </div>
+      {side && <div className="text-[12px] font-black text-blue-600">{side}</div>}
     </div>
   );
 }
 
-function MobileValueRow({ label, value }: { label: string; value: string }) {
+function MobileProgressMetric({ title, value, amount, tone, bordered = false }: { title: string; value: number; amount: number; tone: "purple" | "orange"; bordered?: boolean }) {
+  const text = tone === "purple" ? "text-purple-600" : "text-orange-500";
+  const bar = tone === "purple" ? "bg-purple-600" : "bg-orange-500";
   return (
-    <div className="flex items-center justify-between gap-3 py-2 text-xs">
-      <span className="font-semibold text-slate-600">{label}</span>
-      <span className="font-extrabold text-slate-900">{value}</span>
+    <div className={`p-3 ${bordered ? "border-l border-slate-200" : ""}`}>
+      <div className={`text-[9px] font-black ${text}`}>{title}</div>
+      <div className={`mt-1 text-[20px] font-black ${text}`}>{pct(value)}</div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.min(100, Math.max(0, value))}%` }} /></div>
+      <div className="mt-2 text-[8px] font-semibold text-slate-500">금액&nbsp; {won(amount)}원</div>
     </div>
   );
 }
@@ -6465,9 +6541,9 @@ function MobileSalesStatus({
 }) {
   const [search, setSearch] = useState("");
   const [manager, setManager] = useState("전체");
-  const [channel, setChannel] = useState("전체");
   const [newOnly, setNewOnly] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [orderAge, setOrderAge] = useState("전체");
+  const [selected, setSelected] = useState<string | null>(null);
   const [history, setHistory] = useState<PriorYearStoreHistoryRow[] | null>(null);
 
   useEffect(() => {
@@ -6479,7 +6555,7 @@ function MobileSalesStatus({
     return () => { cancelled = true; };
   }, [month]);
 
-  const rows = useMemo(() => {
+  const allRows = useMemo(() => {
     const storesByCode = storeMap(stores);
     const estByCode = new Map<string, number>();
     ests.filter((row) => row.month === month).forEach((row) => {
@@ -6488,130 +6564,157 @@ function MobileSalesStatus({
     const priorCodes = new Set((history || []).map((row) => norm(row.store_code)));
     const priorNames = new Set((history || []).map((row) => normalizeStoreNameKey(row.store_name)));
     const map = new Map<string, {
-      code: string;
-      name: string;
-      manager: string;
-      channel: string;
-      fullMonthSales: number;
-      currentSales: number;
-      profitAmount: number;
-      est: number;
-      lastOrder: string;
-      isNew: boolean;
+      code: string; name: string; manager: string; channel: string; fullMonthSales: number;
+      currentSales: number; profitAmount: number; est: number; lastOrder: string; isNew: boolean;
     }>();
 
-    sales.filter((row) =>
-      row.period === "current" &&
-      inRange(row.saleDate, monthStart(month), monthEnd(month)) &&
-      Boolean(row.storeName.trim())
-    ).forEach((row) => {
+    sales.filter((row) => row.period === "current" && inRange(row.saleDate, monthStart(month), monthEnd(month)) && Boolean(row.storeName.trim())).forEach((row) => {
       const store = storesByCode.get(row.storeCode);
       const key = row.storeCode || row.storeName;
       const item = map.get(key) || {
         code: row.storeCode,
         name: row.storeName,
         manager: store?.manager || row.manager || "미지정",
-        channel: store?.channel || row.channel || "-",
+        channel: store?.storeType || row.storeType || "-",
         fullMonthSales: 0,
         currentSales: 0,
         profitAmount: 0,
         est: estByCode.get(row.storeCode) || 0,
         lastOrder: "",
-        isNew: history !== null &&
-          !priorCodes.has(norm(row.storeCode)) &&
-          !priorNames.has(normalizeStoreNameKey(row.storeName)),
+        isNew: history !== null && !priorCodes.has(norm(row.storeCode)) && !priorNames.has(normalizeStoreNameKey(row.storeName)),
       };
-      const amount = Number(row.salesAmount || 0);
-      item.fullMonthSales += amount;
-      item.profitAmount += Number(row.profitAmount || 0);
+      item.fullMonthSales += Number(row.salesAmount || 0);
       if (row.saleDate <= date) {
-        item.currentSales += amount;
+        item.currentSales += Number(row.salesAmount || 0);
+        item.profitAmount += Number(row.profitAmount || 0);
         if (!item.lastOrder || row.saleDate > item.lastOrder) item.lastOrder = row.saleDate;
       }
       map.set(key, item);
     });
+    return Array.from(map.values());
+  }, [stores, sales, ests, month, date, history]);
 
+  const rows = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    return Array.from(map.values())
+    return allRows
       .filter((row) => !keyword || row.name.toLowerCase().includes(keyword))
       .filter((row) => manager === "전체" || row.manager === manager)
-      .filter((row) => channel === "전체" || row.channel === channel)
       .filter((row) => !newOnly || row.isNew)
-      .sort((a, b) => b.fullMonthSales - a.fullMonthSales);
-  }, [stores, sales, ests, month, date, history, search, manager, channel, newOnly]);
+      .filter((row) => {
+        if (orderAge === "전체") return true;
+        const elapsed = daysBetween(row.lastOrder, date);
+        if (orderAge === "7일 미만") return elapsed < 7;
+        if (orderAge === "7~13일") return elapsed >= 7 && elapsed < 14;
+        return elapsed >= 14;
+      })
+      .sort((a, b) => b.currentSales - a.currentSales);
+  }, [allRows, search, manager, newOnly, orderAge, date]);
 
   const managers = useMemo(() => Array.from(new Set(stores.map((row) => row.manager).filter(Boolean))).sort(), [stores]);
-  const channels = useMemo(() => Array.from(new Set(stores.map((row) => row.channel).filter(Boolean))).sort(), [stores]);
-  const totalSales = rows.reduce((total, row) => total + row.fullMonthSales, 0);
+  const selectedRow = allRows.find((row) => (row.code || row.name) === selected) || null;
+
+  const orderStatus = (lastOrder: string) => {
+    if (!lastOrder) return { label: "발주 없음", cls: "bg-slate-100 text-slate-500" };
+    const elapsed = daysBetween(lastOrder, date);
+    if (elapsed < 7) return { label: "7일 미만", cls: "bg-emerald-50 text-emerald-600" };
+    if (elapsed < 14) return { label: "7일 경과", cls: "bg-orange-50 text-orange-500" };
+    return { label: "14일 경과", cls: "bg-red-50 text-red-500" };
+  };
 
   return (
-    <div className="mobile-sales-view space-y-3 pb-6">
-      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <h2 className="text-base font-extrabold text-slate-900">매출현황</h2>
-            <p className="mt-0.5 text-[10px] font-semibold text-slate-500">{rows.length}개 거래처</p>
-          </div>
-          <div className="text-right">
-            <div className="text-[10px] font-semibold text-slate-500">당월 총 매출</div>
-            <div className="text-sm font-black text-orange-700">{won(totalSales)}</div>
-          </div>
-        </div>
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="거래처명 검색" className="mt-3 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-orange-400" />
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <select value={manager} onChange={(event) => setManager(event.target.value)} className="rounded-xl border border-slate-300 bg-white px-2 py-2 text-xs">
-            <option>전체</option>
-            {managers.map((item) => <option key={item}>{item}</option>)}
+    <div className="mobile-sales-view pb-24">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="text-[14px] font-black text-slate-900">매출현황</h2>
+        <div className="flex items-center gap-1.5">
+          <select value={orderAge} onChange={(event) => setOrderAge(event.target.value)} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-[9px] font-bold text-slate-600 shadow-sm">
+            <option value="전체">발주일 경과 필터</option>
+            <option value="7일 미만">7일 미만</option>
+            <option value="7~13일">7~13일</option>
+            <option value="14일 이상">14일 이상</option>
           </select>
-          <select value={channel} onChange={(event) => setChannel(event.target.value)} className="rounded-xl border border-slate-300 bg-white px-2 py-2 text-xs">
-            <option>전체</option>
-            {channels.map((item) => <option key={item}>{item}</option>)}
-          </select>
+          <label className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm">
+            <span className="text-[17px]">⌕</span>
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="검색" className="absolute inset-0 h-full w-full cursor-text opacity-0" aria-label="거래처명 검색" />
+          </label>
         </div>
-        <label className="mt-2 flex items-center gap-2 text-xs font-bold text-slate-600">
-          <input type="checkbox" checked={newOnly} onChange={(event) => setNewOnly(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
-          신규 거래처만 보기
-        </label>
       </div>
 
-      <div className="space-y-2">
-        {rows.map((row) => {
-          const rate = row.est ? (row.fullMonthSales / row.est) * 100 : 0;
-          const rowKey = row.code || row.name;
-          const isOpen = expanded === rowKey;
-          return (
-            <button key={rowKey} type="button" onClick={() => setExpanded(isOpen ? null : rowKey)} className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-extrabold text-slate-900">{row.name}</div>
-                  <div className="mt-1 flex flex-wrap gap-1 text-[10px] font-bold text-slate-500">
-                    <span>{row.manager}</span><span>·</span><span>{row.channel}</span>
-                    {row.isNew && <span className="rounded bg-orange-100 px-1 text-orange-700">신규</span>}
-                  </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-[9px] font-bold text-slate-500">당월 총 매출</div>
-                  <div className="mt-0.5 text-sm font-black text-slate-900">{won(row.fullMonthSales)}</div>
-                  <div className="mt-1 text-[10px] font-bold text-orange-700">EST {row.est ? pct(rate) : "-"}</div>
-                </div>
-              </div>
-              {isOpen && (
-                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-[11px]">
-                  <div><span className="text-slate-500">당일까지 매출</span><div className="mt-0.5 font-extrabold">{won(row.currentSales)}</div></div>
-                  <div><span className="text-slate-500">EST</span><div className="mt-0.5 font-extrabold">{won(row.est)}</div></div>
-                  <div><span className="text-slate-500">당월 이익금액</span><div className="mt-0.5 font-extrabold">{won(row.profitAmount)}</div></div>
-                  <div><span className="text-slate-500">마지막 발주일</span><div className="mt-0.5 font-extrabold">{row.lastOrder || "-"}</div></div>
-                </div>
-              )}
-            </button>
-          );
-        })}
-        {!rows.length && <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center text-xs text-slate-400">조건에 맞는 거래처가 없습니다.</div>}
+      <div className="mb-2 flex items-center gap-0">
+        <button type="button" onClick={() => setNewOnly(false)} className={`h-8 rounded-l-lg border px-5 text-[9px] font-black ${!newOnly ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600"}`}>전체 {allRows.length}</button>
+        <label className="flex h-8 items-center gap-2 rounded-r-lg border border-l-0 border-slate-200 bg-white px-3 text-[9px] font-black text-slate-700">
+          신규 거래처만
+          <input type="checkbox" checked={newOnly} onChange={(event) => setNewOnly(event.target.checked)} className="peer sr-only" />
+          <span className="relative h-4 w-7 rounded-full bg-slate-200 transition peer-checked:bg-blue-500 after:absolute after:left-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-3" />
+        </label>
+        <select value={manager} onChange={(event) => setManager(event.target.value)} className="ml-auto h-8 rounded-lg border border-slate-200 bg-white px-2 text-[9px] font-bold text-slate-600">
+          <option>전체</option>
+          {managers.map((item) => <option key={item}>{item}</option>)}
+        </select>
       </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm">
+        <div className="mobile-sales-grid grid grid-cols-[1.45fr_.65fr_.75fr_1.5fr_1.05fr_12px] items-center gap-1 bg-slate-50 px-2 py-2 text-[7.5px] font-black text-slate-600">
+          <span>거래처명</span><span className="text-center">담당자</span><span className="text-center">채널</span><span className="text-center">마지막 발주일</span><span className="text-right text-blue-600">당일까지 매출</span><span />
+        </div>
+        <div className="divide-y divide-slate-100">
+          {rows.map((row) => {
+            const key = row.code || row.name;
+            const status = orderStatus(row.lastOrder);
+            return (
+              <button key={key} type="button" onClick={() => setSelected(key)} className="mobile-sales-grid grid w-full grid-cols-[1.45fr_.65fr_.75fr_1.5fr_1.05fr_12px] items-center gap-1 px-2 py-2.5 text-left hover:bg-slate-50">
+                <span className="truncate text-[10px] font-black text-slate-900">{row.name}</span>
+                <span className="mx-auto rounded-full bg-slate-100 px-1.5 py-0.5 text-[7px] font-black text-slate-600">{row.manager}</span>
+                <span className={`mx-auto rounded-full px-1.5 py-0.5 text-[7px] font-black ${row.channel === "매장" ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-500"}`}>{row.channel}</span>
+                <span className="flex min-w-0 items-center justify-center gap-1 whitespace-nowrap text-[7.5px] font-bold text-slate-700"><span>▣</span><span>{row.lastOrder || "-"}</span><span className={`rounded-full px-1.5 py-0.5 text-[6.5px] font-black ${status.cls}`}>{status.label}</span></span>
+                <span className="text-right text-[9px] font-black text-slate-900">{won(row.currentSales)}원</span>
+                <span className="text-[13px] text-slate-400">›</span>
+              </button>
+            );
+          })}
+          {!rows.length && <div className="py-12 text-center text-xs text-slate-400">조건에 맞는 거래처가 없습니다.</div>}
+        </div>
+      </div>
+
+      {selectedRow && (() => {
+        const estRate = selectedRow.est ? (selectedRow.currentSales / selectedRow.est) * 100 : 0;
+        const profitRate = selectedRow.currentSales ? (selectedRow.profitAmount / selectedRow.currentSales) * 100 : 0;
+        return (
+          <div className="fixed inset-0 z-[120] bg-slate-900/20" onMouseDown={() => setSelected(null)}>
+            <div className="absolute inset-x-0 bottom-0 rounded-t-[24px] border border-slate-200 bg-white px-3 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+              <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-300" />
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-[16px]">▥</div>
+                <h3 className="min-w-0 flex-1 truncate text-[15px] font-black text-slate-900">{selectedRow.name}</h3>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[7px] font-black text-slate-600">{selectedRow.manager}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[7px] font-black ${selectedRow.channel === "매장" ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-500"}`}>{selectedRow.channel}</span>
+                <button type="button" onClick={() => setSelected(null)} className="ml-auto text-[22px] leading-none text-slate-500">×</button>
+              </div>
+              <div className="mt-3 grid grid-cols-4 gap-1.5">
+                <MobileDetailMetric title="당월 전체 매출" value={`${won(selectedRow.fullMonthSales)}원`} sub="" />
+                <MobileDetailMetric title="당일까지 매출" value={`${won(selectedRow.currentSales)}원`} sub={selectedRow.fullMonthSales ? `달성률 ${pct((selectedRow.currentSales / selectedRow.fullMonthSales) * 100)}` : "달성률 -"} tone="blue" progress={selectedRow.fullMonthSales ? (selectedRow.currentSales / selectedRow.fullMonthSales) * 100 : 0} />
+                <MobileDetailMetric title="Time Gone 대비 EST 진척률" value={selectedRow.est ? pct(estRate) : "-"} sub="" tone="purple" progress={estRate} />
+                <MobileDetailMetric title="이익금액 / 이익률" value={`${won(selectedRow.profitAmount)}원`} sub={pct(profitRate)} tone="orange" progress={profitRate} />
+              </div>
+              <button type="button" className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-50 text-[11px] font-black text-blue-900">▣ 거래처 상세 보기 <span>›</span></button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
 
+function MobileDetailMetric({ title, value, sub, tone, progress }: { title: string; value: string; sub: string; tone?: "blue" | "purple" | "orange"; progress?: number }) {
+  const bar = tone === "purple" ? "bg-purple-600" : tone === "orange" ? "bg-orange-500" : "bg-blue-600";
+  return (
+    <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-2">
+      <div className="min-h-[24px] text-[7px] font-bold leading-tight text-slate-500">{title}</div>
+      <div className="mt-1 break-all text-[11px] font-black leading-tight text-slate-900">{value}</div>
+      {sub && <div className="mt-1 text-[7px] font-black text-slate-600">{sub}</div>}
+      {typeof progress === "number" && <div className="mt-2 h-1 overflow-hidden rounded-full bg-slate-200"><div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} /></div>}
+    </div>
+  );
+}
 
 function BrandEstProgress({
   stores,
