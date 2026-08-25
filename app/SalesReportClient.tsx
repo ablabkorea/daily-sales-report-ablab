@@ -6081,6 +6081,43 @@ export default function SalesReportClient() {
             .sales-report-root .mobile-sales-grid {
               min-width: 0;
             }
+            /* 모바일 대시보드: 기준정보 카드 아래 핵심 카드만 좌우 폭을 넓힙니다. */
+            .sales-report-root .mobile-dashboard-card {
+              width: calc(100% + 1rem);
+              margin-left: -0.5rem;
+              margin-right: -0.5rem;
+            }
+            /* 모바일 매출현황 필터는 작은 글씨를 유지하도록 공통 16px 폼 규칙보다 우선합니다. */
+            .sales-report-root .mobile-order-age-filter {
+              min-height: 36px !important;
+              height: 36px !important;
+              width: auto !important;
+              font-size: 9.5px !important;
+              line-height: 1.15 !important;
+            }
+            .sales-report-root .mobile-all-filter {
+              min-height: 32px !important;
+              height: 32px !important;
+              font-size: 9px !important;
+              line-height: 1 !important;
+              white-space: nowrap;
+            }
+            .sales-report-root label.mobile-new-filter {
+              min-height: 32px !important;
+              height: 32px !important;
+              padding-top: 0 !important;
+              padding-bottom: 0 !important;
+              font-size: 9px !important;
+              line-height: 1 !important;
+              white-space: nowrap;
+            }
+            .sales-report-root .mobile-manager-filter {
+              min-height: 32px !important;
+              height: 32px !important;
+              width: auto !important;
+              font-size: 9px !important;
+              line-height: 1.1 !important;
+            }
           }
 
         `}</style>
@@ -6445,7 +6482,7 @@ function MobileDashboard({
 
   return (
     <div className="mobile-dashboard-view space-y-2.5 pb-24">
-      <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <section className="mobile-dashboard-card rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <h2 className="text-[13px] font-black text-slate-900">매출 현황</h2>
         <div className="mt-2 divide-y divide-dashed divide-slate-200">
           <MobileHeroMetric icon="▥" label="당월 전체 매출" value={`${won(data.fullMonthSales)}원`} />
@@ -6453,12 +6490,12 @@ function MobileDashboard({
         </div>
       </section>
 
-      <section className="grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section className="mobile-dashboard-card grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <MobileProgressMetric title="EST 달성률" value={data.estRate} amount={data.est} tone="purple" />
         <MobileProgressMetric title="Target 달성률" value={data.targetRate} amount={data.target} tone="orange" bordered />
       </section>
 
-      <section className="grid grid-cols-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <section className="mobile-dashboard-card grid grid-cols-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <div className="flex items-center gap-2 border-r border-slate-200 pr-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-lg">◉</div>
           <div>
@@ -6472,7 +6509,7 @@ function MobileDashboard({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <section className="mobile-dashboard-card rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <div className="flex items-center justify-between">
           <h2 className="text-[12px] font-black text-slate-900">담당자별 현황 <span className="text-[8px] font-semibold text-slate-400">(당월 전체 매출 기준)</span></h2>
           <span className="text-[9px] font-bold text-blue-600">전체보기 ›</span>
@@ -6626,7 +6663,7 @@ function MobileSalesStatus({
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className="text-[14px] font-black text-slate-900">매출현황</h2>
         <div className="flex items-center gap-1.5">
-          <select value={orderAge} onChange={(event) => setOrderAge(event.target.value)} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-[9px] font-bold text-slate-600 shadow-sm">
+          <select value={orderAge} onChange={(event) => setOrderAge(event.target.value)} className="mobile-order-age-filter h-9 rounded-xl border border-slate-200 bg-white px-2 font-bold text-slate-600 shadow-sm">
             <option value="전체">발주일 경과 필터</option>
             <option value="7일 미만">7일 미만</option>
             <option value="7~13일">7~13일</option>
@@ -6640,13 +6677,13 @@ function MobileSalesStatus({
       </div>
 
       <div className="mb-2 flex items-center gap-0">
-        <button type="button" onClick={() => setNewOnly(false)} className={`h-8 rounded-l-lg border px-5 text-[9px] font-black ${!newOnly ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600"}`}>전체 {allRows.length}</button>
-        <label className="flex h-8 items-center gap-2 rounded-r-lg border border-l-0 border-slate-200 bg-white px-3 text-[9px] font-black text-slate-700">
-          신규 거래처만
+        <button type="button" onClick={() => setNewOnly(false)} className={`mobile-all-filter h-8 rounded-l-lg border px-4 font-black ${!newOnly ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600"}`}>전체 {allRows.length}</button>
+        <label className="mobile-new-filter flex h-8 items-center gap-2 rounded-r-lg border border-l-0 border-slate-200 bg-white px-3 font-black text-slate-700">
+          신규
           <input type="checkbox" checked={newOnly} onChange={(event) => setNewOnly(event.target.checked)} className="peer sr-only" />
           <span className="relative h-4 w-7 rounded-full bg-slate-200 transition peer-checked:bg-blue-500 after:absolute after:left-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-3" />
         </label>
-        <select value={manager} onChange={(event) => setManager(event.target.value)} className="ml-auto h-8 rounded-lg border border-slate-200 bg-white px-2 text-[9px] font-bold text-slate-600">
+        <select value={manager} onChange={(event) => setManager(event.target.value)} className="mobile-manager-filter ml-auto h-8 rounded-lg border border-slate-200 bg-white px-2 font-bold text-slate-600">
           <option>전체</option>
           {managers.map((item) => <option key={item}>{item}</option>)}
         </select>
