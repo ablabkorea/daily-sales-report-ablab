@@ -6162,7 +6162,7 @@ export default function SalesReportClient() {
             timeGone={tg}
           />
         )}
-        {!isMobile && (
+        {!isMobile && active !== "EST 입력" && (
         <div
           className={
             active === "대시보드"
@@ -7467,20 +7467,20 @@ function EstQuickEntry({
   };
 
   return (
-    <div className="space-y-3">
-        <div className="flex flex-wrap items-end justify-between gap-2 px-1">
+    <div className="space-y-2">
+        <div className="flex flex-wrap items-end justify-between gap-2 px-1 pb-1">
           <div>
             <h2 className="text-lg font-black tracking-tight text-slate-900">0. EST 입력</h2>
             <p className="mt-0.5 text-[11px] font-semibold text-slate-500">브랜드 또는 거래처별로 EST 목표를 입력하고 관리합니다.</p>
           </div>
           <div className="text-[11px] font-bold text-slate-500">{selectedManager} 담당 · 매장 {won(managerInfo.store)}개 · 비매장 {won(managerInfo.nonStore)}개</div>
         </div>
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[180px_minmax(0,1fr)] xl:items-stretch">
-      <aside className="h-full w-full shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[150px_minmax(0,1fr)] xl:items-start">
+      <aside className="w-full shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 bg-slate-50 px-3 py-3 text-center text-xs font-extrabold text-slate-700">
           담당자 선택
         </div>
-        <div className="flex max-h-[260px] flex-col gap-1 overflow-y-auto p-2">
+        <div className="flex max-h-[205px] flex-col gap-1 overflow-y-auto p-2">
           {activeManagers.map((config) => {
             const visibleCount = stores.filter((store) => {
               if (store.manager.trim().toUpperCase() !== config.name) return false;
@@ -7532,21 +7532,21 @@ function EstQuickEntry({
         )}
 
       </aside>
-        <div className="h-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="grid gap-3 2xl:grid-cols-[minmax(620px,0.95fr)_minmax(620px,1.05fr)] 2xl:items-center">
             <div className="flex flex-wrap items-stretch gap-3">
               <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-3 shadow-sm">
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-2.5 shadow-sm">
                   <div className="text-[11px] font-extrabold text-slate-500">매장 EST 합계</div>
                   <div className="mt-1 text-xl font-black tracking-tight text-slate-900">{won(selectedManagerEstSummary.storeEst)}원</div>
                   <div className="mt-1 text-[10px] font-bold text-slate-400">{selectedManager} · 매장 {won(managerInfo.store)}개</div>
                 </div>
-                <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 shadow-sm">
+                <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-2.5 shadow-sm">
                   <div className="text-[11px] font-extrabold text-slate-500">비매장 EST 합계</div>
                   <div className="mt-1 text-xl font-black tracking-tight text-slate-900">{won(selectedManagerEstSummary.nonStoreEst)}원</div>
                   <div className="mt-1 text-[10px] font-bold text-slate-400">{selectedManager} · 비매장 {won(managerInfo.nonStore)}개</div>
                 </div>
-                <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-4 py-3 shadow-sm">
+                <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-4 py-2.5 shadow-sm">
                   <div className="text-[11px] font-extrabold text-slate-500">전체 EST 합계</div>
                   <div className="mt-1 text-xl font-black tracking-tight text-slate-900">{won(selectedManagerEstSummary.storeEst + selectedManagerEstSummary.nonStoreEst)}원</div>
                   <div className="mt-1 text-[10px] font-bold text-slate-400">전체 거래처 {won(managerInfo.total)}개</div>
@@ -7588,7 +7588,7 @@ function EstQuickEntry({
               )}
             </div>
 
-            <div className="flex flex-wrap items-end gap-2 xl:justify-end">
+            <div className="flex flex-wrap items-end justify-start gap-2 2xl:justify-end">
               <label className="relative block w-[250px] max-w-full">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
                 <input
@@ -7665,8 +7665,8 @@ function EstQuickEntry({
 
       </div>
         <div
-          className="flex min-h-[360px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
-          style={{ height: "clamp(420px, calc(100vh - 390px), 680px)" }}
+          className="flex min-h-[420px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
+          style={{ height: "clamp(470px, calc(100vh - 300px), 760px)" }}
         >
           <div className="isolate min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 pr-2">
             {entryView === "brand" ? (
