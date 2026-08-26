@@ -6984,6 +6984,8 @@ function EstQuickEntry({
   const [newStoreName, setNewStoreName] = useState("");
   const [newStoreEstAmount, setNewStoreEstAmount] = useState(0);
   const [newStoreModalOpen, setNewStoreModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [entryStatusView, setEntryStatusView] = useState<"all" | "entered" | "missing">("all");
 
   const addPendingNewStoreEst = () => {
     const name = newStoreName.trim();
@@ -7179,6 +7181,18 @@ function EstQuickEntry({
         if (channelView === "store") return store.storeType === "매장";
         if (channelView === "nonStore") return store.storeType !== "매장";
         return true;
+      })
+      .filter((store) => {
+        const query = searchTerm.trim().toLowerCase();
+        if (!query) return true;
+        return [displayBrand(store.brand), store.name, store.code, store.manager]
+          .some((value) => String(value || "").toLowerCase().includes(query));
+      })
+      .filter((store) => {
+        const entered = Number(estMap.get(store.code) || 0) !== 0;
+        if (entryStatusView === "entered") return entered;
+        if (entryStatusView === "missing") return !entered;
+        return true;
       });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -7212,6 +7226,8 @@ function EstQuickEntry({
     estMap,
     editingStoreCode,
     frozenRowOrder,
+    searchTerm,
+    entryStatusView,
   ]);
 
   const openBrandStores = useMemo(() => {
@@ -7456,7 +7472,7 @@ function EstQuickEntry({
         <div className="border-b border-slate-200 bg-slate-50 px-3 py-3 text-center text-xs font-extrabold text-slate-700">
           담당자
         </div>
-        <div className="flex gap-2 p-2 lg:flex-col">
+        <div className="flex max-h-[300px] gap-2 overflow-y-auto p-2 lg:flex-col">
           {activeManagers.map((config) => {
             const visibleCount = stores.filter((store) => {
               if (store.manager.trim().toUpperCase() !== config.name) return false;
@@ -7474,8 +7490,8 @@ function EstQuickEntry({
                 onClick={() => setSelectedManager(config.name)}
                 className={`flex flex-1 items-center justify-between rounded-lg px-3 py-2.5 text-sm font-extrabold transition lg:w-full ${
                   selectedManager === config.name
-                    ? "bg-orange-500 text-white shadow-sm"
-                    : "bg-white text-slate-700 hover:bg-orange-50 hover:text-orange-800"
+                    ? "bg-violet-600 text-white shadow-sm"
+                    : "bg-white text-slate-700 hover:bg-violet-50 hover:text-violet-800"
                 }`}
               >
                 <span>{config.name}</span>
@@ -7546,26 +7562,41 @@ function EstQuickEntry({
       </aside>
 
       <div className="min-w-0 flex-1 space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-2 px-1">
+          <div>
+            <h2 className="text-lg font-black tracking-tight text-slate-900">0. EST 입력</h2>
+            <p className="mt-0.5 text-[11px] font-semibold text-slate-500">브랜드 또는 거래처별로 EST 목표를 입력하고 관리합니다.</p>
+          </div>
+          <div className="text-[11px] font-bold text-slate-500">{selectedManager} 담당 · 매장 {won(managerInfo.store)}개 · 비매장 {won(managerInfo.nonStore)}개</div>
+        </div>
         <div className="rounded-2xl border border-slate-300 bg-white p-3 shadow-sm">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
             <div className="flex flex-wrap items-stretch gap-3">
-              {canEdit && (
-                <div className="flex min-h-[48px] items-center rounded-xl border border-amber-200 bg-[#FFFDF2] px-4 py-2 text-[12px] font-extrabold text-slate-800 shadow-sm">
-                  <span>매장 EST 합계 : {won(selectedManagerEstSummary.storeEst)}</span>
-                  <span className="mx-2 text-slate-400">/</span>
-                  <span>비매장 EST 합계 : {won(selectedManagerEstSummary.nonStoreEst)}</span>
-                  <span className="mx-2 text-slate-400">|</span>
-                  <span>Target 합계 : {won(targetTotal)}</span>
+              <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-3 shadow-sm">
+                  <div className="text-[11px] font-extrabold text-slate-500">매장 EST 합계</div>
+                  <div className="mt-1 text-xl font-black tracking-tight text-slate-900">{won(selectedManagerEstSummary.storeEst)}원</div>
+                  <div className="mt-1 text-[10px] font-bold text-slate-400">{selectedManager} · 매장 {won(managerInfo.store)}개</div>
                 </div>
-              )}
+                <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 shadow-sm">
+                  <div className="text-[11px] font-extrabold text-slate-500">비매장 EST 합계</div>
+                  <div className="mt-1 text-xl font-black tracking-tight text-slate-900">{won(selectedManagerEstSummary.nonStoreEst)}원</div>
+                  <div className="mt-1 text-[10px] font-bold text-slate-400">{selectedManager} · 비매장 {won(managerInfo.nonStore)}개</div>
+                </div>
+                <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-4 py-3 shadow-sm">
+                  <div className="text-[11px] font-extrabold text-slate-500">전체 EST 합계</div>
+                  <div className="mt-1 text-xl font-black tracking-tight text-slate-900">{won(selectedManagerEstSummary.storeEst + selectedManagerEstSummary.nonStoreEst)}원</div>
+                  <div className="mt-1 text-[10px] font-bold text-slate-400">전체 거래처 {won(managerInfo.total)}개</div>
+                </div>
+              </div>
 
               {selectedManagerConfig?.canTarget && (
-                <div className="w-[330px] max-w-full shrink-0 overflow-hidden rounded-xl border border-violet-200 bg-[#F7F4FF] shadow-sm">
-                  <div className="border-b border-violet-200 bg-[#EEE8FF] px-4 py-2 text-center text-[13px] font-extrabold text-violet-950">
+                <div className="w-[360px] max-w-full shrink-0 overflow-hidden rounded-xl border border-orange-200 bg-orange-50/50 shadow-sm">
+                  <div className="border-b border-orange-200 bg-orange-100/70 px-4 py-2 text-left text-[13px] font-extrabold text-slate-900">
                     Target 입력
                   </div>
-                  <div className="grid grid-cols-2 divide-x divide-violet-200">
-                    <label className="px-3 py-2.5 text-center text-[12px] font-bold text-violet-950">
+                  <div className="grid grid-cols-2 divide-x divide-orange-200">
+                    <label className="px-3 py-2.5 text-center text-[12px] font-bold text-slate-700">
                       매장 Target
                       <input
                         type="text"
@@ -7574,10 +7605,10 @@ function EstQuickEntry({
                         value={targetByType.store ? won(targetByType.store) : ""}
                         onChange={(e) => updateTargetByType("매장", num(e.target.value))}
                         placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                        className="mt-1 h-8 w-full min-w-0 rounded-lg border border-violet-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
+                        className="mt-1 h-8 w-full min-w-0 rounded-lg border border-orange-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
                       />
                     </label>
-                    <label className="px-3 py-2.5 text-center text-[12px] font-bold text-violet-950">
+                    <label className="px-3 py-2.5 text-center text-[12px] font-bold text-slate-700">
                       비매장 Target
                       <input
                         type="text"
@@ -7586,7 +7617,7 @@ function EstQuickEntry({
                         value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
                         onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
                         placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                        className="mt-1 h-8 w-full min-w-0 rounded-lg border border-violet-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
+                        className="mt-1 h-8 w-full min-w-0 rounded-lg border border-orange-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
                       />
                     </label>
                   </div>
@@ -7594,19 +7625,28 @@ function EstQuickEntry({
               )}
             </div>
 
-            <div className="flex flex-wrap items-end gap-x-5 gap-y-3 xl:justify-end">
-              <div className="flex items-center rounded-xl border border-orange-200 bg-orange-50 p-1 text-xs font-extrabold">
+            <div className="flex flex-wrap items-end gap-2 xl:justify-end">
+              <label className="relative block w-[250px] max-w-full">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="거래처명 · 코드 · 브랜드 검색"
+                  className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 text-xs font-semibold outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
+                />
+              </label>
+              <div className="flex items-center rounded-xl border border-violet-200 bg-violet-50 p-1 text-xs font-extrabold">
                 <button
                   type="button"
                   onClick={() => setEntryView("store")}
-                  className={`rounded-lg px-3 py-2 transition ${entryView === "store" ? "bg-white text-orange-700 shadow-sm" : "text-slate-600"}`}
+                  className={`rounded-lg px-3 py-2 transition ${entryView === "store" ? "bg-white text-violet-700 shadow-sm" : "text-slate-600"}`}
                 >
                   거래처별 입력
                 </button>
                 <button
                   type="button"
                   onClick={() => setEntryView("brand")}
-                  className={`rounded-lg px-3 py-2 transition ${entryView === "brand" ? "bg-white text-orange-700 shadow-sm" : "text-slate-600"}`}
+                  className={`rounded-lg px-3 py-2 transition ${entryView === "brand" ? "bg-white text-violet-700 shadow-sm" : "text-slate-600"}`}
                 >
                   브랜드별 입력
                 </button>
@@ -7625,6 +7665,28 @@ function EstQuickEntry({
                 </select>
               </label>
 
+              <select
+                value={entryStatusView}
+                onChange={(event) => setEntryStatusView(event.target.value as "all" | "entered" | "missing")}
+                className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-violet-500"
+                aria-label="EST 입력상태 필터"
+              >
+                <option value="all">EST 입력상태 전체</option>
+                <option value="entered">입력 완료</option>
+                <option value="missing">미입력</option>
+              </select>
+
+              <select
+                value={statusView}
+                onChange={(event) => setStatusView(event.target.value as "active" | "paused" | "ended")}
+                className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-violet-500"
+                aria-label="거래상태 필터"
+              >
+                <option value="active">거래중</option>
+                <option value="paused">거래중지</option>
+                <option value="ended">거래종료</option>
+              </select>
+
               <button
                 type="button"
                 onClick={() => setNewStoreModalOpen(true)}
@@ -7634,43 +7696,13 @@ function EstQuickEntry({
                 신규 거래처 생성
               </button>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-extrabold text-slate-600">거래상태</span>
-                <button
-                  type="button"
-                  onClick={() => setStatusView("active")}
-                  className={`h-9 rounded-lg border bg-white px-3 text-xs font-extrabold text-black transition ${
-                    statusView === "active" ? "border-black ring-1 ring-black" : "border-slate-300 hover:border-slate-500"
-                  }`}
-                >
-                  거래중
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusView("paused")}
-                  className={`h-9 rounded-lg border bg-white px-3 text-xs font-extrabold text-blue-600 transition ${
-                    statusView === "paused" ? "border-blue-500 ring-1 ring-blue-500" : "border-slate-300 hover:border-blue-300"
-                  }`}
-                >
-                  거래중지
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusView("ended")}
-                  className={`h-9 rounded-lg border bg-white px-3 text-xs font-extrabold text-red-600 transition ${
-                    statusView === "ended" ? "border-red-500 ring-1 ring-red-500" : "border-slate-300 hover:border-red-300"
-                  }`}
-                >
-                  거래종료
-                </button>
-              </div>
             </div>
           </div>
         </div>
 
         <div
           className="flex min-h-[360px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
-          style={{ height: "clamp(360px, calc(100vh - 430px), 600px)" }}
+          style={{ height: "clamp(360px, calc(100vh - 500px), 600px)" }}
         >
           <div className="isolate min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 pr-2">
             {entryView === "brand" ? (
@@ -7973,6 +8005,9 @@ function EstQuickEntry({
               <button type="button" onClick={() => setNewStoreModalOpen(false)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50">닫기</button>
             </div>
             <div className="space-y-4 p-5">
+              <label className="block text-xs font-extrabold text-slate-700">담당자
+                <input value={selectedManager} disabled className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-extrabold text-slate-700" />
+              </label>
               <label className="block text-xs font-extrabold text-slate-700">구분
                 <select value={newStoreType} onChange={(e) => setNewStoreType(e.target.value as StoreType)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold outline-none focus:border-emerald-500">
                   <option value="매장">매장</option>
@@ -7981,6 +8016,9 @@ function EstQuickEntry({
               </label>
               <label className="block text-xs font-extrabold text-slate-700">거래처명
                 <input value={newStoreName} onChange={(e) => setNewStoreName(e.target.value)} placeholder="신규 거래처명" className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold outline-none focus:border-emerald-500" autoFocus />
+              </label>
+              <label className="block text-xs font-extrabold text-slate-700">거래상태
+                <input value="거래중" disabled className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-extrabold text-emerald-700" />
               </label>
               <label className="block text-xs font-extrabold text-slate-700">EST 금액
                 <input type="text" inputMode="numeric" value={newStoreEstAmount ? won(newStoreEstAmount) : ""} onChange={(e) => setNewStoreEstAmount(num(e.target.value))} placeholder="0" className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-emerald-500" />
