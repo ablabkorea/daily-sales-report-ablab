@@ -9023,6 +9023,22 @@ function Dashboard({
 
   return (
     <div className="space-y-4 pb-8">
+      <style jsx global>{`
+        /* 대시보드 매출 비교 요약 전용 헤더 색상 - 공통 table th 색상보다 최종 우선 */
+        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table thead tr th {
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+          background: #1e293b !important;
+          background-color: #1e293b !important;
+          border-color: #475569 !important;
+        }
+        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table thead tr th > *,
+        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table thead tr th span,
+        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table thead tr th button {
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+        }
+      `}</style>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-end gap-2">
           <h2 className="text-[15px] font-black text-slate-900">매출 비교 요약</h2>
