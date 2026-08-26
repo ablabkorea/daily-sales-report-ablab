@@ -5425,16 +5425,27 @@ export default function SalesReportClient() {
           }
 
           .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th {
+            position: relative !important;
             color: #ffffff !important;
             background-color: #1e293b !important;
             border-color: #475569 !important;
             -webkit-text-fill-color: #ffffff !important;
+            opacity: 1 !important;
+            visibility: visible !important;
           }
-          .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th *,
           .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th::before,
           .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th::after {
+            content: none !important;
+            display: none !important;
+          }
+          .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table .dashboard-comparison-header-label {
+            position: relative !important;
+            z-index: 10 !important;
+            display: block !important;
             color: #ffffff !important;
             -webkit-text-fill-color: #ffffff !important;
+            opacity: 1 !important;
+            visibility: visible !important;
           }
 
           /* 표 섹션 제목은 색 대신 간격과 타이포그래피로 위계를 만듭니다. */
@@ -9023,19 +9034,32 @@ function Dashboard({
   return (
     <div className="space-y-4 pb-8">
       <style jsx global>{`
-        /* 대시보드 매출 비교 요약 전용 헤더 색상 - 공통 table th 색상보다 최종 우선 */
-        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table thead tr th {
+        /* 대시보드 매출 비교 요약 전용 헤더: 공통 table th/가상요소 스타일과 완전히 분리 */
+        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th {
+          position: relative !important;
           color: #ffffff !important;
           -webkit-text-fill-color: #ffffff !important;
           background: #1e293b !important;
           background-color: #1e293b !important;
           border-color: #475569 !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+          overflow: visible !important;
         }
-        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table thead tr th > *,
-        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table thead tr th span,
-        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table thead tr th button {
+        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th::before,
+        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th::after {
+          content: none !important;
+          display: none !important;
+        }
+        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table .dashboard-comparison-header-label {
+          position: relative !important;
+          z-index: 10 !important;
+          display: block !important;
           color: #ffffff !important;
           -webkit-text-fill-color: #ffffff !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+          text-shadow: none !important;
         }
       `}</style>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -9047,18 +9071,18 @@ function Dashboard({
           <table className="dashboard-comparison-table w-full min-w-[1180px] border-separate border-spacing-0 text-center text-[11px]">
             <thead>
               <tr className="bg-slate-800 text-white">
-                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>구분</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>전년동월 매출</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>전월매출</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>당일까지 매출</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>Time gone</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>당월 전체 매출</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>EST (당월)</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>EST 대비</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>Target (당월)</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>Target 대비 진척률</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>이익금액</span></th>
-                <th className="px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>이익률</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">구분</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">전년동월 매출</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">전월매출</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">당일까지 매출</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">Time gone</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">당월 전체 매출</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">EST (당월)</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">EST 대비</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">Target (당월)</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">Target 대비 진척률</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">이익금액</span></th>
+                <th className="px-3 py-2.5"><span className="dashboard-comparison-header-label">이익률</span></th>
               </tr>
             </thead>
             <tbody>
