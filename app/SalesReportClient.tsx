@@ -5411,7 +5411,6 @@ export default function SalesReportClient() {
           .sales-report-root table td { border-color: #e5e7eb !important; }
 
           /* 임원·전사 공유용 표 헤더: 색은 분류만 돕고 숫자보다 먼저 보이지 않도록 절제합니다. */
-          .sales-report-root[data-active="대시보드"] table thead th,
           .sales-report-root[data-active="매출현황"] table thead th,
           .sales-report-root[data-active="거래처별 상세"] table thead th,
           .sales-report-root[data-active="품목분석"] table thead th {
@@ -9048,18 +9047,18 @@ function Dashboard({
           <table className="dashboard-comparison-table w-full min-w-[1180px] border-separate border-spacing-0 text-center text-[11px]">
             <thead>
               <tr className="bg-slate-800 text-white">
-                <th className="border-r border-slate-600 px-3 py-2.5">구분</th>
-                <th className="border-r border-slate-600 px-3 py-2.5">전년동월 매출</th>
-                <th className="border-r border-slate-600 px-3 py-2.5">전월매출</th>
-                <th className="border-r border-slate-600 px-3 py-2.5">당일까지 매출</th>
-                <th className="border-r border-slate-600 px-3 py-2.5">Time gone</th>
-                <th className="border-r border-slate-600 px-3 py-2.5">당월 전체 매출</th>
-                <th className="border-r border-slate-600 px-3 py-2.5">EST (당월)</th>
-                <th className="border-r border-slate-600 px-3 py-2.5">EST 대비</th>
-                <th className="border-r border-slate-600 px-3 py-2.5">Target (당월)</th>
-                <th className="border-r border-slate-600 px-3 py-2.5">Target 대비 진척률</th>
-                <th className="border-r border-slate-600 px-3 py-2.5">이익금액</th>
-                <th className="px-3 py-2.5">이익률</th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>구분</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>전년동월 매출</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>전월매출</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>당일까지 매출</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>Time gone</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>당월 전체 매출</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>EST (당월)</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>EST 대비</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>Target (당월)</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>Target 대비 진척률</span></th>
+                <th className="border-r border-slate-600 px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>이익금액</span></th>
+                <th className="px-3 py-2.5"><span style={{ color: "#ffffff", WebkitTextFillColor: "#ffffff" }}>이익률</span></th>
               </tr>
             </thead>
             <tbody>
