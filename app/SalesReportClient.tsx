@@ -9662,6 +9662,84 @@ function itemSalePriceTimeline(points: ItemSalePricePoint[]) {
   };
 }
 
+type ItemCostPricePoint = {
+  saleDate: string;
+  costUnitPrice: number;
+};
+
+function itemCostPriceTimeline(points: ItemCostPricePoint[]) {
+  const byDate = new Map<string, number[]>();
+
+  points
+    .filter(
+      (point) =>
+        Boolean(point.saleDate) &&
+        Number.isFinite(Number(point.costUnitPrice)) &&
+        Number(point.costUnitPrice) > 0,
+    )
+    .forEach((point) => {
+      const date = String(point.saleDate);
+      const price = Number(point.costUnitPrice);
+      const current = byDate.get(date) || [];
+      if (!current.includes(price)) current.push(price);
+      byDate.set(date, current);
+    });
+
+  const daily = Array.from(byDate.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, prices]) => ({
+      date,
+      prices: prices.slice().sort((a, b) => a - b),
+    }));
+
+  if (!daily.length) {
+    return {
+      label: "-",
+      title: "매입가 데이터 없음",
+      sortValue: 0,
+    };
+  }
+
+  // 일별이익현황의 원가 단가를 날짜 순서로 보고, 같은 단가 구성이 이어지면 한 구간으로 묶습니다.
+  const groups: {
+    start: string;
+    end: string;
+    prices: number[];
+  }[] = [];
+
+  for (const day of daily) {
+    const last = groups[groups.length - 1];
+    const key = day.prices.join("|");
+    const lastKey = last?.prices.join("|");
+
+    if (last && key === lastKey) {
+      last.end = day.date;
+    } else {
+      groups.push({
+        start: day.date,
+        end: day.date,
+        prices: day.prices,
+      });
+    }
+  }
+
+  const priceLabel = (prices: number[]) =>
+    prices.map((price) => won(price)).join(" / ");
+
+  return {
+    label: groups.map((group) => priceLabel(group.prices)).join(" → "),
+    title: groups
+      .map((group) => {
+        const start = group.start.slice(5).replace("-", "/");
+        const end = group.end.slice(5).replace("-", "/");
+        const period = start === end ? start : `${start}~${end}`;
+        return `${period}  ${priceLabel(group.prices)}원`;
+      })
+      .join("\n"),
+    sortValue: groups[groups.length - 1]?.prices[0] || 0,
+  };
+}
+
 function itemStoreMatches(store: Store, search: string) {
   const q = search.trim().toLowerCase();
   if (!q) return true;
@@ -11089,6 +11167,7 @@ function ItemShipmentAnalysis({
         channel: string;
         currentSalePricePoints: ItemSalePricePoint[];
         prevMonthSalePricePoints: ItemSalePricePoint[];
+        currentCostPricePoints: ItemCostPricePoint[];
         current: ItemMetric;
         prevMonth: ItemMetric;
       }
@@ -11104,6 +11183,7 @@ function ItemShipmentAnalysis({
           channel: store?.channel || row.channel || "미지정",
           currentSalePricePoints: [],
           prevMonthSalePricePoints: [],
+          currentCostPricePoints: [],
           current: emptyItemMetric(),
           prevMonth: emptyItemMetric(),
         });
@@ -11121,6 +11201,12 @@ function ItemShipmentAnalysis({
             storeRow.currentSalePricePoints.push({
               saleDate: row.saleDate,
               saleUnitPrice: Number(row.saleUnitPrice || 0),
+            });
+          }
+          if (Number(row.costUnitPrice || 0) > 0) {
+            storeRow.currentCostPricePoints.push({
+              saleDate: row.saleDate,
+              costUnitPrice: Number(row.costUnitPrice || 0),
             });
           }
         }
@@ -11152,6 +11238,9 @@ function ItemShipmentAnalysis({
         ),
         currentSaleUnitPrice: itemSalePriceTimeline(
           r.currentSalePricePoints,
+        ),
+        currentCostUnitPrice: itemCostPriceTimeline(
+          r.currentCostPricePoints,
         ),
       }))
       .sort((a, b) => b.current.sales - a.current.sales);
@@ -11416,7 +11505,7 @@ function ItemShipmentAnalysis({
             </button>
           </div>
           <div className="max-h-[68vh] overflow-auto isolate">
-            <table className="w-full min-w-[1680px] border-separate border-spacing-0 text-center text-[12px] text-black whitespace-nowrap">
+            <table className="w-full min-w-[1780px] border-separate border-spacing-0 text-center text-[12px] text-black whitespace-nowrap">
               <thead>
                 <tr>
                   <PopupTh>거래처코드</PopupTh>
@@ -11429,6 +11518,7 @@ function ItemShipmentAnalysis({
                   <PopupTh right>전월이익률</PopupTh>
                   <PopupTh right>당월 판매단가</PopupTh>
                   <PopupTh right>당월매출</PopupTh>
+                  <PopupTh right>당월 매입가</PopupTh>
                   <PopupTh right>당월이익금액</PopupTh>
                   <PopupTh right>당월이익률</PopupTh>
                   <PopupTh right>이익률변동</PopupTh>
@@ -11461,6 +11551,12 @@ function ItemShipmentAnalysis({
                         {r.currentSaleUnitPrice.label}
                       </td>
                       <td className="border border-slate-300 p-2 text-right text-[14px] font-extrabold">{won(r.current.sales)}</td>
+                      <td
+                        className="border border-slate-300 p-2 text-right font-semibold text-amber-700"
+                        title={r.currentCostUnitPrice.title}
+                      >
+                        {r.currentCostUnitPrice.label}
+                      </td>
                       <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.profit)}</td>
                       <td className="border border-slate-300 p-2 text-right font-extrabold">{pct(currentRate)}</td>
                       <td className={`border border-slate-300 p-2 text-right font-extrabold ${change > 0 ? "text-emerald-700" : change < 0 ? "text-red-600" : "text-black"}`}>
@@ -11471,7 +11567,7 @@ function ItemShipmentAnalysis({
                 })}
                 {!storeRows.length && (
                   <tr>
-                    <td colSpan={13} className="border border-slate-300 p-8 text-center text-black">
+                    <td colSpan={14} className="border border-slate-300 p-8 text-center text-black">
                       표시할 거래처가 없습니다.
                     </td>
                   </tr>
