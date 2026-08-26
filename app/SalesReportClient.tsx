@@ -13848,7 +13848,7 @@ function OrderDrillModal({
                 onClick={clearFilters}
                 className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
               >
-                필터 초기화
+                검색 초기화
               </button>
               <button
                 type="button"
@@ -13891,19 +13891,21 @@ function OrderDrillModal({
                   </th>
                 ))}
               </tr>
-              <tr className="bg-white">
-                {columns.map((column) => (
-                  <th key={`filter-${column.key}`} className={`${column.width} border border-gray-300 bg-white p-1`}>
-                    <input
-                      value={columnFilters[column.key]}
-                      onChange={(event) => setColumnFilters((prev) => ({ ...prev, [column.key]: event.target.value }))}
-                      placeholder={column.placeholder || "필터"}
-                      className={`h-7 w-full rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 outline-none placeholder:text-slate-300 focus:border-orange-300 ${column.align === "right" ? "text-right" : "text-left"}`}
-                      aria-label={`${column.label} 필터`}
-                    />
+              {filteredRows.length > 0 && (
+                <tr className="bg-amber-50 font-extrabold text-slate-900 shadow-[0_2px_0_0_#fde68a]">
+                  <th colSpan={5} className="border border-amber-300 bg-amber-50 px-3 py-2 text-left">
+                    합계 (검색 결과 {filteredRows.length.toLocaleString("ko-KR")}건)
                   </th>
-                ))}
-              </tr>
+                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(totalQuantity)}</th>
+                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">-</th>
+                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(totalSales)}</th>
+                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">-</th>
+                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(sum(filteredRows, "costAmount"))}</th>
+                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(totalProfit)}</th>
+                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{pct(totalProfitRate)}</th>
+                  <th className="border border-amber-300 bg-amber-50 px-2 py-2" />
+                </tr>
+              )}
             </thead>
             <tbody>
               {filteredRows.length === 0 ? (
@@ -13941,23 +13943,7 @@ function OrderDrillModal({
                 ))
               )}
             </tbody>
-            {filteredRows.length > 0 && (
-              <tfoot className="sticky bottom-0 z-[70] bg-amber-50 shadow-[0_-2px_0_0_#fde68a]">
-                <tr className="font-extrabold text-slate-900">
-                  <td colSpan={5} className="border border-amber-300 bg-amber-50 px-3 py-2 text-left">
-                    합계 (검색/헤더 필터 결과 {filteredRows.length.toLocaleString("ko-KR")}건)
-                  </td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(totalQuantity)}</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">-</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(totalSales)}</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">-</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(sum(filteredRows, "costAmount"))}</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(totalProfit)}</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{pct(totalProfitRate)}</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2" />
-                </tr>
-              </tfoot>
-            )}
+
           </table>
         </div>
       </div>
