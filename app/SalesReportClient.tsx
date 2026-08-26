@@ -5240,26 +5240,12 @@ export default function SalesReportClient() {
 
       {!isMobile && (
       <header className="sticky top-0 z-40 border-b border-gray-200 bg-white shadow-sm">
-        <div className="mobile-header-inner flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-5">
+        <div className="mobile-header-inner flex min-h-[60px] flex-col gap-2 px-4 py-2 lg:flex-row lg:items-center lg:justify-between lg:px-5">
           <div className="mobile-header-main flex flex-wrap items-center gap-3">
             <div className="mobile-report-title text-lg font-extrabold tracking-tight text-orange-950">
               에이비랩 코리아 Sales Report
             </div>
-            <nav className="mobile-main-nav flex flex-wrap items-center gap-2">
-              {displayedMenus.map((m) => (
-                <button
-                  key={m.label}
-                  onClick={() => setActive(m.label)}
-                  className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
-                    active === m.label
-                      ? "bg-orange-500 text-white shadow"
-                      : "bg-orange-50 text-orange-900 hover:bg-orange-100"
-                  }`}
-                >
-                  {m.order}. {m.label}
-                </button>
-              ))}
-            </nav>
+
           </div>
           <div className="mobile-header-actions flex flex-wrap items-center justify-end gap-2">
             {!isAppInstalled && (
@@ -5367,6 +5353,22 @@ export default function SalesReportClient() {
 
       )}
 
+      {!isMobile && (
+        <aside className="group fixed bottom-0 left-0 top-[61px] z-[80] w-[58px] overflow-hidden border-r border-slate-200 bg-white shadow-sm transition-all duration-200 hover:w-[210px]">
+          <div className="flex h-full flex-col py-3">
+            <div className="mb-2 flex h-9 items-center px-4 text-xl font-black text-slate-500">☰<span className="ml-4 whitespace-nowrap text-xs font-black text-slate-800 opacity-0 transition-opacity group-hover:opacity-100">메뉴</span></div>
+            <nav className="space-y-1 px-2">
+              {displayedMenus.map((m) => (
+                <button key={m.label} type="button" onClick={() => setActive(m.label)} className={`flex h-10 w-full items-center rounded-xl px-2 transition ${active === m.label ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}>
+                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[12px] font-black ${active === m.label ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-600"}`}>{m.order}</span>
+                  <span className="ml-3 whitespace-nowrap text-xs font-black opacity-0 transition-opacity group-hover:opacity-100">{m.label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
+        </aside>
+      )}
+
       {showIosInstallGuide && (
         <div className="fixed inset-0 z-[220] flex items-end justify-center bg-black/45 p-3 sm:items-center" onMouseDown={() => setShowIosInstallGuide(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
@@ -5410,7 +5412,7 @@ export default function SalesReportClient() {
         </div>
       )}
 
-      <section className="flex h-[calc(100vh-69px)] min-w-0 flex-col overflow-hidden p-4 pb-10 lg:p-5 lg:pb-10">
+      <section className={`flex h-[calc(100vh-61px)] min-w-0 flex-col overflow-hidden p-4 pb-10 lg:p-5 lg:pb-10 ${!isMobile ? "ml-[58px]" : ""}`}>
         <style jsx global>{`
           .sales-report-root table th,
           .sales-report-root table td,
@@ -5434,6 +5436,12 @@ export default function SalesReportClient() {
             background-clip: border-box !important;
             box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.18) !important;
           }
+
+          .sales-report-root[data-active="대시보드"] .dashboard-comparison-table thead th {
+            color: #ffffff !important;
+            background: #1e293b !important;
+          }
+          .sales-report-root[data-active="대시보드"] .dashboard-comparison-table thead th * { color: #ffffff !important; }
 
           /* 표 섹션 제목은 색 대신 간격과 타이포그래피로 위계를 만듭니다. */
           .sales-report-root[data-active="대시보드"] h2,
@@ -8784,7 +8792,19 @@ function Dashboard({
   timeGone: ReturnType<typeof getTimeGone>;
   codeMappings: StoreCodeMapping[];
 }) {
-  void codeMappings;
+  const [dashboardPriorHistory, setDashboardPriorHistory] = useState<PriorYearStoreHistoryRow[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDashboardPriorHistory(null);
+    loadPriorYearStoreHistory(month)
+      .then((rows) => { if (!cancelled) setDashboardPriorHistory(rows); })
+      .catch((error) => {
+        console.error("대시보드 신규 거래처 이력 조회 실패", error);
+        if (!cancelled) setDashboardPriorHistory([]);
+      });
+    return () => { cancelled = true; };
+  }, [month]);
 
   const storesByCode = storeMap(stores);
   const currentRows = sales.filter(
@@ -8934,15 +8954,42 @@ function Dashboard({
       .slice(0, 5);
   }, [fullMonthRows, stores]);
 
+  const dashboardPriorKeys = useMemo(() => {
+    if (dashboardPriorHistory === null) return null;
+    const keys = new Set<string>();
+    dashboardPriorHistory.forEach((row) => {
+      const manual = codeMappings.find((mapping) =>
+        (norm(mapping.oldCode) && norm(mapping.oldCode) === norm(row.store_code)) ||
+        (normalizeStoreNameKey(mapping.oldName) && normalizeStoreNameKey(mapping.oldName) === normalizeStoreNameKey(row.store_name))
+      );
+      const mappedCode = manual?.currentCode || row.store_code;
+      const mappedName = manual?.currentName || row.store_name;
+      const resolved = resolveStoreInfo(mappedCode, mappedName, {}, stores);
+      const codeKey = norm(resolved.code || mappedCode);
+      const nameKey = normalizeStoreNameKey(resolved.name || mappedName);
+      if (codeKey) keys.add(`code:${codeKey}`);
+      if (nameKey) keys.add(`name:${nameKey}`);
+    });
+    return keys;
+  }, [dashboardPriorHistory, stores, codeMappings]);
+
   const newStoreRows = useMemo(() => {
-    const grouped = new Map<
-      string,
-      { storeCode: string; storeName: string; manager: string; storeType: string; sales: number }
-    >();
-    fullMonthRows.forEach((row) => {
+    if (!dashboardPriorKeys) return [];
+    const newCodes = new Set<string>();
+    currentRows.forEach((row) => {
       const master = storesByCode.get(row.storeCode);
-      const brandName = displayBrand(master?.brand ?? row.brand);
-      if (brandName !== "당월 신규 거래처" || Number(row.salesAmount || 0) === 0) return;
+      const codeKey = norm(master?.code || row.storeCode);
+      const nameKey = normalizeStoreNameKey(master?.name || row.storeName);
+      const existedBefore =
+        (codeKey && dashboardPriorKeys.has(`code:${codeKey}`)) ||
+        (nameKey && dashboardPriorKeys.has(`name:${nameKey}`));
+      if (!existedBefore) newCodes.add(row.storeCode);
+    });
+
+    const grouped = new Map<string, { storeCode: string; storeName: string; manager: string; storeType: string; sales: number }>();
+    fullMonthRows.forEach((row) => {
+      if (!newCodes.has(row.storeCode)) return;
+      const master = storesByCode.get(row.storeCode);
       const existing = grouped.get(row.storeCode) || {
         storeCode: row.storeCode,
         storeName: master?.name || row.storeName || row.storeCode,
@@ -8953,10 +9000,8 @@ function Dashboard({
       existing.sales += Number(row.salesAmount || 0);
       grouped.set(row.storeCode, existing);
     });
-    return Array.from(grouped.values()).sort(
-      (a, b) => b.sales - a.sales || a.storeName.localeCompare(b.storeName, "ko-KR"),
-    );
-  }, [fullMonthRows, stores]);
+    return Array.from(grouped.values()).sort((a, b) => b.sales - a.sales || a.storeName.localeCompare(b.storeName, "ko-KR"));
+  }, [dashboardPriorKeys, currentRows, fullMonthRows, stores]);
 
   const newStoreTotalSales = newStoreRows.reduce((total, row) => total + row.sales, 0);
   const newStoreStoreCount = newStoreRows.filter((row) => row.storeType === "매장").length;
@@ -8972,7 +9017,7 @@ function Dashboard({
           <span className="text-[10px] font-bold text-slate-400">(단위: 원)</span>
         </div>
         <div className="overflow-auto rounded-xl border border-slate-200">
-          <table className="w-full min-w-[1180px] border-separate border-spacing-0 text-center text-[11px]">
+          <table className="dashboard-comparison-table w-full min-w-[1180px] border-separate border-spacing-0 text-center text-[11px]">
             <thead>
               <tr className="bg-slate-800 text-white">
                 <th className="border-r border-slate-600 px-3 py-2.5">구분</th>
