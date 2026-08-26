@@ -13820,6 +13820,28 @@ function OrderDrillModal({
           display: none !important;
           content: none !important;
         }
+        /* 일별이익현황 상세창: 컬럼 헤더 + 합계 행을 항상 함께 고정 */
+        .daily-profit-modal-table thead {
+          position: static !important;
+        }
+        .daily-profit-modal-table thead tr:first-child > th {
+          position: sticky !important;
+          top: 0 !important;
+          z-index: 94 !important;
+          height: 34px;
+          min-height: 34px;
+          background: #f8fafc !important;
+          box-shadow: inset 0 -1px 0 #d1d5db !important;
+        }
+        .daily-profit-modal-table thead tr:nth-child(2) > th {
+          position: sticky !important;
+          top: 34px !important;
+          z-index: 93 !important;
+          height: 34px;
+          min-height: 34px;
+          background: #fffbeb !important;
+          box-shadow: inset 0 -1px 0 #fcd34d, 0 2px 0 rgba(245, 158, 11, 0.28) !important;
+        }
       `}</style>
       <div className="flex h-[96vh] max-h-[96vh] w-full max-w-[98vw] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200">
         <div className="shrink-0 border-b border-gray-300 bg-white px-5 py-4 shadow-sm">
@@ -13870,7 +13892,7 @@ function OrderDrillModal({
 
         <div className="relative min-h-0 flex-1 overflow-auto bg-white">
           <table className="daily-profit-modal-table w-full min-w-[1880px] table-fixed border-separate border-spacing-0 bg-white text-xs">
-            <thead className="sticky top-0 z-[90] bg-white shadow-[0_2px_0_0_#cbd5e1]">
+            <thead className="bg-white">
               <tr className="bg-slate-50">
                 {columns.map((column) => (
                   <th
