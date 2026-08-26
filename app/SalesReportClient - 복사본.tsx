@@ -115,7 +115,6 @@ type SalesRecord = {
   costAmount: number;
   profitAmount: number;
   profitRate: number;
-  remark?: string;
 };
 
 type SalesUploadRequest = {
@@ -3637,7 +3636,6 @@ function makeSale(
   stores: Store[],
   uploadedProfitRate?: number,
   sourceRowNumber?: number,
-  remark?: string,
 ): SalesRecord {
   const s = storeMap(stores).get(storeCode);
   const profitRate = Number.isFinite(uploadedProfitRate)
@@ -3667,7 +3665,6 @@ function makeSale(
     costAmount,
     profitAmount,
     profitRate,
-    remark: norm(remark),
   };
 }
 
@@ -4131,7 +4128,6 @@ type V3SalesRecordRow = {
   cost_amount: number | string;
   profit_amount: number | string;
   profit_rate: number | string;
-  remark?: string;
 };
 
 type PriorYearStoreHistoryRow = {
@@ -4168,7 +4164,6 @@ function toV3Payload(row: SalesRecord) {
     cost_amount: Number(row.costAmount || 0),
     profit_amount: Number(row.profitAmount || 0),
     profit_rate: Number(row.profitRate || 0),
-    remark: norm(row.remark),
   };
 }
 
@@ -4193,7 +4188,6 @@ function fromV3Row(row: V3SalesRecordRow): SalesRecord {
     costAmount: Number(row.cost_amount || 0),
     profitAmount: Number(row.profit_amount || 0),
     profitRate: Number(row.profit_rate || 0),
-    remark: norm(row.remark),
   };
 }
 
@@ -13603,61 +13597,6 @@ function compactList(values: string[]) {
   return `${unique.slice(0, 3).join(", ")} 외 ${unique.length - 3}개`;
 }
 
-function hangulInitials(value: unknown) {
-  const initials = [
-    "ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ",
-    "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ",
-  ];
-  return Array.from(norm(value).toLowerCase())
-    .map((char) => {
-      const code = char.charCodeAt(0);
-      if (code < 0xac00 || code > 0xd7a3) return char;
-      return initials[Math.floor((code - 0xac00) / 588)] || char;
-    })
-    .join("");
-}
-
-function drillTextMatches(value: unknown, query: string) {
-  const q = norm(query).toLowerCase().replace(/\s+/g, "");
-  if (!q) return true;
-  const text = norm(value).toLowerCase();
-  const compact = text.replace(/\s+/g, "");
-  return compact.includes(q) || hangulInitials(text).replace(/\s+/g, "").includes(q);
-}
-
-type OrderDrillColumnKey =
-  | "saleDate"
-  | "storeCode"
-  | "storeName"
-  | "itemCode"
-  | "itemName"
-  | "quantity"
-  | "saleUnitPrice"
-  | "salesAmount"
-  | "costUnitPrice"
-  | "costAmount"
-  | "profitAmount"
-  | "profitRate"
-  | "remark";
-
-function dailyProfitRowsForExcel(rows: SalesRecord[]) {
-  return rows.map((r) => ({
-    "일자 No.": r.saleDate,
-    "거래처 코드": r.storeCode,
-    거래처명: r.storeName,
-    "품목 코드": r.itemCode,
-    "품목명[규격]": r.itemName,
-    "판매 수량": r.quantity,
-    "판매 단가": r.saleUnitPrice,
-    "판매 금액": r.salesAmount,
-    "원가 단가": r.costUnitPrice,
-    "원가 금액": r.costAmount,
-    "이익 금액": r.profitAmount,
-    이익률: pct(r.profitRate),
-    적요: norm(r.remark),
-  }));
-}
-
 function OrderDrillModal({
   title,
   rows,
@@ -13674,251 +13613,137 @@ function OrderDrillModal({
     itemName: string;
     rows: SalesRecord[];
   } | null>(null);
-  const [globalSearch, setGlobalSearch] = useState("");
-  const [columnFilters, setColumnFilters] = useState<Record<OrderDrillColumnKey, string>>({
-    saleDate: "",
-    storeCode: "",
-    storeName: "",
-    itemCode: "",
-    itemName: "",
-    quantity: "",
-    saleUnitPrice: "",
-    salesAmount: "",
-    costUnitPrice: "",
-    costAmount: "",
-    profitAmount: "",
-    profitRate: "",
-    remark: "",
-  });
-  const [sortState, setSortState] = useState<{
-    key: OrderDrillColumnKey;
-    direction: SortDirection;
-  }>({ key: "saleDate", direction: "asc" });
-
-  const filteredRows = useMemo(() => {
-    const globallyFiltered = rows.filter((r) => {
-      if (!globalSearch.trim()) return true;
-      return [r.storeName, r.storeCode, r.itemName, r.itemCode, r.remark]
-        .some((value) => drillTextMatches(value, globalSearch));
-    });
-
-    const columnFiltered = globallyFiltered.filter((r) => {
-      const values: Record<OrderDrillColumnKey, unknown> = {
-        saleDate: r.saleDate,
-        storeCode: r.storeCode,
-        storeName: r.storeName,
-        itemCode: r.itemCode,
-        itemName: r.itemName,
-        quantity: r.quantity,
-        saleUnitPrice: r.saleUnitPrice,
-        salesAmount: r.salesAmount,
-        costUnitPrice: r.costUnitPrice,
-        costAmount: r.costAmount,
-        profitAmount: r.profitAmount,
-        profitRate: r.profitRate,
-        remark: r.remark || "",
-      };
-      return (Object.keys(columnFilters) as OrderDrillColumnKey[]).every((key) => {
-        const filter = columnFilters[key];
-        if (!filter.trim()) return true;
-        if (["storeName", "itemName", "remark"].includes(key)) {
-          return drillTextMatches(values[key], filter);
-        }
-        const formatted = key === "profitRate" ? pct(Number(values[key] || 0)) : String(values[key] ?? "");
-        return formatted.toLowerCase().replace(/,/g, "").includes(filter.toLowerCase().replace(/,/g, "").trim());
-      });
-    });
-
-    return [...columnFiltered].sort((a, b) => {
-      const av = sortState.key === "remark" ? (a.remark || "") : a[sortState.key as keyof SalesRecord];
-      const bv = sortState.key === "remark" ? (b.remark || "") : b[sortState.key as keyof SalesRecord];
-      let result = 0;
-      if (typeof av === "number" || typeof bv === "number") {
-        result = Number(av || 0) - Number(bv || 0);
-      } else {
-        result = String(av ?? "").localeCompare(String(bv ?? ""), "ko-KR");
-      }
-      return sortState.direction === "asc" ? result : -result;
-    });
-  }, [rows, globalSearch, columnFilters, sortState]);
-
-  const totalSales = sum(filteredRows, "salesAmount");
-  const totalQuantity = sum(filteredRows, "quantity");
-  const totalProfit = sum(filteredRows, "profitAmount");
-  const totalProfitRate = weightedProfitRate(filteredRows);
-  const excelRows = dailyProfitRowsForExcel(filteredRows);
-
-  const clearFilters = () => {
-    setGlobalSearch("");
-    setColumnFilters({
-      saleDate: "",
-      storeCode: "",
-      storeName: "",
-      itemCode: "",
-      itemName: "",
-      quantity: "",
-      saleUnitPrice: "",
-      salesAmount: "",
-      costUnitPrice: "",
-      costAmount: "",
-      profitAmount: "",
-      profitRate: "",
-      remark: "",
-    });
-  };
-
-  const requestColumnSort = (key: OrderDrillColumnKey) => {
-    setSortState((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
-    }));
-  };
+  const totalSales = sum(rows, "salesAmount");
+  const totalQuantity = sum(rows, "quantity");
+  const totalProfit = sum(rows, "profitAmount");
+  const excelRows = orderRowsForExcel(rows);
+  const summaryBrand = compactList(rows.map((r) => r.brand));
+  const summaryManager = compactList(rows.map((r) => r.manager || "미지정"));
+  const summaryChannel = compactList(rows.map((r) => r.channel));
 
   const openItemDrill = (itemCode: string, itemName: string) => {
-    const filtered = allSales
+    const filteredRows = allSales
       .filter((r) => r.itemCode === itemCode)
       .sort(
         (a, b) =>
           b.saleDate.localeCompare(a.saleDate) ||
           a.storeName.localeCompare(b.storeName, "ko-KR"),
       );
-    setItemDrill({ itemCode, itemName, rows: filtered });
+    setItemDrill({ itemCode, itemName, rows: filteredRows });
   };
 
-  const columns: Array<{
-    key: OrderDrillColumnKey;
-    label: string;
-    align?: "left" | "right";
-    width: string;
-    placeholder?: string;
-  }> = [
-    { key: "saleDate", label: "일자 No.", width: "w-[112px]" },
-    { key: "storeCode", label: "거래처 코드", width: "w-[120px]" },
-    { key: "storeName", label: "거래처명", width: "w-[220px]", placeholder: "검색" },
-    { key: "itemCode", label: "품목 코드", width: "w-[110px]" },
-    { key: "itemName", label: "품목명[규격]", width: "w-[320px]", placeholder: "검색" },
-    { key: "quantity", label: "판매 수량", align: "right", width: "w-[92px]" },
-    { key: "saleUnitPrice", label: "판매 단가", align: "right", width: "w-[105px]" },
-    { key: "salesAmount", label: "판매 금액", align: "right", width: "w-[120px]" },
-    { key: "costUnitPrice", label: "원가 단가", align: "right", width: "w-[105px]" },
-    { key: "costAmount", label: "원가 금액", align: "right", width: "w-[120px]" },
-    { key: "profitAmount", label: "이익 금액", align: "right", width: "w-[115px]" },
-    { key: "profitRate", label: "이익률", align: "right", width: "w-[90px]" },
-    { key: "remark", label: "적요", width: "w-[160px]", placeholder: "검색" },
-  ];
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-2">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3">
       <style jsx global>{`
-        .daily-profit-modal-table,
-        .daily-profit-modal-table th,
-        .daily-profit-modal-table td {
+        .order-popup-table,
+        .order-popup-table th,
+        .order-popup-table td {
           border-color: #d1d5db !important;
         }
-        .daily-profit-modal-table thead th::before,
-        .daily-profit-modal-table thead th::after {
-          display: none !important;
-          content: none !important;
-        }
       `}</style>
-      <div className="flex h-[96vh] max-h-[96vh] w-full max-w-[98vw] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200">
-        <div className="shrink-0 border-b border-gray-300 bg-white px-5 py-4 shadow-sm">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-            <div className="min-w-0 flex-1">
-              <h3 className="text-xl font-extrabold text-slate-900">
-                일별이익현황 · {title}
+      <div className="flex max-h-[94vh] w-full max-w-[96vw] flex-col rounded-2xl bg-white shadow-2xl">
+        <div className="sticky top-0 z-20 flex flex-col gap-3 border-b border-gray-300 bg-white p-5 shadow-sm xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-xl font-bold text-slate-900">
+                {title} 주문내역
               </h3>
-              <p className="mt-1 text-sm text-slate-500">
-                전체 {rows.length.toLocaleString("ko-KR")}건 · 현재 표시 {filteredRows.length.toLocaleString("ko-KR")}건 · 수량 {won(totalQuantity)} · 판매금액 {won(totalSales)}원 · 이익금액 {won(totalProfit)}원 · 이익률 {pct(totalProfitRate)}
-              </p>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                브랜드: {summaryBrand}
+              </span>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                담당자: {summaryManager}
+              </span>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                채널: {summaryChannel}
+              </span>
             </div>
-
-            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-              <div className="relative w-[380px] max-w-[38vw] min-w-[260px]">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">⌕</span>
-                <input
-                  value={globalSearch}
-                  onChange={(event) => setGlobalSearch(event.target.value)}
-                  placeholder="거래처명 / 품목명 / 품목코드 검색 (초성 가능)"
-                  className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
-              >
-                필터 초기화
-              </button>
-              <button
-                type="button"
-                onClick={() => exportExcel(excelRows, `${title.replaceAll(" ", "_").replaceAll("·", "_")}_일별이익현황`)}
-                className="h-10 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
-              >
-                엑셀 다운로드
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="h-10 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                닫기
-              </button>
-            </div>
+            <p className="mt-2 text-sm text-slate-500">
+              총 {rows.length.toLocaleString("ko-KR")}건 · 수량{" "}
+              {won(totalQuantity)} · 매출 {won(totalSales)}원 · 이익{" "}
+              {won(totalProfit)}원
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              상품코드를 클릭하면 해당 품목이 나간 전체 거래처 주문내역을 볼 수
+              있습니다.
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                exportExcel(
+                  excelRows,
+                  `${title.replaceAll(" ", "_").replaceAll("·", "_")}_주문내역`,
+                )
+              }
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+            >
+              주문내역 엑셀 다운로드
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              닫기
+            </button>
           </div>
         </div>
 
-        <div className="relative min-h-0 flex-1 overflow-auto bg-white">
-          <table className="daily-profit-modal-table w-full min-w-[1880px] table-fixed border-separate border-spacing-0 bg-white text-xs">
-            <thead className="sticky top-0 z-[90] bg-white shadow-[0_2px_0_0_#cbd5e1]">
-              <tr className="bg-slate-50">
-                {columns.map((column) => (
-                  <th
-                    key={column.key}
-                    className={`${column.width} border border-gray-300 bg-slate-50 px-2 py-2 ${column.align === "right" ? "text-right" : "text-left"}`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => requestColumnSort(column.key)}
-                      className={`flex w-full items-center gap-1 font-extrabold text-slate-800 ${column.align === "right" ? "justify-end" : "justify-start"}`}
-                      title={`${column.label} 정렬`}
-                    >
-                      <span>{column.label}</span>
-                      <span className="text-[10px] text-slate-400">
-                        {sortState.key === column.key ? (sortState.direction === "asc" ? "↑" : "↓") : "↕"}
-                      </span>
-                    </button>
-                  </th>
-                ))}
-              </tr>
+        <div className="relative isolate min-h-0 flex-1 overflow-auto bg-white px-5 pb-5 pt-0">
+          <table className="order-popup-table w-full min-w-[1100px] border-separate border-spacing-0 border border-gray-300 bg-white text-sm">
+            <thead className="sticky top-0 z-[80] bg-white shadow-[0_2px_0_0_#e2e8f0]">
               <tr className="bg-white">
-                {columns.map((column) => (
-                  <th key={`filter-${column.key}`} className={`${column.width} border border-gray-300 bg-white p-1`}>
-                    <input
-                      value={columnFilters[column.key]}
-                      onChange={(event) => setColumnFilters((prev) => ({ ...prev, [column.key]: event.target.value }))}
-                      placeholder={column.placeholder || "필터"}
-                      className={`h-7 w-full rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 outline-none placeholder:text-slate-300 focus:border-orange-300 ${column.align === "right" ? "text-right" : "text-left"}`}
-                      aria-label={`${column.label} 필터`}
-                    />
-                  </th>
-                ))}
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  주문일
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  거래처
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  상품코드
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  상품명
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  수량
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  매출금액
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  원가금액
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  이익금액
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  이익률
+                </th>
               </tr>
             </thead>
             <tbody>
-              {filteredRows.length === 0 ? (
+              {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="border border-gray-300 p-12 text-center text-sm text-slate-500">
-                    검색/필터 조건에 맞는 일별이익현황 데이터가 없습니다.
+                  <td
+                    colSpan={9}
+                    className="border border-gray-300 p-10 text-center text-slate-500"
+                  >
+                    표시할 주문내역이 없습니다.
                   </td>
                 </tr>
               ) : (
-                filteredRows.map((r) => (
-                  <tr key={r.id} className="hover:bg-orange-50/40">
-                    <td className="border border-gray-300 px-2 py-2 whitespace-nowrap">{r.saleDate}</td>
-                    <td className="border border-gray-300 px-2 py-2 whitespace-nowrap">{r.storeCode}</td>
-                    <td className="border border-gray-300 px-2 py-2 font-semibold" title={r.storeName}>{r.storeName}</td>
-                    <td className="border border-gray-300 px-2 py-2 whitespace-nowrap">
+                rows.map((r) => (
+                  <tr key={r.id} className="hover:bg-slate-50">
+                    <td className="border border-gray-300 px-3 py-2">
+                      {r.saleDate}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2 font-semibold">
+                      {r.storeName}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
                       <button
                         type="button"
                         onClick={() => openItemDrill(r.itemCode, r.itemName)}
@@ -13928,36 +13753,28 @@ function OrderDrillModal({
                         {r.itemCode}
                       </button>
                     </td>
-                    <td className="border border-gray-300 px-2 py-2" title={r.itemName}>{r.itemName}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right">{won(r.quantity)}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right">{won(r.saleUnitPrice)}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right font-bold">{won(r.salesAmount)}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right">{won(r.costUnitPrice)}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right">{won(r.costAmount)}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right font-semibold">{won(r.profitAmount)}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right">{pct(r.profitRate)}</td>
-                    <td className="border border-gray-300 px-2 py-2" title={r.remark || ""}>{r.remark || ""}</td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      {r.itemName}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2 text-right">
+                      {won(r.quantity)}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2 text-right text-base font-bold text-slate-900">
+                      {won(r.salesAmount)}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2 text-right font-semibold text-slate-900">
+                      {won(r.costAmount)}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2 text-right font-semibold text-slate-900">
+                      {won(r.profitAmount)}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2 text-right text-slate-900">
+                      {pct(r.profitRate)}
+                    </td>
                   </tr>
                 ))
               )}
             </tbody>
-            {filteredRows.length > 0 && (
-              <tfoot className="sticky bottom-0 z-[70] bg-amber-50 shadow-[0_-2px_0_0_#fde68a]">
-                <tr className="font-extrabold text-slate-900">
-                  <td colSpan={5} className="border border-amber-300 bg-amber-50 px-3 py-2 text-left">
-                    합계 (검색/헤더 필터 결과 {filteredRows.length.toLocaleString("ko-KR")}건)
-                  </td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(totalQuantity)}</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">-</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(totalSales)}</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">-</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(sum(filteredRows, "costAmount"))}</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(totalProfit)}</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{pct(totalProfitRate)}</td>
-                  <td className="border border-amber-300 bg-amber-50 px-2 py-2" />
-                </tr>
-              </tfoot>
-            )}
           </table>
         </div>
       </div>
@@ -17046,7 +16863,6 @@ function UploadPage({
             r["매출이익률"] ??
             r["마진율"],
         );
-        const remark = norm(r["적요"] ?? r["비고"] ?? r["메모"]);
         const mapping = storeMap(stores).get(storeCode);
 
         const saleMonth = saleDate.slice(0, 7);
@@ -17067,7 +16883,6 @@ function UploadPage({
           stores,
           uploadedProfitRate,
           index + 2,
-          remark,
         );
       })
       .filter(
