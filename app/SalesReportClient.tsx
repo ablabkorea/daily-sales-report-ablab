@@ -5239,122 +5239,86 @@ export default function SalesReportClient() {
       )}
 
       {!isMobile && (
-      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white shadow-sm">
-        <div className="mobile-header-inner flex min-h-[60px] flex-col gap-2 px-4 py-2 lg:flex-row lg:items-center lg:justify-between lg:px-5">
-          <div className="mobile-header-main flex flex-wrap items-center gap-3">
-            <div className="mobile-report-title text-lg font-extrabold tracking-tight text-orange-950">
-              에이비랩 코리아 Sales Report
+        <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
+          <div className="flex h-[62px] items-center gap-5 px-5 pl-[78px]">
+            <div className="flex shrink-0 items-center gap-2 border-r border-slate-200 pr-5">
+              <span className="flex items-end gap-[2px]" aria-hidden="true">
+                <i className="block h-2 w-1.5 rounded-sm bg-blue-500" />
+                <i className="block h-3.5 w-1.5 rounded-sm bg-blue-500" />
+                <i className="block h-5 w-1.5 rounded-sm bg-blue-600" />
+              </span>
+              <span className="text-[16px] font-black tracking-tight text-slate-900">Sales Report</span>
             </div>
 
-          </div>
-          <div className="mobile-header-actions flex flex-wrap items-center justify-end gap-2">
-            {!isAppInstalled && (
-              <button
-                type="button"
-                onClick={installApp}
-                className="install-app-button shrink-0 rounded-xl border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-50"
-              >
-                앱 설치
-              </button>
-            )}
+            <div className="flex min-w-0 flex-1 items-center gap-0">
+              <label className="relative min-w-[128px] border-r border-slate-200 px-4">
+                <span className="block text-[9px] font-bold text-slate-500">기준년월</span>
+                <input
+                  type="month"
+                  value={dashMonth}
+                  onChange={(e) => setDashMonth(e.target.value)}
+                  className="mt-0.5 w-[108px] border-0 bg-transparent p-0 text-[12px] font-black text-slate-900 outline-none"
+                />
+              </label>
+              <label className="relative min-w-[130px] border-r border-slate-200 px-4">
+                <span className="block text-[9px] font-bold text-slate-500">기준일</span>
+                <input
+                  type="date"
+                  value={dashDate}
+                  min={monthStart(dashMonth)}
+                  max={monthEnd(dashMonth)}
+                  onChange={(e) => setDashDate(e.target.value)}
+                  className="mt-0.5 w-[112px] border-0 bg-transparent p-0 text-[12px] font-black text-slate-900 outline-none"
+                />
+              </label>
+              <div className="min-w-[96px] border-r border-slate-200 px-4">
+                <div className="text-[9px] font-bold uppercase text-slate-500">TIME GONE</div>
+                <div className="mt-0.5 text-[13px] font-black text-blue-600">{pct(tg.timeGoneRate)}</div>
+              </div>
+              <div className="min-w-[76px] border-r border-slate-200 px-4">
+                <div className="text-[9px] font-bold text-slate-500">총일수</div>
+                <div className="mt-0.5 text-[13px] font-black text-slate-900">{tg.totalDays}일</div>
+              </div>
+              <div className="min-w-[82px] border-r border-slate-200 px-4">
+                <div className="text-[9px] font-bold text-slate-500">진행일수</div>
+                <div className="mt-0.5 text-[13px] font-black text-slate-900">{tg.progressedDays}일</div>
+              </div>
+              <div className="min-w-[76px] px-4">
+                <div className="text-[9px] font-bold text-slate-500">잔여일수</div>
+                <div className="mt-0.5 text-[13px] font-black text-slate-900">{tg.remainingDays}일</div>
+              </div>
+            </div>
 
-            <div className="sync-control flex shrink-0 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5">
+            <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
                 onClick={requestLatestEcountSync}
                 disabled={ecountSyncRequesting || ecountSyncBusy(ecountSyncState)}
-                className="sync-button shrink-0 rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-extrabold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                className="flex min-w-[116px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-[12px] font-black text-slate-800 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                 title={
                   ecountSyncState?.status === "RUNNING" && ecountSyncState.claimedBy
                     ? `${ecountSyncState.claimedBy} PC에서 동기화 중`
                     : "ECOUNT 최신 데이터를 즉시 Sales Report에 반영합니다."
                 }
               >
-                {ecountSyncState?.status === "RUNNING"
-                  ? "동기화 중"
-                  : ecountSyncState?.status === "PENDING" || ecountSyncState?.status === "CLAIMED"
-                    ? "요청 대기"
-                    : ecountSyncRequesting
-                      ? "요청 중"
-                      : "동기화"}
+                <span className="text-[17px] leading-none">↻</span>
+                <span>{ecountSyncBusy(ecountSyncState) || ecountSyncRequesting ? "동기화 중" : "동기화"}</span>
               </button>
-
-              <div className="sync-status min-w-0 leading-tight">
-                <div className={`whitespace-nowrap text-[10px] font-extrabold ${
-                  ecountSyncState?.status === "FAILED"
-                    ? "text-red-700"
-                    : ecountSyncBusy(ecountSyncState)
-                      ? "text-amber-700"
-                      : "text-emerald-800"
-                }`}>
+              <div className="min-w-[108px] leading-tight">
+                <div className={`text-[9px] font-extrabold ${ecountSyncState?.status === "FAILED" ? "text-red-600" : ecountSyncBusy(ecountSyncState) ? "text-amber-600" : "text-slate-500"}`}>
                   {ecountSyncLoading ? "상태 확인 중" : ecountSyncStatusLabel(ecountSyncState)}
                 </div>
-                <div className="mt-0.5 whitespace-nowrap text-[9px] font-semibold text-slate-500">
-                  마지막 성공 {formatSyncTime(ecountSyncState?.lastSuccessAt)}
-                  {ecountSyncState?.lastSuccessPc ? ` · ${ecountSyncState.lastSuccessPc}` : ""}
+                <div className="mt-0.5 whitespace-nowrap text-[9px] font-semibold text-slate-400">
+                  {formatSyncTime(ecountSyncState?.lastSuccessAt)}
                 </div>
-                {ecountSyncError && (
-                  <div className="mt-0.5 max-w-[220px] truncate text-[9px] font-semibold text-red-600">
-                    {ecountSyncError}
-                  </div>
-                )}
               </div>
             </div>
-
-            {notificationSupported && (
-              <button
-                type="button"
-                disabled={notificationBusy}
-                onClick={notificationSubscribed ? disableNotifications : enableNotifications}
-                className="notification-button shrink-0 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2 text-xs font-bold text-sky-800 hover:bg-sky-100 disabled:opacity-50"
-              >
-                {notificationSubscribed ? "알림 끄기" : "알림 받기"}
-              </button>
-            )}
-            {isAdmin ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setMenuSettingsOpen(true)}
-                  className="rounded-xl border border-orange-300 bg-orange-50 px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-100"
-                >
-                  카테고리 공개 설정
-                </button>
-                <button
-                  type="button"
-                  onClick={changeAdminPassword}
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
-                >
-                  비밀번호 변경
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAdmin(false);
-                    setActive(openMenus[0]?.label || "EST 입력");
-                  }}
-                  className="rounded-xl bg-orange-100 px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-200"
-                >
-                  관리자 모드 해제
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={adminLogin}
-                className="rounded-xl bg-orange-100 px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-200"
-              >
-                관리자 로그인
-              </button>
-            )}
           </div>
-        </div>
-      </header>
-
+        </header>
       )}
 
       {!isMobile && (
-        <aside className="group fixed bottom-0 left-0 top-[61px] z-[80] w-[58px] overflow-hidden border-r border-slate-200 bg-white shadow-sm transition-all duration-200 hover:w-[210px]">
+        <aside className="group fixed bottom-0 left-0 top-[62px] z-[80] w-[58px] overflow-hidden border-r border-slate-200 bg-white transition-all duration-200 hover:w-[210px]">
           <div className="flex h-full flex-col py-3">
             <div className="mb-2 flex h-9 items-center px-4 text-xl font-black text-slate-500">☰<span className="ml-4 whitespace-nowrap text-xs font-black text-slate-800 opacity-0 transition-opacity group-hover:opacity-100">메뉴</span></div>
             <nav className="space-y-1 px-2">
@@ -5365,6 +5329,30 @@ export default function SalesReportClient() {
                 </button>
               ))}
             </nav>
+
+            <div className="mt-auto border-t border-slate-100 px-2 pt-3">
+              {isAdmin ? (
+                <div className="space-y-1">
+                  <button type="button" onClick={() => setMenuSettingsOpen(true)} className="flex h-9 w-full items-center rounded-xl px-2 text-slate-600 hover:bg-slate-50">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[15px]">⚙</span>
+                    <span className="ml-3 whitespace-nowrap text-[11px] font-black opacity-0 transition-opacity group-hover:opacity-100">공개 설정</span>
+                  </button>
+                  <button type="button" onClick={changeAdminPassword} className="flex h-9 w-full items-center rounded-xl px-2 text-slate-600 hover:bg-slate-50">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[14px]">⌘</span>
+                    <span className="ml-3 whitespace-nowrap text-[11px] font-black opacity-0 transition-opacity group-hover:opacity-100">비밀번호 변경</span>
+                  </button>
+                  <button type="button" onClick={() => { setIsAdmin(false); setActive(openMenus[0]?.label || "EST 입력"); }} className="flex h-9 w-full items-center rounded-xl px-2 text-slate-600 hover:bg-slate-50">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[15px]">⇥</span>
+                    <span className="ml-3 whitespace-nowrap text-[11px] font-black opacity-0 transition-opacity group-hover:opacity-100">관리자 모드 해제</span>
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={adminLogin} className="flex h-10 w-full items-center rounded-xl px-2 text-slate-600 transition hover:bg-slate-50">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[16px]">⇥</span>
+                  <span className="ml-3 whitespace-nowrap text-[11px] font-black opacity-0 transition-opacity group-hover:opacity-100">관리자 로그인</span>
+                </button>
+              )}
+            </div>
           </div>
         </aside>
       )}
@@ -5412,7 +5400,7 @@ export default function SalesReportClient() {
         </div>
       )}
 
-      <section className={`flex h-[calc(100vh-61px)] min-w-0 flex-col overflow-hidden p-4 pb-10 lg:p-5 lg:pb-10 ${!isMobile ? "ml-[58px]" : ""}`}>
+      <section className={`flex h-[calc(100vh-62px)] min-w-0 flex-col overflow-hidden p-4 pb-10 lg:p-5 lg:pb-10 ${!isMobile ? "ml-[58px]" : ""}`}>
         <style jsx global>{`
           .sales-report-root table th,
           .sales-report-root table td,
@@ -5437,11 +5425,18 @@ export default function SalesReportClient() {
             box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.18) !important;
           }
 
-          .sales-report-root[data-active="대시보드"] .dashboard-comparison-table thead th {
+          .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th {
             color: #ffffff !important;
-            background: #1e293b !important;
+            background-color: #1e293b !important;
+            border-color: #475569 !important;
+            -webkit-text-fill-color: #ffffff !important;
           }
-          .sales-report-root[data-active="대시보드"] .dashboard-comparison-table thead th * { color: #ffffff !important; }
+          .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th *,
+          .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th::before,
+          .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th::after {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+          }
 
           /* 표 섹션 제목은 색 대신 간격과 타이포그래피로 위계를 만듭니다. */
           .sales-report-root[data-active="대시보드"] h2,
@@ -5735,6 +5730,19 @@ export default function SalesReportClient() {
           }
 
           @media (min-width: 768px) {
+            .sales-report-root[data-active="대시보드"] > section {
+              background: #f8fafc !important;
+              padding-top: 1rem !important;
+            }
+            .sales-report-root[data-active="대시보드"] .dashboard-comparison-table tbody td {
+              color: #0f172a !important;
+            }
+            .sales-report-root[data-active="대시보드"] .dashboard-comparison-table tbody td.text-blue-600 {
+              color: #2563eb !important;
+            }
+            .sales-report-root[data-active="대시보드"] .dashboard-comparison-table tbody td.text-emerald-600 {
+              color: #16a34a !important;
+            }
             .sales-report-root .mobile-header-actions {
               flex-wrap: wrap !important;
               justify-content: flex-end;
@@ -6147,11 +6155,14 @@ export default function SalesReportClient() {
         {!isMobile && (
         <div
           className={
-            ["매출현황", "거래처별 상세", "품목분석"].includes(active)
-              ? "mb-2 space-y-1"
-              : "mb-4 space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+            active === "대시보드"
+              ? "mb-4 space-y-4"
+              : ["매출현황", "거래처별 상세", "품목분석"].includes(active)
+                ? "mb-2 space-y-1"
+                : "mb-4 space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
           }
         >
+          {active !== "대시보드" && (
           <div
             className={
               ["매출현황", "거래처별 상세", "품목분석"].includes(active)
@@ -6209,6 +6220,7 @@ export default function SalesReportClient() {
               )}
             </div>
           </div>
+          )}
 
           {!isMobile && active === "대시보드" && (
             <DashboardTopKpis
