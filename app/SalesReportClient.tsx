@@ -7468,177 +7468,123 @@ function EstQuickEntry({
 
   return (
     <div className="space-y-2">
-        <div className="flex flex-wrap items-end justify-between gap-2 px-1 pb-1">
-          <div>
-            <h2 className="text-lg font-black tracking-tight text-slate-900">0. EST 입력</h2>
-            <p className="mt-0.5 text-[11px] font-semibold text-slate-500">브랜드 또는 거래처별로 EST 목표를 입력하고 관리합니다.</p>
-          </div>
-          <div className="text-[11px] font-bold text-slate-500">{selectedManager} 담당 · 매장 {won(managerInfo.store)}개 · 비매장 {won(managerInfo.nonStore)}개</div>
+      <div className="flex flex-wrap items-end justify-between gap-2 px-1 pb-1">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-5 gap-y-1">
+          <h2 className="text-lg font-black tracking-tight text-slate-900">0. EST 입력</h2>
+          <p className="text-[11px] font-semibold text-slate-500">
+            브랜드 또는 거래처별로 EST 목표를 입력하고 관리합니다.
+          </p>
         </div>
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[150px_minmax(0,1fr)] xl:items-start">
-      <aside className="w-full shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 bg-slate-50 px-3 py-3 text-center text-xs font-extrabold text-slate-700">
-          담당자 선택
+        <div className="text-[11px] font-bold text-slate-500">
+          {selectedManager} 담당 · 매장 {won(managerInfo.store)}개 · 비매장 {won(managerInfo.nonStore)}개 · 전체 {won(managerInfo.total)}개
         </div>
-        <div className="flex max-h-[205px] flex-col gap-1 overflow-y-auto p-2">
-          {activeManagers.map((config) => {
-            const visibleCount = stores.filter((store) => {
-              if (store.manager.trim().toUpperCase() !== config.name) return false;
-              if (statusView === "active" && store.status !== "거래중") return false;
-              if (statusView === "paused" && store.status !== "거래중단") return false;
-              if (statusView === "ended" && store.status !== "거래종료") return false;
-              if (channelView === "store" && store.storeType !== "매장") return false;
-              if (channelView === "nonStore" && store.storeType === "매장") return false;
-              return true;
-            }).length;
-            return (
-              <button
-                key={config.name}
-                type="button"
-                onClick={() => setSelectedManager(config.name)}
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-extrabold transition ${
-                  selectedManager === config.name
-                    ? "bg-violet-600 text-white shadow-sm"
-                    : "bg-white text-slate-700 hover:bg-violet-50 hover:text-violet-800"
-                }`}
-              >
-                <span>{config.name}</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] ${selectedManager === config.name ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
-                  {visibleCount}
-                </span>
-              </button>
-            );
-          })}
-          {!activeManagers.length && (
-            <div className="px-2 py-4 text-center text-xs font-semibold text-slate-500">
-              월초관리에서 사용할 담당자를 활성화해주세요.
-            </div>
-          )}
-        </div>
+      </div>
 
-        {activeManagers.length > 0 && (
-          <div className="border-t border-slate-200 bg-rose-50/70 p-3">
-            <button
-              type="button"
-              onClick={resetSelectedManagerEst}
-              disabled={!canEdit || selectedManagerEstInputCount === 0}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-2 text-[11px] font-extrabold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-              title={`${selectedManager} 담당자의 ${month} 당월 EST만 초기화합니다.`}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-end gap-3 border-b border-slate-200 bg-white px-4 py-3">
+          <label className="w-[150px] shrink-0">
+            <span className="mb-1 block text-[10px] font-extrabold text-slate-500">담당자</span>
+            <select
+              value={selectedManager}
+              onChange={(event) => setSelectedManager(event.target.value)}
+              className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-extrabold text-slate-800 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
+              aria-label="EST 담당자 선택"
             >
-              <span>당월 EST 초기화</span>
-              <span>({selectedManagerEstInputCount}건)</span>
-            </button>
+              {activeManagers.map((config) => {
+                const managerStoreCount = stores.filter(
+                  (store) => store.manager.trim().toUpperCase() === config.name,
+                ).length;
+                return (
+                  <option key={config.name} value={config.name}>
+                    {config.name} ({managerStoreCount})
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+
+          <div className="flex min-h-10 items-center gap-4 pb-0.5 text-[12px] font-bold text-slate-600">
+            <span>
+              거래처 <strong className="text-slate-900">{won(managerInfo.total)}개</strong>
+            </span>
+            <span className="h-4 w-px bg-slate-200" />
+            <span>
+              매장 <strong className="text-slate-900">{won(managerInfo.store)}개</strong>
+            </span>
+            <span className="h-4 w-px bg-slate-200" />
+            <span>
+              비매장 <strong className="text-slate-900">{won(managerInfo.nonStore)}개</strong>
+            </span>
           </div>
-        )}
 
-      </aside>
-        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="grid gap-3 2xl:grid-cols-[minmax(620px,0.95fr)_minmax(620px,1.05fr)] 2xl:items-center">
-            <div className="flex flex-wrap items-stretch gap-3">
-              <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-2.5 shadow-sm">
-                  <div className="text-[11px] font-extrabold text-slate-500">매장 EST 합계</div>
-                  <div className="mt-1 text-xl font-black tracking-tight text-slate-900">{won(selectedManagerEstSummary.storeEst)}원</div>
-                  <div className="mt-1 text-[10px] font-bold text-slate-400">{selectedManager} · 매장 {won(managerInfo.store)}개</div>
-                </div>
-                <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-2.5 shadow-sm">
-                  <div className="text-[11px] font-extrabold text-slate-500">비매장 EST 합계</div>
-                  <div className="mt-1 text-xl font-black tracking-tight text-slate-900">{won(selectedManagerEstSummary.nonStoreEst)}원</div>
-                  <div className="mt-1 text-[10px] font-bold text-slate-400">{selectedManager} · 비매장 {won(managerInfo.nonStore)}개</div>
-                </div>
-                <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-4 py-2.5 shadow-sm">
-                  <div className="text-[11px] font-extrabold text-slate-500">전체 EST 합계</div>
-                  <div className="mt-1 text-xl font-black tracking-tight text-slate-900">{won(selectedManagerEstSummary.storeEst + selectedManagerEstSummary.nonStoreEst)}원</div>
-                  <div className="mt-1 text-[10px] font-bold text-slate-400">전체 거래처 {won(managerInfo.total)}개</div>
-                </div>
-              </div>
+          <button
+            type="button"
+            onClick={resetSelectedManagerEst}
+            disabled={!canEdit || selectedManagerEstInputCount === 0}
+            className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-[11px] font-extrabold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-40"
+            title={`${selectedManager} 담당자의 ${month} 당월 EST만 초기화합니다.`}
+          >
+            당월 EST 초기화 ({selectedManagerEstInputCount}건)
+          </button>
 
-              {selectedManagerConfig?.canTarget && (
-                <div className="w-[360px] max-w-full shrink-0 overflow-hidden rounded-xl border border-orange-200 bg-orange-50/50 shadow-sm">
-                  <div className="border-b border-orange-200 bg-orange-100/70 px-4 py-2 text-left text-[13px] font-extrabold text-slate-900">
-                    Target 입력
-                  </div>
-                  <div className="grid grid-cols-2 divide-x divide-orange-200">
-                    <label className="px-3 py-2.5 text-center text-[12px] font-bold text-slate-700">
-                      매장 Target
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        disabled={!canEditTarget}
-                        value={targetByType.store ? won(targetByType.store) : ""}
-                        onChange={(e) => updateTargetByType("매장", num(e.target.value))}
-                        placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                        className="mt-1 h-8 w-full min-w-0 rounded-lg border border-orange-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
-                      />
-                    </label>
-                    <label className="px-3 py-2.5 text-center text-[12px] font-bold text-slate-700">
-                      비매장 Target
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        disabled={!canEditTarget}
-                        value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
-                        onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
-                        placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                        className="mt-1 h-8 w-full min-w-0 rounded-lg border border-orange-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
-                      />
-                    </label>
-                  </div>
-                </div>
-              )}
+          <div className="ml-auto flex min-w-0 flex-wrap items-end justify-end gap-2">
+            <label className="relative block w-[260px] max-w-full">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
+              <input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="거래처명 · 코드 · 브랜드 검색"
+                className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 text-xs font-semibold outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
+              />
+            </label>
+
+            <div className="flex items-center rounded-xl border border-violet-200 bg-violet-50 p-1 text-xs font-extrabold">
+              <button
+                type="button"
+                onClick={() => setEntryView("store")}
+                className={`rounded-lg px-3 py-2 transition ${entryView === "store" ? "bg-white text-violet-700 shadow-sm" : "text-slate-600"}`}
+              >
+                거래처별 입력
+              </button>
+              <button
+                type="button"
+                onClick={() => setEntryView("brand")}
+                className={`rounded-lg px-3 py-2 transition ${entryView === "brand" ? "bg-white text-violet-700 shadow-sm" : "text-slate-600"}`}
+              >
+                브랜드별 입력
+              </button>
             </div>
 
-            <div className="flex flex-wrap items-end justify-start gap-2 2xl:justify-end">
-              <label className="relative block w-[250px] max-w-full">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
-                <input
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="거래처명 · 코드 · 브랜드 검색"
-                  className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 text-xs font-semibold outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
-                />
-              </label>
-              <div className="flex items-center rounded-xl border border-violet-200 bg-violet-50 p-1 text-xs font-extrabold">
-                <button
-                  type="button"
-                  onClick={() => setEntryView("store")}
-                  className={`rounded-lg px-3 py-2 transition ${entryView === "store" ? "bg-white text-violet-700 shadow-sm" : "text-slate-600"}`}
-                >
-                  거래처별 입력
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEntryView("brand")}
-                  className={`rounded-lg px-3 py-2 transition ${entryView === "brand" ? "bg-white text-violet-700 shadow-sm" : "text-slate-600"}`}
-                >
-                  브랜드별 입력
-                </button>
-              </div>
-              <label className="flex items-center gap-2">
-                <span className="text-xs font-extrabold text-slate-600">채널</span>
-                <select
-                  value={channelView}
-                  onChange={(e) => setChannelView(e.target.value as "all" | "store" | "nonStore")}
-                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-orange-400"
-                  aria-label="매장 비매장 채널 필터"
-                >
-                  <option value="all">전체 채널</option>
-                  <option value="store">매장</option>
-                  <option value="nonStore">비매장</option>
-                </select>
-              </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-extrabold text-slate-500">채널</span>
+              <select
+                value={channelView}
+                onChange={(e) => setChannelView(e.target.value as "all" | "store" | "nonStore")}
+                className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-orange-400"
+                aria-label="매장 비매장 채널 필터"
+              >
+                <option value="all">전체 채널</option>
+                <option value="store">매장</option>
+                <option value="nonStore">비매장</option>
+              </select>
+            </label>
 
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-extrabold text-slate-500">입력상태</span>
               <select
                 value={entryStatusView}
                 onChange={(event) => setEntryStatusView(event.target.value as "all" | "entered" | "missing")}
                 className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-violet-500"
                 aria-label="EST 입력상태 필터"
               >
-                <option value="all">EST 입력상태 전체</option>
+                <option value="all">전체</option>
                 <option value="entered">입력 완료</option>
                 <option value="missing">미입력</option>
               </select>
+            </label>
 
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-extrabold text-slate-500">거래상태</span>
               <select
                 value={statusView}
                 onChange={(event) => setStatusView(event.target.value as "active" | "paused" | "ended")}
@@ -7649,21 +7595,88 @@ function EstQuickEntry({
                 <option value="paused">거래중지</option>
                 <option value="ended">거래종료</option>
               </select>
+            </label>
 
-              <button
-                type="button"
-                onClick={() => setNewStoreModalOpen(true)}
-                disabled={!selectedManager}
-                className="h-9 rounded-lg border border-emerald-600 bg-emerald-600 px-4 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
-              >
-                신규 거래처 생성
-              </button>
-
-            </div>
+            <button
+              type="button"
+              onClick={() => setNewStoreModalOpen(true)}
+              disabled={!selectedManager}
+              className="h-9 rounded-lg border border-emerald-600 bg-emerald-600 px-4 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
+            >
+              + 신규 거래처 생성
+            </button>
           </div>
         </div>
 
+        <div className="flex flex-wrap items-stretch gap-3 bg-slate-50/40 px-4 py-3">
+          <div className="grid min-w-[560px] flex-1 grid-cols-3 gap-3">
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-3 shadow-sm">
+              <div className="text-[11px] font-extrabold text-slate-500">매장 EST 합계</div>
+              <div className="mt-1 text-xl font-black tracking-tight text-slate-900">
+                {won(selectedManagerEstSummary.storeEst)}원
+              </div>
+              <div className="mt-1 text-[10px] font-bold text-slate-400">
+                {selectedManager} · 매장 {won(managerInfo.store)}개
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 shadow-sm">
+              <div className="text-[11px] font-extrabold text-slate-500">비매장 EST 합계</div>
+              <div className="mt-1 text-xl font-black tracking-tight text-slate-900">
+                {won(selectedManagerEstSummary.nonStoreEst)}원
+              </div>
+              <div className="mt-1 text-[10px] font-bold text-slate-400">
+                {selectedManager} · 비매장 {won(managerInfo.nonStore)}개
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-4 py-3 shadow-sm">
+              <div className="text-[11px] font-extrabold text-slate-500">전체 EST 합계</div>
+              <div className="mt-1 text-xl font-black tracking-tight text-slate-900">
+                {won(selectedManagerEstSummary.storeEst + selectedManagerEstSummary.nonStoreEst)}원
+              </div>
+              <div className="mt-1 text-[10px] font-bold text-slate-400">
+                전체 거래처 {won(managerInfo.total)}개
+              </div>
+            </div>
+          </div>
+
+          {selectedManagerConfig?.canTarget && (
+            <div className="w-[360px] max-w-full shrink-0 overflow-hidden rounded-xl border border-orange-200 bg-orange-50/50 shadow-sm">
+              <div className="border-b border-orange-200 bg-orange-100/70 px-4 py-2 text-left text-[13px] font-extrabold text-slate-900">
+                Target 입력
+              </div>
+              <div className="grid grid-cols-2 divide-x divide-orange-200">
+                <label className="px-3 py-2.5 text-center text-[12px] font-bold text-slate-700">
+                  매장 Target
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    disabled={!canEditTarget}
+                    value={targetByType.store ? won(targetByType.store) : ""}
+                    onChange={(e) => updateTargetByType("매장", num(e.target.value))}
+                    placeholder={canEditTarget ? "0" : "입력 기간 종료"}
+                    className="mt-1 h-8 w-full min-w-0 rounded-lg border border-orange-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                  />
+                </label>
+                <label className="px-3 py-2.5 text-center text-[12px] font-bold text-slate-700">
+                  비매장 Target
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    disabled={!canEditTarget}
+                    value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
+                    onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
+                    placeholder={canEditTarget ? "0" : "입력 기간 종료"}
+                    className="mt-1 h-8 w-full min-w-0 rounded-lg border border-orange-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+
         <div
           className="flex min-h-[420px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
           style={{ height: "clamp(470px, calc(100vh - 300px), 760px)" }}
