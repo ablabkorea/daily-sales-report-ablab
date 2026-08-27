@@ -5060,7 +5060,7 @@ export default function SalesReportClient() {
   }
 
   useEffect(() => {
-    if (isMobile && active !== "대시보드" && active !== "매출현황") {
+    if (isMobile && active !== "대시보드" && active !== "매출현황" && active !== "품목현황") {
       setActive("대시보드");
     }
   }, [isMobile, active]);
@@ -6370,14 +6370,24 @@ export default function SalesReportClient() {
             date={dashDate}
           />
         )}
+        {isMobile && active === "품목현황" && (
+          <MobileItemStatus
+            sales={sales}
+            month={dashMonth}
+            date={dashDate}
+          />
+        )}
       </section>
       {isMobile && (
-        <nav className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-[100] grid grid-cols-2 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+        <nav className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-[100] grid grid-cols-3 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
           <button type="button" onClick={() => setActive("대시보드")} className={`flex h-[58px] flex-col items-center justify-center gap-0.5 text-[9px] font-black ${active === "대시보드" ? "text-blue-600" : "text-slate-500"}`}>
             <span className="text-[18px]">◔</span><span>대시보드</span>
           </button>
           <button type="button" onClick={() => setActive("매출현황")} className={`flex h-[58px] flex-col items-center justify-center gap-0.5 text-[9px] font-black ${active === "매출현황" ? "text-blue-600" : "text-slate-500"}`}>
             <span className="text-[18px]">▤</span><span>매출현황</span>
+          </button>
+          <button type="button" onClick={() => setActive("품목현황")} className={`flex h-[58px] flex-col items-center justify-center gap-0.5 text-[9px] font-black ${active === "품목현황" ? "text-blue-600" : "text-slate-500"}`}>
+            <span className="text-[18px]">◇</span><span>품목현황</span>
           </button>
         </nav>
       )}
@@ -6791,28 +6801,267 @@ function MobileSalesStatus({
       {selectedRow && (() => {
         const estRate = selectedRow.est ? (selectedRow.currentSales / selectedRow.est) * 100 : 0;
         const profitRate = selectedRow.currentSales ? (selectedRow.profitAmount / selectedRow.currentSales) * 100 : 0;
+        const shipmentRows = sales
+          .filter((row) =>
+            row.period === "current" &&
+            (row.storeCode || row.storeName) === (selectedRow.code || selectedRow.name) &&
+            inRange(row.saleDate, monthStart(month), date)
+          )
+          .sort((a, b) => b.saleDate.localeCompare(a.saleDate) || a.itemName.localeCompare(b.itemName, "ko-KR", { numeric: true }));
+        const shipmentQty = shipmentRows.reduce((total, row) => total + Number(row.quantity || 0), 0);
+        const shipmentSales = shipmentRows.reduce((total, row) => total + Number(row.salesAmount || 0), 0);
         return (
-          <div className="fixed inset-0 z-[120] bg-slate-900/20" onMouseDown={() => setSelected(null)}>
-            <div className="absolute inset-x-0 bottom-0 rounded-t-[24px] border border-slate-200 bg-white px-3 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-              <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-300" />
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-[16px]">▥</div>
-                <h3 className="min-w-0 flex-1 truncate text-[15px] font-black text-slate-900">{selectedRow.name}</h3>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[7px] font-black text-slate-600">{selectedRow.manager}</span>
-                <span className={`rounded-full px-2 py-0.5 text-[7px] font-black ${selectedRow.channel === "매장" ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-500"}`}>{selectedRow.channel}</span>
-                <button type="button" onClick={() => setSelected(null)} className="ml-auto text-[22px] leading-none text-slate-500">×</button>
+          <div className="fixed inset-0 z-[120] bg-slate-900/25" onMouseDown={() => setSelected(null)}>
+            <div className="absolute inset-x-0 bottom-0 flex max-h-[84dvh] min-h-[66dvh] flex-col overflow-hidden rounded-t-[24px] border border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+              <div className="shrink-0 px-3 pt-2">
+                <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-300" />
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-[16px]">▥</div>
+                  <h3 className="min-w-0 flex-1 truncate text-[14px] font-black text-slate-900">{selectedRow.name}</h3>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[7px] font-black text-slate-600">{selectedRow.manager}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[7px] font-black ${selectedRow.channel === "매장" ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-500"}`}>{selectedRow.channel}</span>
+                  <button type="button" onClick={() => setSelected(null)} className="ml-auto flex h-8 w-8 items-center justify-center text-[22px] leading-none text-slate-500">×</button>
+                </div>
+                <div className="mt-3 grid grid-cols-4 gap-1.5">
+                  <MobileDetailMetric title="당월 전체 매출" value={`${won(selectedRow.fullMonthSales)}원`} sub="" />
+                  <MobileDetailMetric title="당일까지 매출" value={`${won(selectedRow.currentSales)}원`} sub={selectedRow.fullMonthSales ? `달성률 ${pct((selectedRow.currentSales / selectedRow.fullMonthSales) * 100)}` : "달성률 -"} tone="blue" progress={selectedRow.fullMonthSales ? (selectedRow.currentSales / selectedRow.fullMonthSales) * 100 : 0} />
+                  <MobileDetailMetric title="Time Gone 대비 EST 진척률" value={selectedRow.est ? pct(estRate) : "-"} sub="" tone="purple" progress={estRate} />
+                  <MobileDetailMetric title="이익금액 / 이익률" value={`${won(selectedRow.profitAmount)}원`} sub={pct(profitRate)} tone="orange" progress={profitRate} />
+                </div>
               </div>
-              <div className="mt-3 grid grid-cols-4 gap-1.5">
-                <MobileDetailMetric title="당월 전체 매출" value={`${won(selectedRow.fullMonthSales)}원`} sub="" />
-                <MobileDetailMetric title="당일까지 매출" value={`${won(selectedRow.currentSales)}원`} sub={selectedRow.fullMonthSales ? `달성률 ${pct((selectedRow.currentSales / selectedRow.fullMonthSales) * 100)}` : "달성률 -"} tone="blue" progress={selectedRow.fullMonthSales ? (selectedRow.currentSales / selectedRow.fullMonthSales) * 100 : 0} />
-                <MobileDetailMetric title="Time Gone 대비 EST 진척률" value={selectedRow.est ? pct(estRate) : "-"} sub="" tone="purple" progress={estRate} />
-                <MobileDetailMetric title="이익금액 / 이익률" value={`${won(selectedRow.profitAmount)}원`} sub={pct(profitRate)} tone="orange" progress={profitRate} />
+
+              <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-slate-100">
+                <div className="flex shrink-0 items-end justify-between px-3 py-2.5">
+                  <div>
+                    <h4 className="text-[12px] font-black text-slate-900">출고 내역</h4>
+                    <div className="mt-0.5 text-[7px] font-semibold text-slate-400">기준일까지만 표시 · 실제 판매행 기준</div>
+                  </div>
+                  <div className="text-right text-[7px] font-bold text-slate-500">{shipmentRows.length.toLocaleString("ko-KR")}건 · 수량 {won(shipmentQty)} · 매출 {won(shipmentSales)}원</div>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3">
+                  <div className="overflow-hidden rounded-xl border border-slate-100">
+                    <div className="grid grid-cols-[.82fr_1.55fr_.58fr_.78fr_.9fr] gap-1 bg-slate-50 px-2 py-2 text-[6.5px] font-black text-slate-600">
+                      <span>출고 일자</span><span>제품명</span><span className="text-right">수량</span><span className="text-right">납품가</span><span className="text-right">매출</span>
+                    </div>
+                    <div className="divide-y divide-slate-100 bg-white">
+                      {shipmentRows.map((row) => (
+                        <div key={row.id} className="grid grid-cols-[.82fr_1.55fr_.58fr_.78fr_.9fr] items-center gap-1 px-2 py-2 text-[7.5px] text-slate-700">
+                          <span className="whitespace-nowrap font-bold">{row.saleDate}</span>
+                          <span className="line-clamp-2 font-black leading-tight text-slate-900" title={row.itemName}>{row.itemName || "미지정"}</span>
+                          <span className="text-right font-bold">{won(row.quantity)}</span>
+                          <span className="text-right font-bold">{won(row.saleUnitPrice)}원</span>
+                          <span className="text-right font-black text-slate-900">{won(row.salesAmount)}원</span>
+                        </div>
+                      ))}
+                      {!shipmentRows.length && <div className="px-3 py-10 text-center text-[9px] font-bold text-slate-400">기준일까지의 출고 내역이 없습니다.</div>}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <button type="button" className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-50 text-[11px] font-black text-blue-900">▣ 거래처 상세 보기 <span>›</span></button>
             </div>
           </div>
         );
       })()}
+    </div>
+  );
+}
+
+
+function MobileItemStatus({
+  sales,
+  month,
+  date,
+}: {
+  sales: SalesRecord[];
+  month: string;
+  date: string;
+}) {
+  const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState<"sales" | "latest" | "name">("sales");
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const monthRows = useMemo(
+    () => sales.filter((row) => row.period === "current" && inRange(row.saleDate, monthStart(month), monthEnd(month)) && Boolean(row.itemName.trim())),
+    [sales, month],
+  );
+
+  const allRows = useMemo(() => {
+    const map = new Map<string, {
+      key: string;
+      itemCode: string;
+      itemName: string;
+      fullMonthSales: number;
+      currentSales: number;
+      currentQty: number;
+      currentProfit: number;
+      lastShipDate: string;
+      stores: Set<string>;
+    }>();
+
+    monthRows.forEach((row) => {
+      const key = row.itemCode || row.itemName;
+      const item = map.get(key) || {
+        key,
+        itemCode: row.itemCode || "-",
+        itemName: row.itemName || "미지정",
+        fullMonthSales: 0,
+        currentSales: 0,
+        currentQty: 0,
+        currentProfit: 0,
+        lastShipDate: "",
+        stores: new Set<string>(),
+      };
+      item.fullMonthSales += Number(row.salesAmount || 0);
+      if (row.saleDate <= date) {
+        item.currentSales += Number(row.salesAmount || 0);
+        item.currentQty += Number(row.quantity || 0);
+        item.currentProfit += Number(row.profitAmount || 0);
+        item.stores.add(row.storeCode || row.storeName);
+        if (!item.lastShipDate || row.saleDate > item.lastShipDate) item.lastShipDate = row.saleDate;
+      }
+      map.set(key, item);
+    });
+
+    return Array.from(map.values()).map((row) => ({
+      ...row,
+      storeCount: row.stores.size,
+      profitRate: row.currentSales ? (row.currentProfit / row.currentSales) * 100 : 0,
+    }));
+  }, [monthRows, date]);
+
+  const rows = useMemo(() => {
+    const keyword = search.trim();
+    const filtered = allRows.filter((row) =>
+      mobileStoreSearchMatches(`${row.itemName} ${row.itemCode}`, keyword),
+    );
+    return [...filtered].sort((a, b) => {
+      if (sortMode === "latest") return b.lastShipDate.localeCompare(a.lastShipDate) || b.currentSales - a.currentSales;
+      if (sortMode === "name") return a.itemName.localeCompare(b.itemName, "ko-KR", { numeric: true });
+      return b.currentSales - a.currentSales || b.lastShipDate.localeCompare(a.lastShipDate);
+    });
+  }, [allRows, search, sortMode]);
+
+  const selectedRow = allRows.find((row) => row.key === selected) || null;
+  const selectedShipments = useMemo(() => {
+    if (!selected) return [];
+    return monthRows
+      .filter((row) => (row.itemCode || row.itemName) === selected && row.saleDate <= date)
+      .sort((a, b) => b.saleDate.localeCompare(a.saleDate) || a.storeName.localeCompare(b.storeName, "ko-KR", { numeric: true }));
+  }, [monthRows, selected, date]);
+
+  return (
+    <div className="mobile-item-status-view pb-24">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div>
+          <h2 className="text-[14px] font-black text-slate-900">품목현황</h2>
+          <div className="mt-0.5 text-[7.5px] font-semibold text-slate-400">당월 판매 품목 {allRows.length.toLocaleString("ko-KR")}개</div>
+        </div>
+        <select value={sortMode} onChange={(event) => setSortMode(event.target.value as "sales" | "latest" | "name")} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-[9px] font-bold text-slate-600 shadow-sm">
+          <option value="sales">당일까지 매출순</option>
+          <option value="latest">마지막 출고일 최신순</option>
+          <option value="name">제품명순</option>
+        </select>
+      </div>
+
+      <div className="relative mb-2">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-slate-400">⌕</span>
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="제품명 / 품목코드 검색 · 초성 가능 (예: ㅂㄹㅇㅅㅂ)"
+          className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-8 pr-9 text-[10.5px] font-bold text-slate-800 outline-none transition placeholder:font-semibold placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          aria-label="품목 검색"
+          autoComplete="off"
+        />
+        {search && (
+          <button type="button" onClick={() => setSearch("")} className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-[13px] font-black text-slate-400 hover:bg-slate-100" aria-label="검색어 지우기">×</button>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm">
+        <div className="grid grid-cols-[1.6fr_.82fr_1.15fr_12px] items-center gap-1 bg-slate-50 px-2 py-2 text-[7.5px] font-black text-slate-600">
+          <span>제품명</span><span className="text-center">마지막 출고일</span><span className="text-right text-blue-600">당일까지 매출</span><span />
+        </div>
+        <div className="divide-y divide-slate-100">
+          {rows.map((row) => (
+            <button key={row.key} type="button" onClick={() => setSelected(row.key)} className="grid w-full grid-cols-[1.6fr_.82fr_1.15fr_12px] items-center gap-1 px-2 py-3 text-left hover:bg-slate-50">
+              <span className="min-w-0">
+                <span className="block truncate text-[10px] font-black text-slate-900">{row.itemName}</span>
+                <span className="mt-0.5 block truncate text-[7px] font-semibold text-slate-400">{row.itemCode || "-"}</span>
+              </span>
+              <span className="text-center text-[8px] font-bold text-slate-700">{row.lastShipDate || "-"}</span>
+              <span className="text-right text-[9px] font-black text-slate-900">{won(row.currentSales)}원</span>
+              <span className="text-[13px] text-slate-400">›</span>
+            </button>
+          ))}
+          {!rows.length && <div className="py-12 text-center text-xs text-slate-400">조건에 맞는 품목이 없습니다.</div>}
+        </div>
+      </div>
+
+      {selectedRow && (
+        <div className="fixed inset-0 z-[120] bg-slate-900/25" onMouseDown={() => setSelected(null)}>
+          <div className="absolute inset-x-0 bottom-0 flex max-h-[88dvh] min-h-[72dvh] flex-col overflow-hidden rounded-t-[24px] border border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="shrink-0 px-3 pt-2">
+              <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-300" />
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[12px] font-black text-blue-600">{koreanInitials(selectedRow.itemName).replace(/[^ㄱ-ㅎ]/g, "").slice(0, 1) || "품"}</div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-[14px] font-black text-slate-900">{selectedRow.itemName}</h3>
+                  <div className="mt-0.5 truncate text-[7px] font-semibold text-slate-400">품목코드 {selectedRow.itemCode || "-"}</div>
+                </div>
+                <button type="button" onClick={() => setSelected(null)} className="flex h-8 w-8 items-center justify-center text-[22px] leading-none text-slate-500">×</button>
+              </div>
+
+              <div className="mt-3 grid grid-cols-3 gap-1.5">
+                <MobileItemDetailMetric title="당일까지 매출" value={`${won(selectedRow.currentSales)}원`} />
+                <MobileItemDetailMetric title="당월 전체 매출" value={`${won(selectedRow.fullMonthSales)}원`} />
+                <MobileItemDetailMetric title="당월 총 출고수량" value={won(selectedRow.currentQty)} />
+                <MobileItemDetailMetric title="사용 거래처 수" value={`${selectedRow.storeCount.toLocaleString("ko-KR")}곳`} />
+                <MobileItemDetailMetric title="이익금액" value={`${won(selectedRow.currentProfit)}원`} tone="green" />
+                <MobileItemDetailMetric title="이익률" value={pct(selectedRow.profitRate)} tone="green" />
+              </div>
+            </div>
+
+            <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-slate-100">
+              <div className="flex shrink-0 items-end justify-between px-3 py-2.5">
+                <div>
+                  <h4 className="text-[12px] font-black text-slate-900">출고 내역</h4>
+                  <div className="mt-0.5 text-[7px] font-semibold text-slate-400">품목별 실제 출고 · 기준일까지만 표시</div>
+                </div>
+                <div className="text-[7px] font-bold text-slate-500">{selectedShipments.length.toLocaleString("ko-KR")}건</div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3">
+                <div className="overflow-hidden rounded-xl border border-slate-100">
+                  <div className="grid grid-cols-[.8fr_1.55fr_.55fr_.75fr_.9fr] gap-1 bg-slate-50 px-2 py-2 text-[6.5px] font-black text-slate-600">
+                    <span>출고 일자</span><span>거래처명</span><span className="text-right">수량</span><span className="text-right">납품단가</span><span className="text-right">매출</span>
+                  </div>
+                  <div className="divide-y divide-slate-100 bg-white">
+                    {selectedShipments.map((row) => (
+                      <div key={row.id} className="grid grid-cols-[.8fr_1.55fr_.55fr_.75fr_.9fr] items-center gap-1 px-2 py-2 text-[7.5px] text-slate-700">
+                        <span className="whitespace-nowrap font-bold">{row.saleDate}</span>
+                        <span className="line-clamp-2 font-black leading-tight text-slate-900" title={row.storeName}>{row.storeName || "미지정"}</span>
+                        <span className="text-right font-bold">{won(row.quantity)}</span>
+                        <span className="text-right font-bold">{won(row.saleUnitPrice)}원</span>
+                        <span className="text-right font-black text-slate-900">{won(row.salesAmount)}원</span>
+                      </div>
+                    ))}
+                    {!selectedShipments.length && <div className="px-3 py-10 text-center text-[9px] font-bold text-slate-400">기준일까지의 출고 내역이 없습니다.</div>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MobileItemDetailMetric({ title, value, tone }: { title: string; value: string; tone?: "green" }) {
+  return (
+    <div className={`min-w-0 rounded-xl border p-2.5 ${tone === "green" ? "border-emerald-100 bg-emerald-50/30" : "border-slate-200 bg-white"}`}>
+      <div className="min-h-[22px] text-[7px] font-bold leading-tight text-slate-500">{title}</div>
+      <div className={`mt-1 break-all text-[11px] font-black leading-tight ${tone === "green" ? "text-emerald-600" : "text-slate-900"}`}>{value}</div>
     </div>
   );
 }
