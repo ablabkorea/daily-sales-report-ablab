@@ -13669,7 +13669,7 @@ function OrderDrillModal({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-2">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/55 p-2">
       <style jsx global>{`
         .daily-profit-modal-table,
         .daily-profit-modal-table th,
