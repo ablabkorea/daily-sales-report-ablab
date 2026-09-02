@@ -42,6 +42,31 @@ type ReplacePayload = {
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: jsonHeaders });
 
+let salesIndexesReady: Promise<void> | null = null;
+
+function ensureSalesIndexes(env: Env) {
+  if (!salesIndexesReady) {
+    salesIndexesReady = env.DB.batch([
+      env.DB.prepare(
+        `CREATE INDEX IF NOT EXISTS idx_sales_records_month_period_batch_date
+           ON sales_records (base_month, period_type, batch_id, sales_date, id)`,
+      ),
+      env.DB.prepare(
+        `CREATE INDEX IF NOT EXISTS idx_sales_records_history
+           ON sales_records (period_type, sales_date, customer_code, batch_id)`,
+      ),
+      env.DB.prepare(
+        `CREATE INDEX IF NOT EXISTS idx_sales_batches_month_status_period
+           ON sales_upload_batches (base_month, status, period_type, id)`,
+      ),
+    ]).then(() => undefined).catch((error) => {
+      salesIndexesReady = null;
+      throw error;
+    });
+  }
+  return salesIndexesReady;
+}
+
 function authorized(request: Request, env: Env) {
   const supplied = request.headers.get("X-ABL-API-Key") || "";
   return Boolean(env.ABL_API_KEY) && supplied === env.ABL_API_KEY;
@@ -96,7 +121,7 @@ async function putSetting(request: Request, env: Env, key: string) {
 }
 
 async function getSales(url: URL, env: Env) {
-  await ensureExactUnitPriceColumns(env);
+  await ensureSalesIndexes(env);
   const baseMonth = url.searchParams.get("baseMonth") || "";
   if (!/^\d{4}-\d{2}$/.test(baseMonth)) return json({ error: "Invalid baseMonth" }, 400);
   const requestedPeriod = url.searchParams.get("period") || "";
@@ -140,6 +165,7 @@ async function getSales(url: URL, env: Env) {
 }
 
 async function getPriorYearStoreHistory(url: URL, env: Env) {
+  await ensureSalesIndexes(env);
   const baseMonth = url.searchParams.get("baseMonth") || "";
   if (!/^\d{4}-\d{2}$/.test(baseMonth)) return json({ error: "Invalid baseMonth" }, 400);
 

@@ -1,0 +1,13 @@
+{
+  "name": "ablab-sales-api",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/web-push": "^3.6.4",
+    "typescript": "^5.9.2",
+    "wrangler": "^4.31.0"
+  }
+}

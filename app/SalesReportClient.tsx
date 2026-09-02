@@ -3679,7 +3679,6 @@ type AppStateRow<T> = {
 
 
 const STATIC_SYNC_INTERVAL_MS = 30 * 60 * 1000;
-const SALES_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const FOCUS_REFRESH_MIN_GAP_MS = 5 * 60 * 1000;
 const MAX_SUPABASE_BACKOFF_MS = 30 * 60 * 1000;
 
@@ -4238,6 +4237,24 @@ async function loadV3SalesForMonth(
 }
 
 async function loadPriorYearStoreHistory(month: string): Promise<PriorYearStoreHistoryRow[]> {
+  const cached = priorYearStoreHistoryCache.get(month);
+  if (cached) return cached;
+
+  const request = loadPriorYearStoreHistoryUncached(month).catch((error) => {
+    priorYearStoreHistoryCache.delete(month);
+    throw error;
+  });
+  priorYearStoreHistoryCache.set(month, request);
+  return request;
+}
+
+const priorYearStoreHistoryCache = new Map<string, Promise<PriorYearStoreHistoryRow[]>>();
+
+function invalidatePriorYearStoreHistory(month: string) {
+  priorYearStoreHistoryCache.delete(month);
+}
+
+async function loadPriorYearStoreHistoryUncached(month: string): Promise<PriorYearStoreHistoryRow[]> {
   const api = d1SalesEndpoint("sales/prior-year-store-history");
   const response = await fetch(
     `${api.url}?baseMonth=${encodeURIComponent(month)}`,
@@ -4520,22 +4537,6 @@ function useChunkedSales(
     };
   }, [baseKey, month]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const interval = window.setInterval(() => {
-      refreshFromSupabase().catch((error) => console.warn("매출 데이터 자동 동기화 실패", error));
-    }, SALES_SYNC_INTERVAL_MS);
-    const onFocus = () => {
-      if (Date.now() - lastSalesRefreshAtRef.current < FOCUS_REFRESH_MIN_GAP_MS) return;
-      refreshFromSupabase();
-    };
-    window.addEventListener("focus", onFocus);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [baseKey]);
-
   const actions: SalesStorageActions = {
     replaceUpload,
     deleteCurrentDate,
@@ -4736,10 +4737,9 @@ export default function SalesReportClient() {
   const [notificationSubscribed, setNotificationSubscribed] = useState(false);
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [ecountSyncState, setEcountSyncState] = useState<EcountSyncState | null>(null);
-  const [ecountSyncLoading, setEcountSyncLoading] = useState(true);
+  const [ecountSyncLoading] = useState(false);
   const [ecountSyncRequesting, setEcountSyncRequesting] = useState(false);
   const [ecountSyncError, setEcountSyncError] = useState("");
-  const lastObservedSyncSuccessRef = useRef<string | null>(null);
   const salesRefreshRef = useRef<() => Promise<void>>(async () => undefined);
   const [estHeaderSummary, setEstHeaderSummary] = useState<EstHeaderSummary | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -4768,52 +4768,6 @@ export default function SalesReportClient() {
     salesRefreshRef.current = salesActions.refresh;
   }, [salesActions.refresh]);
 
-  // ----------------------------------------------------------
-  // ECOUNT 동기화 상태를 5초마다 확인합니다.
-  // 동기화가 성공하면 D1 매출을 즉시 다시 읽어 화면에도 반영합니다.
-  // ----------------------------------------------------------
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const refreshSyncState = async () => {
-      try {
-        const next = await loadEcountSyncState();
-        if (cancelled) return;
-
-        setEcountSyncState(next);
-        setEcountSyncError("");
-
-        const successAt = next?.lastSuccessAt || null;
-        if (
-          successAt &&
-          lastObservedSyncSuccessRef.current &&
-          successAt !== lastObservedSyncSuccessRef.current
-        ) {
-          await salesRefreshRef.current().catch((error) =>
-            console.warn("동기화 완료 후 매출 최신화 실패", error),
-          );
-        }
-        if (successAt) lastObservedSyncSuccessRef.current = successAt;
-      } catch (error) {
-        if (cancelled) return;
-        setEcountSyncError(
-          error instanceof Error ? error.message : "동기화 상태를 확인하지 못했습니다.",
-        );
-      } finally {
-        if (!cancelled) setEcountSyncLoading(false);
-      }
-    };
-
-    refreshSyncState();
-    const timer = window.setInterval(refreshSyncState, 5000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, []);
-
   async function requestLatestEcountSync() {
     if (ecountSyncRequesting || ecountSyncBusy(ecountSyncState)) return;
 
@@ -4823,32 +4777,57 @@ export default function SalesReportClient() {
     try {
       // 클릭 직전 서버 상태를 다시 확인하여 다른 PC가 처리 중인 요청을 덮어쓰지 않습니다.
       const latest = await loadEcountSyncState();
-      if (ecountSyncBusy(latest)) {
-        setEcountSyncState(latest);
-        return;
+      const baselineSuccessAt = latest?.lastSuccessAt || null;
+      let requestedState = latest;
+
+      if (!ecountSyncBusy(latest)) {
+        const now = new Date().toISOString();
+        requestedState = {
+          ...(latest || {}),
+          requestId: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          reason: "manual",
+          requestedBy: "Sales Report 웹",
+          requestedAt: now,
+          status: "PENDING",
+          claimedBy: null,
+          claimToken: null,
+          claimedAt: null,
+          leaseUntil: null,
+          startedAt: null,
+          completedAt: null,
+          heartbeatAt: null,
+          lastError: null,
+          message: "웹사이트에서 최신 데이터 동기화를 요청했습니다.",
+        };
+        await saveEcountSyncState(requestedState);
       }
 
-      const now = new Date().toISOString();
-      const next: EcountSyncState = {
-        ...(latest || {}),
-        requestId: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-        reason: "manual",
-        requestedBy: "Sales Report 웹",
-        requestedAt: now,
-        status: "PENDING",
-        claimedBy: null,
-        claimToken: null,
-        claimedAt: null,
-        leaseUntil: null,
-        startedAt: null,
-        completedAt: null,
-        heartbeatAt: null,
-        lastError: null,
-        message: "웹사이트에서 최신 데이터 동기화를 요청했습니다.",
-      };
+      setEcountSyncState(requestedState);
 
-      await saveEcountSyncState(next);
-      setEcountSyncState(next);
+      // 평상시에는 D1을 조회하지 않습니다. 동기화 버튼을 누른 뒤에만 완료될 때까지 확인합니다.
+      const targetRequestId = requestedState?.requestId || null;
+      for (let attempt = 0; attempt < 180; attempt += 1) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 10_000));
+        const current = await loadEcountSyncState();
+        setEcountSyncState(current);
+
+        const isTargetRequest = !targetRequestId || current?.requestId === targetRequestId;
+        const hasNewSuccess = Boolean(
+          current?.lastSuccessAt && current.lastSuccessAt !== baselineSuccessAt,
+        );
+
+        if ((isTargetRequest && current?.status === "SUCCESS") || hasNewSuccess) {
+          invalidatePriorYearStoreHistory(dashMonth);
+          await salesRefreshRef.current();
+          return;
+        }
+
+        if (isTargetRequest && current?.status === "FAILED") {
+          throw new Error(current.lastError || current.message || "동기화에 실패했습니다.");
+        }
+      }
+
+      throw new Error("동기화 완료 확인 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.");
     } catch (error) {
       setEcountSyncError(
         error instanceof Error ? error.message : "동기화 요청에 실패했습니다.",
