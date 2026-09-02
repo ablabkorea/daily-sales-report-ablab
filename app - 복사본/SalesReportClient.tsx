@@ -5,16 +5,10 @@ import * as XLSX from "xlsx";
 
 type Channel = string;
 type Manager = string;
-type ManagerConfig = {
-  name: Manager;
-  active: boolean;
-  order: number;
-  canTarget: boolean;
-};
 type StoreType = string;
 type PeriodType = "current" | "prevMonth" | "prevYear";
 type SalesView = "거래처별" | "브랜드별" | "담당자별" | "채널별";
-type MonthStartTab = "신규 거래처 EST" | "거래처 리스트" | "기준정보" | "업로드 관리" | "이익금액 검증표";
+type MonthStartTab = "거래처/휴면 관리" | "업로드 관리";
 type DrillPeriod = "prevYear" | "prevMonth" | "current" | "currentFullMonth";
 type SalesStatusSortKey =
   | "label"
@@ -30,51 +24,10 @@ type SalesStatusSortKey =
   | "timeGoneGap"
   | "est"
   | "estRate"
-  | "brandProgressRate"
   | "profitAmount"
-  | "profitRate"
-  | "lastOrderDate";
-type MainMenuLabel = "EST 입력" | "대시보드" | "매출현황" | "거래처별 상세" | "품목분석" | "월초관리";
+  | "profitRate";
 type SortDirection = "asc" | "desc";
 type InactiveOrderTab = "거래처별" | "품목별";
-
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-};
-
-// ============================================================
-// ECOUNT 자동 동기화 상태
-// ============================================================
-
-type EcountSyncState = {
-  requestId?: string | null;
-  reason?: "manual" | "scheduled" | string;
-  requestedBy?: string | null;
-  requestedAt?: string | null;
-  status?: "IDLE" | "PENDING" | "CLAIMED" | "RUNNING" | "SUCCESS" | "FAILED" | string;
-  claimedBy?: string | null;
-  claimToken?: string | null;
-  claimedAt?: string | null;
-  leaseUntil?: string | null;
-  startedAt?: string | null;
-  completedAt?: string | null;
-  heartbeatAt?: string | null;
-  lastSuccessAt?: string | null;
-  lastSuccessPc?: string | null;
-  lastError?: string | null;
-  message?: string | null;
-};
-
-const ECOUNT_SYNC_STATE_KEY = "ecount_sync_state_v1";
-const PUSH_OPT_OUT_KEY = "ablab_push_opt_out_v1";
-
-function urlBase64ToUint8Array(value: string) {
-  const padding = "=".repeat((4 - (value.length % 4)) % 4);
-  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = window.atob(base64);
-  return Uint8Array.from(Array.from(raw).map((character) => character.charCodeAt(0)));
-}
 
 type Store = {
   code: string;
@@ -83,7 +36,7 @@ type Store = {
   manager: Manager;
   storeType: StoreType;
   brand: string;
-  status: "거래중" | "거래중단" | "거래종료";
+  status: "거래중" | "거래종료";
 };
 
 type StoreCodeMapping = {
@@ -109,13 +62,10 @@ type SalesRecord = {
   itemCode: string;
   itemName: string;
   quantity: number;
-  saleUnitPrice: number;
-  costUnitPrice: number;
   salesAmount: number;
   costAmount: number;
   profitAmount: number;
   profitRate: number;
-  remark?: string;
 };
 
 type SalesUploadRequest = {
@@ -141,28 +91,11 @@ type TargetRecord = {
   storeName?: string;
 };
 
-type EstHeaderSummary = {
-  manager: string;
-  storeEst: number;
-  nonStoreEst: number;
-  targetTotal: number;
-};
-
 type EstRecord = {
   storeCode: string;
   storeName: string;
   month: string;
   amount: number;
-};
-
-type PendingNewStoreEst = {
-  id: string;
-  month: string;
-  manager: string;
-  storeType: StoreType;
-  storeName: string;
-  amount: number;
-  createdAt: string;
 };
 
 type ItemCostHistory = {
@@ -171,21 +104,6 @@ type ItemCostHistory = {
   effectiveDate: string;
   previousCost: number;
   newCost: number;
-  memo?: string;
-};
-
-type ItemMasterRecord = {
-  itemCode: string;
-  itemName: string;
-  category: string;
-  supplier?: string;
-  specification?: string;
-  packQuantity?: string;
-  stockUnit?: string;
-  storageMethod?: string;
-  source?: "initial" | "sales";
-  firstSeenMonth?: string;
-  active?: boolean;
   memo?: string;
 };
 
@@ -204,23 +122,25 @@ type TimeConfig = {
   holidays: string[];
 };
 
-const CHANNELS: Channel[] = ["매장", "비매장"];
-const MANAGERS: Manager[] = ["SY", "KT", "SW", "NH", "Bomi", "BM", "bomi"];
-const INITIAL_MANAGER_CONFIGS: ManagerConfig[] = [
-  { name: "SY", active: true, order: 1, canTarget: true },
-  { name: "KT", active: true, order: 2, canTarget: false },
-  { name: "NH", active: true, order: 3, canTarget: false },
-  { name: "SW", active: false, order: 4, canTarget: false },
-  { name: "BOMI", active: false, order: 5, canTarget: false },
-  { name: "BM", active: false, order: 6, canTarget: false },
+const CHANNELS: Channel[] = [
+  "도매",
+  "체인",
+  "체인물류",
+  "식자재마트",
+  "제조",
+  "권역배송",
+  "온라인",
+  "매장",
+  "비매장",
+  "기업",
+  "매입",
+  "본사",
 ];
-const SALES_VIEWS: SalesView[] = ["거래처별", "브랜드별", "담당자별"];
+const MANAGERS: Manager[] = ["SY", "KT", "SW", "NH", "Bomi", "BM", "bomi"];
+const SALES_VIEWS: SalesView[] = ["거래처별", "브랜드별", "담당자별", "채널별"];
 const MONTH_TABS: MonthStartTab[] = [
-  "신규 거래처 EST",
-  "거래처 리스트",
-  "기준정보",
+  "거래처/휴면 관리",
   "업로드 관리",
-  "이익금액 검증표",
 ];
 
 const initialStores: Store[] = [
@@ -3349,33 +3269,64 @@ const initialStores: Store[] = [
   },
 ];
 
-// 공유 저장소를 불러오기 전에는 빈 값으로 시작합니다.
-// 예시 데이터가 D1의 실제 데이터를 덮어쓰는 사고를 막기 위해
-// 운영 데이터의 초기값에는 샘플 거래처/금액을 절대 넣지 않습니다.
-const initialTargets: TargetRecord[] = [];
+const initialTargets: TargetRecord[] = [
+  { storeType: "매장", month: thisMonth(), amount: 20000000 },
+  { storeType: "비매장", month: thisMonth(), amount: 15000000 },
+];
 
-const initialEsts: EstRecord[] = [];
+const initialEsts: EstRecord[] = [
+  {
+    storeCode: "A001",
+    storeName: "강남점",
+    month: thisMonth(),
+    amount: 18000000,
+  },
+  {
+    storeCode: "A002",
+    storeName: "홍대점",
+    month: thisMonth(),
+    amount: 14000000,
+  },
+];
 
 const initialItemCosts: ItemCostRecord[] = [];
 
-const initialSales: SalesRecord[] = [];
+const initialSales: SalesRecord[] = [
+  makeSale(
+    "current",
+    thisMonth(),
+    `${thisMonth()}-17`,
+    "A001",
+    "강남점",
+    "P001",
+    "샘플상품",
+    1,
+    12500000,
+    8000000,
+    4500000,
+    initialStores,
+  ),
+  makeSale(
+    "current",
+    thisMonth(),
+    `${thisMonth()}-17`,
+    "A002",
+    "홍대점",
+    "P001",
+    "샘플상품",
+    1,
+    5300000,
+    3500000,
+    1800000,
+    initialStores,
+  ),
+];
 
 const initialTimeConfigs: TimeConfig[] = [{ month: thisMonth(), holidays: [] }];
 
 function today() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function todayInSeoul() {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const value = (type: "year" | "month" | "day") => parts.find((part) => part.type === type)?.value || "";
-  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 function thisMonth() {
@@ -3494,23 +3445,14 @@ function displayBrand(v: unknown) {
 
 function normalizeStatus(v: unknown): Store["status"] {
   const t = norm(v);
-  const lower = t.toLowerCase();
-  if (
-    t === "종료" ||
+  return t === "종료" ||
     t === "거래종료" ||
     t === "비활성" ||
     t === "비활성화" ||
-    lower === "inactive" ||
-    lower === "closed"
-  ) return "거래종료";
-  if (
-    t === "중단" ||
-    t === "거래중단" ||
-    t === "일시중단" ||
-    lower === "paused" ||
-    lower === "suspended"
-  ) return "거래중단";
-  return "거래중";
+    t.toLowerCase() === "inactive" ||
+    t.toLowerCase() === "closed"
+    ? "거래종료"
+    : "거래중";
 }
 
 function normalizeChannel(v: unknown) {
@@ -3557,7 +3499,8 @@ function dayWeight(date: string, holidays: string[]) {
   const { y, m, d } = parseYmd(date);
   const day = new Date(y, m - 1, d).getDay();
   const isHoliday = holidays.includes(date);
-  if (day === 0 || day === 6) return 0.5;
+  if (day === 0) return 0;
+  if (day === 6) return 0.5;
   if (isHoliday) return 0.5;
   return 1;
 }
@@ -3629,15 +3572,11 @@ function makeSale(
   itemCode: string,
   itemName: string,
   quantity: number,
-  saleUnitPrice: number,
   salesAmount: number,
-  costUnitPrice: number,
   costAmount: number,
   profitAmount: number,
   stores: Store[],
   uploadedProfitRate?: number,
-  sourceRowNumber?: number,
-  remark?: string,
 ): SalesRecord {
   const s = storeMap(stores).get(storeCode);
   const profitRate = Number.isFinite(uploadedProfitRate)
@@ -3646,9 +3585,7 @@ function makeSale(
       ? (profitAmount / salesAmount) * 100
       : 0;
   return {
-    // 같은 날짜·거래처·품목이 여러 행이어도 원본 엑셀 행별로 각각 보존합니다.
-    // 업로드 날짜는 replaceUpload에서 기존 자료를 먼저 교체하므로 재업로드 시 중복 누적되지 않습니다.
-    id: `${period}|${refMonth}|${saleDate}|${storeCode}|${itemCode}|${itemName}|source-row:${sourceRowNumber ?? "unknown"}`,
+    id: `${period}|${refMonth}|${saleDate}|${storeCode}|${itemCode}|${itemName}`,
     period,
     refMonth,
     saleDate,
@@ -3661,13 +3598,10 @@ function makeSale(
     itemCode,
     itemName,
     quantity,
-    saleUnitPrice,
-    costUnitPrice,
     salesAmount,
     costAmount,
     profitAmount,
     profitRate,
-    remark: norm(remark),
   };
 }
 
@@ -3793,61 +3727,16 @@ async function saveSharedState<T>(key: string, value: T) {
   return row.updated_at || new Date().toISOString();
 }
 
-// ============================================================
-// ECOUNT 동기화 요청 / 상태 API
-// 기존 Cloudflare D1 settings 저장소를 그대로 사용합니다.
-// ============================================================
-
-async function loadEcountSyncState(): Promise<EcountSyncState | null> {
-  return loadSharedState<EcountSyncState>(ECOUNT_SYNC_STATE_KEY);
-}
-
-async function saveEcountSyncState(value: EcountSyncState) {
-  await saveSharedState(ECOUNT_SYNC_STATE_KEY, value);
-}
-
-function ecountSyncBusy(state: EcountSyncState | null) {
-  const status = String(state?.status || "");
-  if (status === "PENDING") return true;
-  if (status !== "CLAIMED" && status !== "RUNNING") return false;
-
-  const leaseTime = state?.leaseUntil ? new Date(state.leaseUntil).getTime() : NaN;
-  if (Number.isFinite(leaseTime) && leaseTime <= Date.now()) return false;
-  return true;
-}
-
-function ecountSyncStatusLabel(state: EcountSyncState | null) {
-  if (!ecountSyncBusy(state)) return "동기화 대기";
-
-  switch (state?.status) {
-    case "PENDING":
-      return "동기화 요청 대기중";
-    case "CLAIMED":
-      return "동기화 준비 중";
-    case "RUNNING":
-      return "ECOUNT 동기화 중";
-    default:
-      return "동기화 대기";
-  }
-}
-
-function formatSyncTime(value?: string | null) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-
-  return new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
 function reportSharedSaveError(error: unknown) {
-  // 수정·자동저장 과정에서 팝업이 반복되지 않도록 콘솔 기록만 남깁니다.
   console.warn("공유 저장소(Cloudflare D1) 저장 실패", error);
+  if (typeof window === "undefined") return;
+  const now = Date.now();
+  const last = Number(window.sessionStorage.getItem("ablab_shared_save_error_at") || 0);
+  if (now - last < 10 * 60 * 1000) return;
+  window.sessionStorage.setItem("ablab_shared_save_error_at", String(now));
+  window.alert(
+    "공유 저장소(Cloudflare D1)에 연결할 수 없습니다. 현재 값은 브라우저에 임시 보관되며, 연결이 복구되면 자동으로 다시 저장됩니다.",
+  );
 }
 
 function useLocal<T>(key: string, initial: T) {
@@ -3861,7 +3750,6 @@ function useLocal<T>(key: string, initial: T) {
   const isReloadingRemoteRef = useRef(false);
   const alertOpenRef = useRef(false);
   const lastRemoteCheckAtRef = useRef(0);
-  const loadedRef = useRef(false);
 
   useEffect(() => {
     keyRef.current = key;
@@ -3899,9 +3787,6 @@ function useLocal<T>(key: string, initial: T) {
 
   const persistNow = (nextValue: T) => {
     if (typeof window === "undefined") return;
-    // D1 조회가 끝나기 전 발생한 화면 초기화/자동 보정은 저장하지 않습니다.
-    // 이 시점의 값은 샘플 또는 빈 초기값일 수 있으므로 원격값을 덮어쓰면 안 됩니다.
-    if (!loadedRef.current) return;
 
     const editedAt = Date.now();
     valueRef.current = nextValue;
@@ -3930,9 +3815,6 @@ function useLocal<T>(key: string, initial: T) {
 
   const setValue: React.Dispatch<React.SetStateAction<T>> = (next) => {
     rawSetValue((prev) => {
-      // 각 화면의 초기 useEffect가 원격 hydrate보다 먼저 실행될 수 있습니다.
-      // 로딩 중 상태 변경 자체를 무시해 원격 데이터가 항상 먼저 기준이 되게 합니다.
-      if (!loadedRef.current) return prev;
       const resolved =
         typeof next === "function" ? (next as (prev: T) => T)(prev) : next;
       valueRef.current = resolved;
@@ -3961,10 +3843,17 @@ function useLocal<T>(key: string, initial: T) {
 
     alertOpenRef.current = true;
     try {
-      // 로컬에 저장 대기 중인 수정이 없을 때만 최신 원격값을 조용히 반영합니다.
-      lastRemoteUpdatedAtRef.current = remoteRow.updated_at;
-      applyValue(remoteRow.data);
-      setLocalMeta(keyRef.current, { editedAt: Date.now(), pending: false });
+      const shouldRefresh = window.confirm(
+        "다른 사용자가 데이터를 수정했습니다. 최신 데이터로 새로고침할까요?",
+      );
+      if (shouldRefresh) {
+        lastRemoteUpdatedAtRef.current = remoteRow.updated_at;
+        applyValue(remoteRow.data);
+        setLocalMeta(keyRef.current, { editedAt: Date.now(), pending: false });
+      } else {
+        // 같은 알림이 반복해서 뜨지 않도록 현재 원격 버전은 확인 처리만 합니다.
+        lastRemoteUpdatedAtRef.current = remoteRow.updated_at;
+      }
     } finally {
       alertOpenRef.current = false;
     }
@@ -4009,14 +3898,7 @@ function useLocal<T>(key: string, initial: T) {
           }
         }
       } finally {
-        if (!cancelled) {
-          // 이전 버전이 남긴 pending 표시는 자동 재저장하지 않습니다.
-          // 이후 사용자가 실제로 수정할 때만 새로운 pending 저장이 만들어집니다.
-          const currentMeta = getLocalMeta(key);
-          setLocalMeta(key, { editedAt: currentMeta.editedAt, pending: false });
-          loadedRef.current = true;
-          setLoaded(true);
-        }
+        if (!cancelled) setLoaded(true);
       }
     }
 
@@ -4030,6 +3912,21 @@ function useLocal<T>(key: string, initial: T) {
 
   useEffect(() => {
     if (!loaded || typeof window === "undefined") return;
+
+    const retryPendingSave = async () => {
+      try {
+        const meta = getLocalMeta(key);
+        if (!meta.pending) return;
+        const localSaved = safeGetLocalStorage(key);
+        if (!localSaved) return;
+        const parsed = JSON.parse(localSaved) as T;
+        const savedUpdatedAt = await saveSharedState(key, parsed);
+        if (savedUpdatedAt) lastRemoteUpdatedAtRef.current = savedUpdatedAt;
+        setLocalMeta(key, { editedAt: meta.editedAt, pending: false });
+      } catch (error) {
+        console.warn("공유 데이터 저장 재시도 실패", error);
+      }
+    };
 
     const safeCheckRemoteUpdate = () => {
       checkRemoteUpdate().catch((error) =>
@@ -4047,6 +3944,7 @@ function useLocal<T>(key: string, initial: T) {
     };
 
     const interval = window.setInterval(() => {
+      retryPendingSave();
       safeCheckRemoteUpdate();
     }, STATIC_SYNC_INTERVAL_MS);
     window.addEventListener("focus", refreshIfStale);
@@ -4087,8 +3985,6 @@ function salesKeysForMonth(baseKey: string, month: string) {
   return [
     salesChunkKey(baseKey, "current", month),
     salesChunkKey(baseKey, "current", addMonths(month, 1)),
-    salesChunkKey(baseKey, "current", previousMonth(month)),
-    salesChunkKey(baseKey, "current", addMonths(month, -12)),
     salesChunkKey(baseKey, "prevMonth", month),
     salesChunkKey(baseKey, "prevYear", month),
   ];
@@ -4125,19 +4021,10 @@ type V3SalesRecordRow = {
   item_code: string;
   item_name: string;
   quantity: number | string;
-  sale_unit_price: number | string;
   sales_amount: number | string;
-  cost_unit_price: number | string;
   cost_amount: number | string;
   profit_amount: number | string;
   profit_rate: number | string;
-  remark?: string;
-};
-
-type PriorYearStoreHistoryRow = {
-  store_code: string;
-  store_name: string;
-  first_sale_date: string;
 };
 
 function d1SalesEndpoint(path: string) {
@@ -4162,13 +4049,10 @@ function toV3Payload(row: SalesRecord) {
     item_code: row.itemCode,
     item_name: row.itemName,
     quantity: Number(row.quantity || 0),
-    sale_unit_price: Number(row.saleUnitPrice || 0),
     sales_amount: Number(row.salesAmount || 0),
-    cost_unit_price: Number(row.costUnitPrice || 0),
     cost_amount: Number(row.costAmount || 0),
     profit_amount: Number(row.profitAmount || 0),
     profit_rate: Number(row.profitRate || 0),
-    remark: norm(row.remark),
   };
 }
 
@@ -4187,26 +4071,21 @@ function fromV3Row(row: V3SalesRecordRow): SalesRecord {
     itemCode: row.item_code,
     itemName: row.item_name,
     quantity: Number(row.quantity || 0),
-    saleUnitPrice: Number(row.sale_unit_price || 0),
     salesAmount: Number(row.sales_amount || 0),
-    costUnitPrice: Number(row.cost_unit_price || 0),
     costAmount: Number(row.cost_amount || 0),
     profitAmount: Number(row.profit_amount || 0),
     profitRate: Number(row.profit_rate || 0),
-    remark: norm(row.remark),
   };
 }
 
-type V3SalesLoadResult = {
+async function loadV3SalesForMonth(month: string): Promise<{
   available: boolean;
   periodsWithBatch: Set<PeriodType>;
   records: SalesRecord[];
-};
-
-async function loadV3SalesPeriod(month: string, period: PeriodType): Promise<V3SalesLoadResult> {
+}> {
   const api = d1SalesEndpoint("sales");
   const response = await fetch(
-    `${api.url}?baseMonth=${encodeURIComponent(month)}&period=${encodeURIComponent(period)}`,
+    `${api.url}?baseMonth=${encodeURIComponent(month)}`,
     { method: "GET", headers: api.headers, cache: "no-store" },
   );
   if (response.status === 404) {
@@ -4223,61 +4102,6 @@ async function loadV3SalesPeriod(month: string, period: PeriodType): Promise<V3S
     periodsWithBatch: new Set((payload.batches || []).map((row) => row.period)),
     records: (payload.records || []).map(fromV3Row),
   };
-}
-
-async function loadV3SalesForMonth(
-  month: string,
-  periods: PeriodType[] = ["current", "prevMonth", "prevYear"],
-): Promise<V3SalesLoadResult> {
-  const results = await Promise.all(periods.map((period) => loadV3SalesPeriod(month, period)));
-  return {
-    available: results.some((result) => result.available),
-    periodsWithBatch: new Set(results.flatMap((result) => Array.from(result.periodsWithBatch))),
-    records: dedupeSales(results.flatMap((result) => result.records)),
-  };
-}
-
-async function loadPriorYearStoreHistory(month: string): Promise<PriorYearStoreHistoryRow[]> {
-  const api = d1SalesEndpoint("sales/prior-year-store-history");
-  const response = await fetch(
-    `${api.url}?baseMonth=${encodeURIComponent(month)}`,
-    { method: "GET", headers: api.headers, cache: "no-store" },
-  );
-  if (!response.ok) throw new Error(`D1 prior-year history load failed: ${response.status}`);
-  const payload = (await response.json()) as { stores?: PriorYearStoreHistoryRow[] };
-  return payload.stores || [];
-}
-
-function asPreviousMonthSales(rows: SalesRecord[], targetMonth: string) {
-  const sourceMonth = previousMonth(targetMonth);
-  return rows
-    .filter((row) => {
-      if (row.period !== "current") return false;
-      const rowMonth = row.refMonth || row.saleDate.slice(0, 7);
-      return rowMonth === sourceMonth;
-    })
-    .map((row) => ({
-      ...row,
-      id: `prev-month-fallback:${targetMonth}:${row.id}`,
-      period: "prevMonth" as PeriodType,
-      refMonth: targetMonth,
-    }));
-}
-
-function asPreviousYearSales(rows: SalesRecord[], targetMonth: string) {
-  const sourceMonth = addMonths(targetMonth, -12);
-  return rows
-    .filter((row) => {
-      if (row.period !== "current") return false;
-      const rowMonth = row.refMonth || row.saleDate.slice(0, 7);
-      return rowMonth === sourceMonth;
-    })
-    .map((row) => ({
-      ...row,
-      id: `prev-year-fallback:${targetMonth}:${row.id}`,
-      period: "prevYear" as PeriodType,
-      refMonth: targetMonth,
-    }));
 }
 
 async function replaceV3SalesBatch(request: SalesUploadRequest) {
@@ -4353,50 +4177,7 @@ function useChunkedSales(
     const legacy = await loadLegacyMonthChunks(targetMonth);
     const v3Periods = v3.periodsWithBatch;
     const legacyForUnmigratedPeriods = legacy.filter((row) => !v3Periods.has(row.period));
-    let previousMonthFallback: SalesRecord[] = [];
-    let previousYearFallback: SalesRecord[] = [];
-
-    // 선택 월에 전월 업로드가 따로 없으면, D1에 보존된 직전 월의 당월 매출을
-    // 전월 매출로 연결합니다. 별도 전월 업로드가 존재할 때는 그 값을 우선합니다.
-    const alreadyHasPreviousMonth =
-      v3Periods.has("prevMonth") ||
-      legacyForUnmigratedPeriods.some(
-        (row) => row.period === "prevMonth" && row.refMonth === targetMonth,
-      );
-    if (!alreadyHasPreviousMonth) {
-      try {
-        const previousV3 = await loadV3SalesForMonth(previousMonth(targetMonth), ["current"]);
-        if (previousV3.available) {
-          previousMonthFallback = asPreviousMonthSales(previousV3.records, targetMonth);
-        }
-      } catch (error) {
-        console.warn("직전 월 매출 자동 연결 실패", error);
-      }
-    }
-
-
-    const alreadyHasPreviousYear =
-      v3Periods.has("prevYear") ||
-      legacyForUnmigratedPeriods.some(
-        (row) => row.period === "prevYear" && row.refMonth === targetMonth,
-      );
-    if (!alreadyHasPreviousYear) {
-      try {
-        const previousYearV3 = await loadV3SalesForMonth(addMonths(targetMonth, -12), ["current"]);
-        if (previousYearV3.available) {
-          previousYearFallback = asPreviousYearSales(previousYearV3.records, targetMonth);
-        }
-      } catch (error) {
-        console.warn("전년동월 매출 자동 연결 실패", error);
-      }
-    }
-
-    return dedupeSales([
-      ...legacyForUnmigratedPeriods,
-      ...v3.records,
-      ...previousMonthFallback,
-      ...previousYearFallback,
-    ]);
+    return dedupeSales([...legacyForUnmigratedPeriods, ...v3.records]);
   };
 
   const persistLegacyNow = (nextValue: SalesRecord[]) => {
@@ -4568,9 +4349,6 @@ function readFileRows(file: File): Promise<Record<string, unknown>[]> {
               "매출일",
               "Target",
               "EST",
-              "품목코드",
-              "품목 코드",
-              "품목명",
             ].includes(norm(cell)),
           ),
         );
@@ -4702,56 +4480,23 @@ function orderRowsForExcel(rows: SalesRecord[]) {
     상품코드: r.itemCode,
     상품명: r.itemName,
     수량: r.quantity,
-    판매단가: r.saleUnitPrice,
     매출금액: r.salesAmount,
-    매입단가: r.costUnitPrice,
     원가금액: r.costAmount,
     이익금액: r.profitAmount,
     이익률: pct(r.profitRate),
   }));
 }
 
-const DEFAULT_ADMIN_PASSWORD_HASH = "766d98069ffd0f229ef8ab8b135d35bb7a7d1eae6cafc4bf909315ea5f7bb625";
+const ADMIN_PASSWORD = "ablab2026";
+const EST_ENTRY_MANAGERS: Manager[] = ["SY", "KT", "NH"];
 
-async function hashAdminPassword(value: string) {
-  const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function isEstEntryPeriodOpen(month: string) {
-  const seoulToday = todayInSeoul();
-  return seoulToday.slice(0, 7) === month && Number(seoulToday.slice(8, 10)) <= 5;
+function isEstEntryPeriodToday() {
+  return Number(today().slice(8, 10)) <= 4;
 }
 
 export default function SalesReportClient() {
-  const [active, setActive] = useState("EST 입력");
-  const [isMobile, setIsMobile] = useState(false);
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [showIosInstallGuide, setShowIosInstallGuide] = useState(false);
-  const [isAppInstalled, setIsAppInstalled] = useState(false);
-  const [notificationSupported, setNotificationSupported] = useState(false);
-  const [notificationSubscribed, setNotificationSubscribed] = useState(false);
-  const [notificationBusy, setNotificationBusy] = useState(false);
-  const [ecountSyncState, setEcountSyncState] = useState<EcountSyncState | null>(null);
-  const [ecountSyncLoading, setEcountSyncLoading] = useState(true);
-  const [ecountSyncRequesting, setEcountSyncRequesting] = useState(false);
-  const [ecountSyncError, setEcountSyncError] = useState("");
-  const lastObservedSyncSuccessRef = useRef<string | null>(null);
-  const salesRefreshRef = useRef<() => Promise<void>>(async () => undefined);
-  const [estHeaderSummary, setEstHeaderSummary] = useState<EstHeaderSummary | null>(null);
+  const [active, setActive] = useState("대시보드");
   const [isAdmin, setIsAdmin] = useState(false);
-  const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
-  const [menuVisibility, setMenuVisibility] = useLocal<Record<MainMenuLabel, boolean>>(
-    "ablab_main_menu_visibility_v1",
-    { "EST 입력": true, "대시보드": true, "매출현황": true, "거래처별 상세": true, "품목분석": true, "월초관리": true },
-  );
-  const [adminPasswordHash, setAdminPasswordHash] = useLocal<string>(
-    "ablab_admin_password_hash_v1",
-    DEFAULT_ADMIN_PASSWORD_HASH,
-  );
   const [dashMonth, setDashMonth] = useState(thisMonth());
   const [dashDate, setDashDate] = useState(today());
   const [stores, setStores] = useLocal<Store[]>(
@@ -4763,110 +4508,11 @@ export default function SalesReportClient() {
     initialSales,
     dashMonth,
   );
-
-  useEffect(() => {
-    salesRefreshRef.current = salesActions.refresh;
-  }, [salesActions.refresh]);
-
-  // ----------------------------------------------------------
-  // ECOUNT 동기화 상태를 5초마다 확인합니다.
-  // 동기화가 성공하면 D1 매출을 즉시 다시 읽어 화면에도 반영합니다.
-  // ----------------------------------------------------------
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const refreshSyncState = async () => {
-      try {
-        const next = await loadEcountSyncState();
-        if (cancelled) return;
-
-        setEcountSyncState(next);
-        setEcountSyncError("");
-
-        const successAt = next?.lastSuccessAt || null;
-        if (
-          successAt &&
-          lastObservedSyncSuccessRef.current &&
-          successAt !== lastObservedSyncSuccessRef.current
-        ) {
-          await salesRefreshRef.current().catch((error) =>
-            console.warn("동기화 완료 후 매출 최신화 실패", error),
-          );
-        }
-        if (successAt) lastObservedSyncSuccessRef.current = successAt;
-      } catch (error) {
-        if (cancelled) return;
-        setEcountSyncError(
-          error instanceof Error ? error.message : "동기화 상태를 확인하지 못했습니다.",
-        );
-      } finally {
-        if (!cancelled) setEcountSyncLoading(false);
-      }
-    };
-
-    refreshSyncState();
-    const timer = window.setInterval(refreshSyncState, 5000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  async function requestLatestEcountSync() {
-    if (ecountSyncRequesting || ecountSyncBusy(ecountSyncState)) return;
-
-    setEcountSyncRequesting(true);
-    setEcountSyncError("");
-
-    try {
-      // 클릭 직전 서버 상태를 다시 확인하여 다른 PC가 처리 중인 요청을 덮어쓰지 않습니다.
-      const latest = await loadEcountSyncState();
-      if (ecountSyncBusy(latest)) {
-        setEcountSyncState(latest);
-        return;
-      }
-
-      const now = new Date().toISOString();
-      const next: EcountSyncState = {
-        ...(latest || {}),
-        requestId: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-        reason: "manual",
-        requestedBy: "Sales Report 웹",
-        requestedAt: now,
-        status: "PENDING",
-        claimedBy: null,
-        claimToken: null,
-        claimedAt: null,
-        leaseUntil: null,
-        startedAt: null,
-        completedAt: null,
-        heartbeatAt: null,
-        lastError: null,
-        message: "웹사이트에서 최신 데이터 동기화를 요청했습니다.",
-      };
-
-      await saveEcountSyncState(next);
-      setEcountSyncState(next);
-    } catch (error) {
-      setEcountSyncError(
-        error instanceof Error ? error.message : "동기화 요청에 실패했습니다.",
-      );
-    } finally {
-      setEcountSyncRequesting(false);
-    }
-  }
-
   const [targets, setTargets] = useLocal<TargetRecord[]>(
     "ablab_targets_v14",
     initialTargets,
   );
   const [ests, setEsts] = useLocal<EstRecord[]>("ablab_ests_v14", initialEsts);
-  const [pendingNewStoreEsts, setPendingNewStoreEsts] = useLocal<PendingNewStoreEst[]>(
-    "ablab_pending_new_store_ests_v1",
-    [],
-  );
   const [timeConfigs, setTimeConfigs] = useLocal<TimeConfig[]>(
     "ablab_time_configs_v14",
     initialTimeConfigs,
@@ -4879,298 +4525,36 @@ export default function SalesReportClient() {
     "ablab_item_costs_v1",
     initialItemCosts,
   );
-  const [itemMasters, setItemMasters] = useLocal<ItemMasterRecord[]>(
-    "ablab_item_masters_v1",
-    [],
-  );
-  const [managerConfigs, setManagerConfigs] = useLocal<ManagerConfig[]>(
-    "month-start-manager-configs-v2",
-    INITIAL_MANAGER_CONFIGS,
-  );
 
   useEffect(() => {
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
-    setIsAppInstalled(standalone || window.localStorage.getItem("ablab_pwa_installed") === "1");
-
     if (!dashDate.startsWith(dashMonth)) setDashDate(monthEnd(dashMonth));
   }, [dashMonth, dashDate]);
 
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 767px)");
-    const syncViewport = () => setIsMobile(media.matches);
-    syncViewport();
-    media.addEventListener("change", syncViewport);
-    return () => media.removeEventListener("change", syncViewport);
-  }, []);
+  const isEstEntryOpen = isEstEntryPeriodToday();
+  const canAccessEstEntry = isAdmin || isEstEntryOpen;
 
   useEffect(() => {
-    const supported =
-      "serviceWorker" in navigator &&
-      "PushManager" in window &&
-      "Notification" in window;
-    setNotificationSupported(supported);
-    if (!supported) return;
-
-    navigator.serviceWorker.ready
-      .then((registration) => registration.pushManager.getSubscription())
-      .then((subscription) => setNotificationSubscribed(Boolean(subscription)))
-      .catch(() => setNotificationSubscribed(false));
-  }, []);
-
-  async function ensurePushSubscription(options?: { requestPermission?: boolean }) {
-    if (!notificationSupported) return false;
-
-    const optedOut = window.localStorage.getItem(PUSH_OPT_OUT_KEY) === "1";
-    if (optedOut && !options?.requestPermission) return false;
-
-    let permission = Notification.permission;
-    if (permission === "default" && options?.requestPermission) {
-      permission = await Notification.requestPermission();
-    }
-
-    if (permission !== "granted") return false;
-
-    const keyResponse = await fetch("/api/d1/push/public-key", { cache: "no-store" });
-    if (!keyResponse.ok) throw new Error("푸시 공개키를 불러오지 못했습니다.");
-    const { publicKey } = await keyResponse.json() as { publicKey: string };
-
-    const registration = await navigator.serviceWorker.ready;
-    const existing = await registration.pushManager.getSubscription();
-    const subscription = existing || await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey),
-    });
-
-    const response = await fetch("/api/d1/push/subscribe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscription: subscription.toJSON() }),
-    });
-    if (!response.ok) throw new Error("알림 구독을 저장하지 못했습니다.");
-
-    window.localStorage.removeItem(PUSH_OPT_OUT_KEY);
-    setNotificationSubscribed(true);
-    return true;
-  }
-
-  // 이미 알림 권한을 허용한 기기는 별도의 '알림 받기' 설정 없이 자동 등록합니다.
-  // 사용자가 명시적으로 '알림 끄기'를 누른 기기는 다시 자동 등록하지 않습니다.
-  useEffect(() => {
-    if (!notificationSupported || Notification.permission !== "granted") return;
-    if (window.localStorage.getItem(PUSH_OPT_OUT_KEY) === "1") return;
-
-    ensurePushSubscription().catch((error) =>
-      console.warn("푸시 자동 구독 확인 실패", error),
-    );
-  }, [notificationSupported]);
-
-  // 권한이 아직 결정되지 않은 사용자는 사이트에서 첫 상호작용을 할 때
-  // 브라우저의 알림 허용 창을 한 번 띄웁니다. 별도 설정 메뉴를 찾을 필요가 없습니다.
-  useEffect(() => {
-    if (!notificationSupported) return;
-    if (Notification.permission !== "default") return;
-    if (window.localStorage.getItem(PUSH_OPT_OUT_KEY) === "1") return;
-
-    let handled = false;
-    const requestOnFirstInteraction = () => {
-      if (handled) return;
-      handled = true;
-      cleanup();
-
-      ensurePushSubscription({ requestPermission: true }).catch((error) =>
-        console.warn("푸시 자동 권한 요청 실패", error),
-      );
-    };
-
-    const cleanup = () => {
-      window.removeEventListener("pointerdown", requestOnFirstInteraction);
-      window.removeEventListener("keydown", requestOnFirstInteraction);
-    };
-
-    window.addEventListener("pointerdown", requestOnFirstInteraction, { once: true });
-    window.addEventListener("keydown", requestOnFirstInteraction, { once: true });
-
-    return cleanup;
-  }, [notificationSupported]);
-
-  async function enableNotifications() {
-    if (!notificationSupported || notificationBusy) return;
-    setNotificationBusy(true);
-    try {
-      const enabled = await ensurePushSubscription({ requestPermission: true });
-      if (!enabled) {
-        alert("알림 권한이 허용되지 않았습니다. 브라우저 또는 앱 설정에서 알림을 허용해주세요.");
-        return;
-      }
-      alert("업데이트 알림을 받도록 설정되었습니다.");
-    } catch (error) {
-      alert(error instanceof Error ? error.message : "알림 설정 중 오류가 발생했습니다.");
-    } finally {
-      setNotificationBusy(false);
-    }
-  }
-
-  async function disableNotifications() {
-    if (notificationBusy) return;
-    setNotificationBusy(true);
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      if (subscription) {
-        await fetch("/api/d1/push/subscribe", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ endpoint: subscription.endpoint }),
-        });
-        await subscription.unsubscribe();
-      }
-      window.localStorage.setItem(PUSH_OPT_OUT_KEY, "1");
-      setNotificationSubscribed(false);
-      alert("업데이트 알림을 해제했습니다.");
-    } catch {
-      alert("알림 해제 중 오류가 발생했습니다.");
-    } finally {
-      setNotificationBusy(false);
-    }
-  }
-
-  async function sendUpdateNotification() {
-    if (!window.confirm(`${dashDate} 매출 업데이트 완료 알림을 발송할까요?`)) return;
-    setNotificationBusy(true);
-    try {
-      const response = await fetch("/api/d1/push/notify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ baseMonth: dashMonth, reportDate: dashDate, syncSlot: "manual" }),
-      });
-      const payload = await response.json() as { sent?: number; duplicate?: boolean; error?: string };
-      if (!response.ok) throw new Error(payload.error || "알림 발송에 실패했습니다.");
-      if (payload.duplicate) {
-        alert("해당 기준일의 업데이트 완료 알림은 이미 발송되었습니다.");
-      } else {
-        alert(`업데이트 완료 알림을 ${Number(payload.sent || 0).toLocaleString("ko-KR")}개 기기에 발송했습니다.`);
-      }
-    } catch (error) {
-      alert(error instanceof Error ? error.message : "알림 발송 중 오류가 발생했습니다.");
-    } finally {
-      setNotificationBusy(false);
-    }
-  }
-
-  useEffect(() => {
-    if (isMobile && active !== "대시보드" && active !== "매출현황") {
-      setActive("대시보드");
-    }
-  }, [isMobile, active]);
-
-  useEffect(() => {
-    const headEntries: Array<[string, Record<string, string>]> = [
-      ["link", { rel: "manifest", href: "/manifest.webmanifest" }],
-      ["link", { rel: "apple-touch-icon", href: "/icons/icon-192.png" }],
-      ["meta", { name: "theme-color", content: "#f97316" }],
-      ["meta", { name: "mobile-web-app-capable", content: "yes" }],
-      ["meta", { name: "apple-mobile-web-app-capable", content: "yes" }],
-      ["meta", { name: "apple-mobile-web-app-status-bar-style", content: "default" }],
-      ["meta", { name: "apple-mobile-web-app-title", content: "Sales Report" }],
-    ];
-    headEntries.forEach(([tag, attributes]) => {
-      const selector = tag === "link"
-        ? `link[rel="${attributes.rel}"]`
-        : `meta[name="${attributes.name}"]`;
-      let element = document.head.querySelector(selector) as HTMLElement | null;
-      if (!element) {
-        element = document.createElement(tag);
-        document.head.appendChild(element);
-      }
-      Object.entries(attributes).forEach(([key, value]) => element?.setAttribute(key, value));
-    });
-
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-    }
-
-    const onBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as BeforeInstallPromptEvent);
-    };
-    const onAppInstalled = () => {
-      setInstallPrompt(null);
-      setIsAppInstalled(true);
-      window.localStorage.setItem("ablab_pwa_installed", "1");
-    };
-
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-    window.addEventListener("appinstalled", onAppInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-      window.removeEventListener("appinstalled", onAppInstalled);
-    };
-  }, []);
-
-  async function installApp() {
-    if (installPrompt) {
-      await installPrompt.prompt();
-      await installPrompt.userChoice;
-      setInstallPrompt(null);
-      return;
-    }
-
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
-    if (standalone) {
-      alert("이미 앱으로 설치되어 있습니다.");
-      return;
-    }
-
-    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    if (isIos) {
-      setShowIosInstallGuide(true);
-      return;
-    }
-    alert("브라우저 메뉴에서 ‘앱 설치’ 또는 ‘홈 화면에 추가’를 선택해주세요.");
-  }
-
-  const canAccessEstEntry = true;
+    if (!isAdmin && active === "월초관리") setActive("대시보드");
+    if (!canAccessEstEntry && active === "EST 입력") setActive("대시보드");
+  }, [isAdmin, active, canAccessEstEntry]);
 
   const tg = useMemo(
     () => getTimeGone(dashMonth, dashDate, timeConfigs),
     [dashMonth, dashDate, timeConfigs],
   );
-  const allMenus: { label: MainMenuLabel; order: string }[] = [
-    { label: "EST 입력", order: "0" },
+  const menus = [
+    ...(canAccessEstEntry ? [{ label: "EST 입력", order: "0" }] : []),
     { label: "대시보드", order: "1" },
     { label: "매출현황", order: "2" },
     { label: "거래처별 상세", order: "3" },
     { label: "품목분석", order: "4" },
-    { label: "월초관리", order: "5" },
+    { label: "매입가 정보", order: "5" },
+    ...(isAdmin ? [{ label: "월초관리", order: "6" }] : []),
   ];
-  const openMenus = allMenus.filter((menu) => menuVisibility[menu.label] !== false);
-  const menus = isAdmin ? allMenus : openMenus;
-  const displayedMenus = isMobile
-    ? allMenus.filter((menu) => menu.label === "대시보드" || menu.label === "매출현황")
-    : menus;
 
-  useEffect(() => {
-    if (isAdmin || isMobile) return;
-    if (!openMenus.some((menu) => menu.label === active))
-      setActive(openMenus[0]?.label || "EST 입력");
-  }, [isAdmin, isMobile, active, menuVisibility]);
-
-  const toggleMenuVisibility = (label: MainMenuLabel) => {
-    const currentlyOpen = menuVisibility[label] !== false;
-    if (currentlyOpen && openMenus.length === 1) {
-      alert("최소 한 개의 카테고리는 열어두어야 합니다.");
-      return;
-    }
-    setMenuVisibility((prev) => ({ ...prev, [label]: !currentlyOpen }));
-  };
-
-  async function adminLogin() {
+  function adminLogin() {
     const password = window.prompt("관리자 비밀번호를 입력하세요.");
-    if (password !== null && await hashAdminPassword(password) === adminPasswordHash) {
+    if (password === ADMIN_PASSWORD) {
       setIsAdmin(true);
       alert("관리자 모드로 전환되었습니다.");
     } else if (password !== null) {
@@ -5178,1009 +4562,62 @@ export default function SalesReportClient() {
     }
   }
 
-  async function changeAdminPassword() {
-    const currentPassword = window.prompt("현재 관리자 비밀번호를 입력하세요.");
-    if (currentPassword === null) return;
-    if (await hashAdminPassword(currentPassword) !== adminPasswordHash) {
-      alert("현재 비밀번호가 올바르지 않습니다.");
-      return;
-    }
-    const nextPassword = window.prompt("새 관리자 비밀번호를 입력하세요. (6자 이상)");
-    if (nextPassword === null) return;
-    if (nextPassword.length < 6) {
-      alert("새 비밀번호는 6자 이상으로 입력해주세요.");
-      return;
-    }
-    const confirmedPassword = window.prompt("새 관리자 비밀번호를 한 번 더 입력하세요.");
-    if (confirmedPassword === null) return;
-    if (nextPassword !== confirmedPassword) {
-      alert("새 비밀번호가 서로 일치하지 않습니다.");
-      return;
-    }
-    setAdminPasswordHash(await hashAdminPassword(nextPassword));
-    alert("관리자 비밀번호가 변경되었습니다.");
-  }
-
   return (
     <main
-      className="sales-report-root h-screen overflow-hidden bg-white text-black"
-      data-active={active}
+      className="min-h-screen bg-white text-slate-900"
       style={{ fontFamily: '"Malgun Gothic", "맑은 고딕", sans-serif' }}
     >
-      {isMobile && (
-        <header className="mobile-app-header sticky top-0 z-[90] border-b border-slate-100 bg-white">
-          <div className="flex h-[58px] items-center justify-between px-4">
-            <button type="button" aria-label="메뉴" className="flex h-10 w-10 items-center justify-start text-slate-700">
-              <span className="text-[22px] leading-none">☰</span>
-            </button>
-            <div className="flex items-center gap-2">
-              <span className="flex items-end gap-[2px]" aria-hidden="true">
-                <i className="block h-2 w-1.5 rounded-sm bg-blue-500" />
-                <i className="block h-3.5 w-1.5 rounded-sm bg-blue-500" />
-                <i className="block h-5 w-1.5 rounded-sm bg-blue-600" />
-              </span>
-              <span className="text-[16px] font-black tracking-tight text-slate-900">Sales Report</span>
+      <header className="sticky top-0 z-40 border-b border-gray-300 bg-white/95 shadow-sm backdrop-blur">
+        <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-5">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-lg font-extrabold tracking-tight text-orange-950">
+              에이비랩 코리아 Sales Report
             </div>
-            <button
-              type="button"
-              aria-label="알림"
-              onClick={() => {
-                if (!notificationSupported || notificationBusy) return;
-                if (notificationSubscribed) disableNotifications();
-                else enableNotifications();
-              }}
-              className="relative flex h-10 w-10 items-center justify-end text-slate-700"
-            >
-              <span className="text-[20px]">♧</span>
-              {notificationSubscribed && <span className="absolute right-0 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black text-white">2</span>}
-            </button>
-          </div>
-        </header>
-      )}
-
-      {!isMobile && (
-        <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
-          <div className="flex h-[62px] items-center gap-5 px-5 pl-[78px]">
-            <div className="flex shrink-0 items-center gap-2 border-r border-slate-200 pr-5">
-              <span className="flex items-end gap-[2px]" aria-hidden="true">
-                <i className="block h-2 w-1.5 rounded-sm bg-blue-500" />
-                <i className="block h-3.5 w-1.5 rounded-sm bg-blue-500" />
-                <i className="block h-5 w-1.5 rounded-sm bg-blue-600" />
-              </span>
-              <span className="text-[16px] font-black tracking-tight text-slate-900">Sales Report</span>
-            </div>
-
-            <div className="flex min-w-0 flex-1 items-center gap-0">
-              <label className="relative min-w-[128px] border-r border-slate-200 px-4">
-                <span className="block text-[9px] font-bold text-slate-500">기준년월</span>
-                <input
-                  type="month"
-                  value={dashMonth}
-                  onChange={(e) => setDashMonth(e.target.value)}
-                  className="mt-0.5 w-[108px] border-0 bg-transparent p-0 text-[12px] font-black text-slate-900 outline-none"
-                />
-              </label>
-              <label className="relative min-w-[130px] border-r border-slate-200 px-4">
-                <span className="block text-[9px] font-bold text-slate-500">기준일</span>
-                <input
-                  type="date"
-                  value={dashDate}
-                  min={monthStart(dashMonth)}
-                  max={monthEnd(dashMonth)}
-                  onChange={(e) => setDashDate(e.target.value)}
-                  className="mt-0.5 w-[112px] border-0 bg-transparent p-0 text-[12px] font-black text-slate-900 outline-none"
-                />
-              </label>
-              <div className="min-w-[96px] border-r border-slate-200 px-4">
-                <div className="text-[9px] font-bold uppercase text-slate-500">TIME GONE</div>
-                <div className="mt-0.5 text-[13px] font-black text-blue-600">{pct(tg.timeGoneRate)}</div>
-              </div>
-              <div className="min-w-[76px] border-r border-slate-200 px-4">
-                <div className="text-[9px] font-bold text-slate-500">총일수</div>
-                <div className="mt-0.5 text-[13px] font-black text-slate-900">{tg.totalDays}일</div>
-              </div>
-              <div className="min-w-[82px] border-r border-slate-200 px-4">
-                <div className="text-[9px] font-bold text-slate-500">진행일수</div>
-                <div className="mt-0.5 text-[13px] font-black text-slate-900">{tg.progressedDays}일</div>
-              </div>
-              <div className="min-w-[76px] px-4">
-                <div className="text-[9px] font-bold text-slate-500">잔여일수</div>
-                <div className="mt-0.5 text-[13px] font-black text-slate-900">{tg.remainingDays}일</div>
-              </div>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={requestLatestEcountSync}
-                disabled={ecountSyncRequesting || ecountSyncBusy(ecountSyncState)}
-                className="flex min-w-[116px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-[12px] font-black text-slate-800 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                title={
-                  ecountSyncState?.status === "RUNNING" && ecountSyncState.claimedBy
-                    ? `${ecountSyncState.claimedBy} PC에서 동기화 중`
-                    : "ECOUNT 최신 데이터를 즉시 Sales Report에 반영합니다."
-                }
-              >
-                <span className="text-[17px] leading-none">↻</span>
-                <span>{ecountSyncBusy(ecountSyncState) || ecountSyncRequesting ? "동기화 중" : "동기화"}</span>
-              </button>
-              <div className="min-w-[108px] leading-tight">
-                <div className={`text-[9px] font-extrabold ${ecountSyncState?.status === "FAILED" ? "text-red-600" : ecountSyncBusy(ecountSyncState) ? "text-amber-600" : "text-slate-500"}`}>
-                  {ecountSyncLoading ? "상태 확인 중" : ecountSyncStatusLabel(ecountSyncState)}
-                </div>
-                <div className="mt-0.5 whitespace-nowrap text-[9px] font-semibold text-slate-400">
-                  {formatSyncTime(ecountSyncState?.lastSuccessAt)}
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-      )}
-
-      {!isMobile && (
-        <aside className="group fixed bottom-0 left-0 top-[62px] z-[80] w-[58px] overflow-hidden border-r border-slate-200 bg-white transition-all duration-200 hover:w-[210px]">
-          <div className="flex h-full flex-col py-3">
-            <div className="mb-2 flex h-9 items-center px-4 text-xl font-black text-slate-500">☰<span className="ml-4 whitespace-nowrap text-xs font-black text-slate-800 opacity-0 transition-opacity group-hover:opacity-100">메뉴</span></div>
-            <nav className="space-y-1 px-2">
-              {displayedMenus.map((m) => (
-                <button key={m.label} type="button" onClick={() => setActive(m.label)} className={`flex h-10 w-full items-center rounded-xl px-2 transition ${active === m.label ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}>
-                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[12px] font-black ${active === m.label ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-600"}`}>{m.order}</span>
-                  <span className="ml-3 whitespace-nowrap text-xs font-black opacity-0 transition-opacity group-hover:opacity-100">{m.label}</span>
+            <nav className="flex flex-wrap items-center gap-2">
+              {menus.map((m) => (
+                <button
+                  key={m.label}
+                  onClick={() => setActive(m.label)}
+                  className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
+                    active === m.label
+                      ? "bg-orange-500 text-white shadow"
+                      : "bg-orange-50 text-orange-900 hover:bg-orange-100"
+                  }`}
+                >
+                  {m.order}. {m.label}
                 </button>
               ))}
             </nav>
-
-            <div className="mt-auto border-t border-slate-100 px-2 pt-3">
-              {isAdmin ? (
-                <div className="space-y-1">
-                  <button type="button" onClick={() => setMenuSettingsOpen(true)} className="flex h-9 w-full items-center rounded-xl px-2 text-slate-600 hover:bg-slate-50">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[15px]">⚙</span>
-                    <span className="ml-3 whitespace-nowrap text-[11px] font-black opacity-0 transition-opacity group-hover:opacity-100">공개 설정</span>
-                  </button>
-                  <button type="button" onClick={changeAdminPassword} className="flex h-9 w-full items-center rounded-xl px-2 text-slate-600 hover:bg-slate-50">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[14px]">⌘</span>
-                    <span className="ml-3 whitespace-nowrap text-[11px] font-black opacity-0 transition-opacity group-hover:opacity-100">비밀번호 변경</span>
-                  </button>
-                  <button type="button" onClick={() => { setIsAdmin(false); setActive(openMenus[0]?.label || "EST 입력"); }} className="flex h-9 w-full items-center rounded-xl px-2 text-slate-600 hover:bg-slate-50">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[15px]">⇥</span>
-                    <span className="ml-3 whitespace-nowrap text-[11px] font-black opacity-0 transition-opacity group-hover:opacity-100">관리자 모드 해제</span>
-                  </button>
-                </div>
-              ) : (
-                <button type="button" onClick={adminLogin} className="flex h-10 w-full items-center rounded-xl px-2 text-slate-600 transition hover:bg-slate-50">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[16px]">⇥</span>
-                  <span className="ml-3 whitespace-nowrap text-[11px] font-black opacity-0 transition-opacity group-hover:opacity-100">관리자 로그인</span>
-                </button>
-              )}
-            </div>
           </div>
-        </aside>
-      )}
-
-      {showIosInstallGuide && (
-        <div className="fixed inset-0 z-[220] flex items-end justify-center bg-black/45 p-3 sm:items-center" onMouseDown={() => setShowIosInstallGuide(false)}>
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-extrabold text-slate-900">iPhone 홈 화면에 설치</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">Safari 하단의 공유 버튼을 누른 다음 <b>홈 화면에 추가</b>를 선택해주세요.</p>
-              </div>
-              <button type="button" onClick={() => setShowIosInstallGuide(false)} className="min-h-11 min-w-11 rounded-xl text-xl font-bold text-slate-500 hover:bg-slate-100">×</button>
-            </div>
-            <button type="button" onClick={() => setShowIosInstallGuide(false)} className="mt-4 min-h-12 w-full rounded-xl bg-orange-500 px-4 py-3 text-sm font-extrabold text-white">확인</button>
+          <div>
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAdmin(false);
+                  setActive("대시보드");
+                }}
+                className="rounded-xl bg-orange-100 px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-200"
+              >
+                관리자 모드 해제
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={adminLogin}
+                className="rounded-xl bg-orange-100 px-4 py-2 text-xs font-bold text-orange-900 hover:bg-orange-200"
+              >
+                관리자 로그인
+              </button>
+            )}
           </div>
         </div>
-      )}
+      </header>
 
-      {menuSettingsOpen && isAdmin && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" onMouseDown={() => setMenuSettingsOpen(false)}>
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-extrabold text-slate-900">카테고리 공개 설정</h2>
-              </div>
-              <button type="button" onClick={() => setMenuSettingsOpen(false)} className="rounded-lg px-2 py-1 text-lg font-bold text-slate-500 hover:bg-slate-100">×</button>
-            </div>
-            <div className="mt-4 space-y-2">
-              {allMenus.map((menu) => {
-                const opened = menuVisibility[menu.label] !== false;
-                return (
-                  <label key={menu.label} className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 px-4 py-3 hover:bg-slate-50">
-                    <span className="text-sm font-bold text-slate-800">{menu.order}. {menu.label}</span>
-                    <span className="flex items-center gap-2 text-xs font-extrabold">
-                      <span className={opened ? "text-emerald-700" : "text-slate-500"}>{opened ? "열림" : "닫힘"}</span>
-                      <input type="checkbox" checked={opened} onChange={() => toggleMenuVisibility(menu.label)} className="h-5 w-5 rounded border-slate-300 text-orange-500" />
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            <button type="button" onClick={() => setMenuSettingsOpen(false)} className="mt-4 w-full rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-extrabold text-white hover:bg-orange-600">설정 완료</button>
-          </div>
-        </div>
-      )}
-
-      <section className={`flex h-[calc(100vh-62px)] min-w-0 flex-col overflow-hidden p-4 pb-10 lg:p-5 lg:pb-10 ${!isMobile ? "ml-[58px]" : ""}`}>
-        <style jsx global>{`
-          .sales-report-root table th,
-          .sales-report-root table td,
-          .sales-report-root table input,
-          .sales-report-root table select,
-          .sales-report-root .metric-black { color: #000 !important; }
-          .sales-report-root table th,
-          .sales-report-root table td { border-color: #e5e7eb !important; }
-
-          /* 임원·전사 공유용 표 헤더: 색은 분류만 돕고 숫자보다 먼저 보이지 않도록 절제합니다. */
-          .sales-report-root[data-active="매출현황"] table thead th,
-          .sales-report-root[data-active="거래처별 상세"] table thead th,
-          .sales-report-root[data-active="품목분석"] table thead th {
-            border-width: 1px !important;
-            border-style: solid !important;
-            border-color: #e5e7eb !important;
-            border-radius: 0 !important;
-            color: #111827 !important;
-            font-weight: 700;
-            background-clip: border-box !important;
-            box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.18) !important;
-          }
-
-          .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th {
-            position: relative !important;
-            color: #ffffff !important;
-            background-color: #1e293b !important;
-            border-color: #475569 !important;
-            -webkit-text-fill-color: #ffffff !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-          }
-          .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th::before,
-          .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th::after {
-            content: none !important;
-            display: none !important;
-          }
-          .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table .dashboard-comparison-header-label {
-            position: relative !important;
-            z-index: 10 !important;
-            display: block !important;
-            color: #ffffff !important;
-            -webkit-text-fill-color: #ffffff !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-          }
-
-          /* 표 섹션 제목은 색 대신 간격과 타이포그래피로 위계를 만듭니다. */
-          .sales-report-root[data-active="대시보드"] h2,
-          .sales-report-root[data-active="대시보드"] h3,
-          .sales-report-root[data-active="매출현황"] h2,
-          .sales-report-root[data-active="매출현황"] h3,
-          .sales-report-root[data-active="거래처별 상세"] h2,
-          .sales-report-root[data-active="거래처별 상세"] h3,
-          .sales-report-root[data-active="품목분석"] h2,
-          .sales-report-root[data-active="품목분석"] h3 {
-            color: #111827;
-            letter-spacing: -0.01em;
-          }
-
-          /* 모든 카테고리 공통: 표 내부 스크롤 시 고정 헤더 뒤로 본문이 비치지 않도록 처리 */
-          .sales-report-root .overflow-auto:has(table) {
-            position: relative;
-            isolation: isolate;
-            background: #fff;
-            overscroll-behavior: contain;
-            scrollbar-gutter: stable;
-          }
-          .sales-report-root table {
-            position: relative;
-            background: #fff;
-          }
-          .sales-report-root table thead {
-            position: relative;
-            z-index: 70;
-          }
-          .sales-report-root table thead tr {
-            position: relative;
-            z-index: 70;
-          }
-          .sales-report-root table thead th {
-            opacity: 1 !important;
-            background-clip: border-box !important;
-            isolation: isolate;
-            box-shadow: inset 0 -1px 0 #e5e7eb, 0 1px 2px rgba(15, 23, 42, 0.04);
-          }
-          .sales-report-root table thead th::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            z-index: -1;
-            background: inherit;
-            pointer-events: none;
-          }
-          .sales-report-root table thead th::after {
-            content: "";
-            position: absolute;
-            left: -1px;
-            right: -1px;
-            bottom: -1px;
-            height: 2px;
-            z-index: 2;
-            background: #e5e7eb;
-            pointer-events: none;
-          }
-          .sales-report-root table tbody {
-            position: relative;
-            z-index: 1;
-          }
-          .sales-report-root table tr.sticky > th,
-          .sales-report-root table tr.sticky > td {
-            opacity: 1 !important;
-            background-clip: border-box !important;
-            box-shadow: inset 0 -1px 0 #e5e7eb, 0 1px 2px rgba(15, 23, 42, 0.04);
-          }
-          .sales-report-root table tr.sticky > th::before,
-          .sales-report-root table tr.sticky > td::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            z-index: -1;
-            background: inherit;
-            pointer-events: none;
-          }
-          /* 매출현황 2단 헤더: 품목분석과 동일하게 상단 그룹과 하단 세부 헤더 사이 구분선 표시 */
-          .sales-report-root .sales-status-table thead tr:first-child th {
-            height: 31px;
-            min-height: 31px;
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-            box-shadow: none !important;
-          }
-          .sales-report-root .sales-status-table thead tr:first-child th:not([rowspan]) {
-            border-bottom: 1px solid #d7dee7 !important;
-            box-shadow: inset 0 -1px 0 #d7dee7 !important;
-          }
-          .sales-report-root .sales-status-table thead tr:first-child th::after {
-            display: none !important;
-          }
-          .sales-report-root .sales-status-table thead tr:nth-child(2) th {
-            top: 31px !important;
-            border-top: 1px solid #cbd5e1 !important;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
-          }
-          .sales-report-root .sales-status-table thead tr:nth-child(2) th::before {
-            top: 0;
-          }
-          .sales-report-root .sales-status-table thead tr:nth-child(2) th::after {
-            bottom: -1px;
-          }
-
-          /* 거래처별 상세 2단 헤더: 품목분석과 동일하게 상단 그룹과 하단 세부 헤더 사이 구분선 표시 */
-          .sales-report-root .connected-two-tier thead tr:first-child th {
-            height: 37px;
-            min-height: 37px;
-            box-shadow: none !important;
-            text-align: center !important;
-          }
-          .sales-report-root .connected-two-tier thead tr:first-child th:not([rowspan]) {
-            border-bottom: 1px solid #d7dee7 !important;
-            box-shadow: inset 0 -1px 0 #d7dee7 !important;
-          }
-          .sales-report-root .connected-two-tier thead tr:first-child th::after {
-            display: none !important;
-          }
-          .sales-report-root .connected-two-tier thead tr:nth-child(2) th {
-            top: 37px !important;
-            border-top: 1px solid #cbd5e1 !important;
-            text-align: center !important;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
-          }
-          .sales-report-root .connected-two-tier thead tr:nth-child(2) th::before {
-            top: 0;
-          }
-          .sales-report-root .connected-two-tier thead th,
-          .sales-report-root .connected-two-tier thead button {
-            text-align: center !important;
-            justify-content: center !important;
-          }
-          /* 2단 헤더 기간 그룹 구분선: sticky 위치는 유지하고 그룹 경계만 또렷하게 표시 */
-          .sales-report-root .period-group-start {
-            border-left: 2px solid #cbd5e1 !important;
-          }
-          .sales-report-root .period-subgroup-start {
-            border-left: 2px solid #d7dee8 !important;
-          }
-          /* 매출현황: 헤더만 고정하고 본문만 스크롤 */
-          .sales-report-root .sales-status-scroll {
-            position: relative;
-            height: clamp(300px, calc(100vh - 430px), 600px);
-            overflow-y: auto;
-            overflow-x: hidden;
-            scrollbar-gutter: stable;
-            overscroll-behavior: contain;
-            background: #fff;
-            isolation: isolate;
-          }
-          .sales-report-root .sales-status-table {
-            border-collapse: separate !important;
-            border-spacing: 0 !important;
-            background: #fff;
-          }
-          .sales-report-root .sales-status-table thead th {
-            opacity: 1 !important;
-            background-clip: border-box !important;
-            transform: translateZ(0);
-          }
-          .sales-report-root .sales-status-table tbody > tr > td {
-            position: relative;
-            z-index: 1;
-          }
-          /* 품목분석 손익요약: 헤더·SUBTOTAL·본문을 하나의 table/colgroup으로 렌더링 */
-          .sales-report-root .item-profit-scroll {
-            position: relative;
-            height: clamp(300px, calc(100vh - 430px), 600px);
-            overflow-y: auto;
-            overflow-x: hidden;
-            scrollbar-gutter: stable;
-            background: #fff;
-            isolation: isolate;
-          }
-          /* 고정 헤더 뒤로 스크롤되는 본문이 비치지 않도록 흰색 차단막을 둔다. */
-          .sales-report-root .item-profit-scroll::before {
-            content: "";
-            position: sticky;
-            top: 0;
-            z-index: 24;
-            display: block;
-            width: 100%;
-            height: 112px;
-            margin-bottom: -112px;
-            background: #fff;
-            pointer-events: none;
-          }
-          .sales-report-root .item-profit-table {
-            width: 100%;
-            table-layout: fixed;
-            border-collapse: separate;
-            border-spacing: 0;
-            font-size: 12px;
-            background: #fff;
-          }
-          .sales-report-root .item-profit-table th,
-          .sales-report-root .item-profit-table td {
-            box-sizing: border-box;
-            border-right: 1px solid #e5e7eb !important;
-            border-bottom: 1px solid #e5e7eb !important;
-            border-top: 0 !important;
-            border-left: 0 !important;
-            vertical-align: middle;
-          }
-          .sales-report-root .item-profit-table tr > :first-child {
-            border-left: 1px solid #e5e7eb !important;
-          }
-          .sales-report-root .item-profit-table thead tr:first-child > th {
-            border-top: 1px solid #e5e7eb !important;
-          }
-          .sales-report-root .item-profit-table thead th {
-            position: sticky !important;
-            background-clip: border-box !important;
-            opacity: 1 !important;
-            overflow: hidden;
-          }
-          .sales-report-root .item-profit-table thead tr:nth-child(1) th {
-            top: 0;
-            z-index: 43;
-            height: 34px;
-            transform: translateZ(0);
-          }
-          .sales-report-root .item-profit-table thead tr:nth-child(2) th {
-            top: 34px;
-            z-index: 42;
-            height: 44px;
-            transform: translateZ(0);
-          }
-          .sales-report-root .item-profit-table thead tr:nth-child(3) th {
-            top: 78px;
-            z-index: 41;
-            height: 34px;
-            background: #fff8dc !important;
-            border-radius: 0 !important;
-            box-shadow: 0 1px 0 #e5e7eb !important;
-            transform: translateZ(0);
-          }
-          .sales-report-root .item-profit-table thead th[rowspan="2"] {
-            top: 0 !important;
-            z-index: 44;
-            height: 78px;
-            transform: translateZ(0);
-          }
-          .sales-report-root .item-profit-table thead th::before,
-          .sales-report-root .item-profit-table thead th::after {
-            display: none !important;
-            content: none !important;
-          }
-          .sales-report-root .item-profit-table .subtotal-label {
-            padding-left: 16px !important;
-            text-align: left !important;
-            letter-spacing: 0.01em;
-          }
-          .sales-report-root .item-profit-table .subtotal-number,
-          .sales-report-root .item-profit-table .item-profit-number-cell {
-            padding-right: 12px !important;
-            text-align: right !important;
-          }
-          .sales-report-root .item-profit-table tbody {
-            position: relative;
-            z-index: 1;
-          }
-          .sales-report-root .item-profit-table tbody td {
-            position: relative;
-            z-index: 1;
-            height: 40px;
-            padding: 8px;
-            font-size: 12px;
-          }
-          .sales-report-root .item-profit-table .item-profit-category-cell {
-            padding-left: 4px !important;
-            padding-right: 4px !important;
-            font-size: 11px !important;
-            letter-spacing: -0.02em;
-          }
-          .sales-report-root .item-profit-table .item-name-cell {
-            overflow: visible;
-            text-overflow: clip;
-            white-space: nowrap;
-            word-break: normal;
-            overflow-wrap: normal;
-            line-height: 1.35;
-          }
-
-          /* 대시보드 EST 카드: 담당자별 매출요약의 EST 계열과 동일한 색상 */
-          .sales-report-root .est-summary-card {
-            border-color: #f2d675 !important;
-            background: #fffdf2 !important;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
-          }
-
-          @media (min-width: 768px) {
-            .sales-report-root[data-active="대시보드"] > section {
-              background: #f8fafc !important;
-              padding-top: 1rem !important;
-            }
-            .sales-report-root[data-active="대시보드"] .dashboard-comparison-table tbody td {
-              color: #0f172a !important;
-            }
-            .sales-report-root[data-active="대시보드"] .dashboard-comparison-table tbody td.text-blue-600 {
-              color: #2563eb !important;
-            }
-            .sales-report-root[data-active="대시보드"] .dashboard-comparison-table tbody td.text-emerald-600 {
-              color: #16a34a !important;
-            }
-            .sales-report-root .mobile-header-actions {
-              flex-wrap: wrap !important;
-              justify-content: flex-end;
-              overflow: visible !important;
-            }
-            .sales-report-root .sync-control,
-            .sales-report-root .install-app-button,
-            .sales-report-root .notification-button {
-              flex: 0 0 auto;
-            }
-            .sales-report-root {
-              display: flex;
-              min-width: 1180px;
-              flex-direction: column;
-            }
-            .sales-report-root > header {
-              flex: 0 0 auto;
-            }
-            .sales-report-root > section {
-              height: 0 !important;
-              min-height: 0;
-              flex: 1 1 auto;
-              padding-bottom: 0.5rem !important;
-            }
-            .sales-report-root[data-active="EST 입력"] > section,
-            .sales-report-root[data-active="대시보드"] > section,
-            .sales-report-root[data-active="매출현황"] > section,
-            .sales-report-root[data-active="거래처별 상세"] > section,
-            .sales-report-root[data-active="품목분석"] > section {
-              overflow-y: auto !important;
-              scrollbar-gutter: stable;
-            }
-            .sales-report-root .sales-status-scroll,
-            .sales-report-root .item-profit-scroll,
-            .sales-report-root [class*="h-[clamp(300px"] {
-              height: max(420px, calc(100dvh - 385px)) !important;
-              max-height: none !important;
-            }
-            .sales-report-root[data-active="EST 입력"] .overflow-y-auto,
-            .sales-report-root[data-active="대시보드"] .overflow-auto,
-            .sales-report-root[data-active="거래처별 상세"] .overflow-auto,
-            .sales-report-root[data-active="품목분석"] .overflow-auto {
-              scrollbar-gutter: stable;
-            }
-            .sales-report-root table {
-              max-width: 100%;
-            }
-            .sales-report-root table th,
-            .sales-report-root table td {
-              box-sizing: border-box;
-              overflow: hidden;
-              text-overflow: ellipsis;
-            }
-            .sales-report-root table th[title],
-            .sales-report-root table td[title] {
-              cursor: help;
-            }
-            .sales-report-root .desktop-end-marker {
-              min-height: 42px;
-            }
-          }
-
-          @media (max-width: 767px) {
-            html, body {
-              min-width: 0 !important;
-              overflow-x: hidden;
-              overscroll-behavior-y: none;
-            }
-            .sales-report-root {
-              display: flex;
-              flex-direction: column;
-              height: 100dvh !important;
-              min-height: 100dvh;
-              padding-bottom: env(safe-area-inset-bottom);
-            }
-            .sales-report-root > header {
-              flex: 0 0 auto;
-              padding-top: env(safe-area-inset-top);
-            }
-            .sales-report-root > header > div {
-              gap: 0.65rem !important;
-              padding: 0.65rem 0.75rem !important;
-            }
-            .sales-report-root > header > div > div {
-              min-width: 0;
-              width: 100%;
-            }
-            .sales-report-root .mobile-main-nav {
-              width: 100%;
-              flex-wrap: nowrap !important;
-              gap: 0.4rem !important;
-              overflow-x: auto;
-              padding: 0.2rem 0 0.35rem;
-              scrollbar-width: none;
-              scroll-snap-type: x proximity;
-              -webkit-overflow-scrolling: touch;
-            }
-            .sales-report-root .mobile-main-nav::-webkit-scrollbar {
-              display: none;
-            }
-            .sales-report-root .mobile-main-nav button {
-              flex: 0 0 auto;
-              min-height: 42px;
-              padding-left: 0.85rem !important;
-              padding-right: 0.85rem !important;
-              scroll-snap-align: start;
-            }
-            .sales-report-root .install-app-button {
-              margin-left: auto;
-              min-height: 42px;
-            }
-            .sales-report-root > section {
-              height: 0 !important;
-              min-height: 0;
-              flex: 1 1 auto;
-              overflow-x: hidden !important;
-              overflow-y: auto !important;
-              padding: 0.75rem 0.75rem calc(1.25rem + env(safe-area-inset-bottom)) !important;
-              -webkit-overflow-scrolling: touch;
-            }
-            .sales-report-root .mobile-period-bar {
-              box-sizing: border-box;
-              min-height: 54px;
-              scrollbar-width: none;
-              -webkit-overflow-scrolling: touch;
-            }
-            .sales-report-root .mobile-period-sticky {
-              top: -12px !important;
-              isolation: isolate;
-              background: #fff !important;
-              padding-top: 12px !important;
-              padding-bottom: 6px !important;
-              margin-bottom: 8px !important;
-              box-shadow:
-                0 -24px 0 24px #fff,
-                0 8px 10px -12px rgba(15, 23, 42, 0.35);
-            }
-            .sales-report-root .mobile-period-bar-inner {
-              height: 36px;
-              min-height: 36px;
-            }
-            .sales-report-root .mobile-period-bar input {
-              min-height: 0 !important;
-              font-size: 16px;
-            }
-            .sales-report-root .mobile-period-bar::-webkit-scrollbar {
-              display: none;
-            }
-            .sales-report-root input,
-            .sales-report-root select,
-            .sales-report-root textarea {
-              min-height: 40px;
-              font-size: 16px;
-            }
-            .sales-report-root button {
-              min-height: 38px;
-            }
-            .sales-report-root input[type="checkbox"],
-            .sales-report-root input[type="radio"] {
-              min-height: 1.25rem;
-            }
-            .sales-report-root .overflow-auto:has(table),
-            .sales-report-root .overflow-x-auto:has(table),
-            .sales-report-root .sales-status-scroll,
-            .sales-report-root .item-profit-scroll {
-              max-width: 100%;
-              height: min(58dvh, 560px) !important;
-              overflow-x: auto !important;
-              overflow-y: auto !important;
-              scrollbar-gutter: auto;
-              touch-action: pan-x pan-y;
-              -webkit-overflow-scrolling: touch;
-            }
-            .sales-report-root table {
-              max-width: none;
-            }
-            .sales-report-root table th,
-            .sales-report-root table td {
-              white-space: nowrap;
-            }
-            .sales-report-root [class*="max-w-"] {
-              max-width: calc(100vw - 1.5rem);
-            }
-            .sales-report-root .fixed.inset-0 {
-              padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
-            }
-            .sales-report-root .mobile-header-inner {
-              padding: 0.55rem 0.75rem 0.65rem !important;
-            }
-            .sales-report-root .mobile-header-main {
-              display: block !important;
-            }
-            .sales-report-root .mobile-report-title {
-              margin-bottom: 0.45rem;
-              font-size: 1rem !important;
-              line-height: 1.25rem;
-            }
-            .sales-report-root .mobile-main-nav button {
-              min-height: 36px !important;
-              border-radius: 0.7rem !important;
-              padding: 0.45rem 0.7rem !important;
-              font-size: 0.72rem !important;
-              line-height: 1rem;
-            }
-            .sales-report-root .mobile-header-actions {
-              width: 100%;
-              flex-wrap: wrap !important;
-              justify-content: flex-end;
-              gap: 0.4rem !important;
-            }
-            .sales-report-root .mobile-header-actions button {
-              min-height: 34px !important;
-              padding: 0.4rem 0.7rem !important;
-              font-size: 0.7rem !important;
-            }
-            .sales-report-root .mobile-header-actions button:not(.install-app-button):not(.notification-button):not(.sync-button) {
-              display: none !important;
-            }
-            .sales-report-root .mobile-header-actions .sync-control {
-              max-width: 100%;
-              padding: 0.3rem 0.4rem !important;
-            }
-            .sales-report-root .mobile-header-actions .sync-status {
-              display: none;
-            }
-            .sales-report-root .mobile-header-actions .sync-button {
-              min-height: 34px !important;
-              white-space: nowrap;
-              padding: 0.4rem 0.65rem !important;
-              font-size: 0.68rem !important;
-            }
-            .sales-report-root .mobile-main-nav {
-              display: grid !important;
-              grid-template-columns: repeat(2, minmax(0, 1fr));
-              overflow: visible !important;
-              padding-bottom: 0 !important;
-            }
-            .sales-report-root .mobile-main-nav button {
-              width: 100%;
-              text-align: center;
-            }
-            .sales-report-root .report-controls {
-              display: grid !important;
-              grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-              align-items: stretch !important;
-              gap: 0.5rem !important;
-            }
-            .sales-report-root .report-controls > label {
-              width: auto !important;
-              min-width: 0;
-              font-size: 0.68rem !important;
-            }
-            .sales-report-root .report-controls > label input {
-              min-width: 0;
-              padding: 0.45rem 0.55rem !important;
-              font-size: 0.8rem !important;
-            }
-            .sales-report-root .report-controls > div:not(.est-header-summary):not(.target-header-kpi) {
-              min-width: 0 !important;
-              padding: 0.4rem 0.25rem !important;
-            }
-            .sales-report-root .report-controls > div:not(.est-header-summary):not(.target-header-kpi) p:first-child {
-              font-size: 0.62rem !important;
-              line-height: 0.85rem;
-            }
-            .sales-report-root .report-controls > div:not(.est-header-summary):not(.target-header-kpi) p:last-child {
-              font-size: 0.85rem !important;
-              line-height: 1.05rem;
-            }
-            .sales-report-root .report-controls > div:nth-of-type(1),
-            .sales-report-root .report-controls > div:nth-of-type(2),
-            .sales-report-root .report-controls > div:nth-of-type(3),
-            .sales-report-root .report-controls > div:nth-of-type(4) {
-              grid-column: span 1;
-            }
-            .sales-report-root .est-header-summary,
-            .sales-report-root .target-header-kpi {
-              grid-column: 1 / -1;
-              width: 100%;
-              min-width: 0 !important;
-              margin-left: 0 !important;
-            }
-            .sales-report-root .est-header-summary {
-              padding: 0.6rem 0.75rem !important;
-              text-align: left !important;
-              font-size: 0.68rem !important;
-              line-height: 1.15rem;
-            }
-            .sales-report-root .target-header-kpi {
-              overflow: hidden;
-              padding: 0.5rem !important;
-            }
-            .sales-report-root .target-header-kpi > div {
-              grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-              gap: 0.35rem !important;
-            }
-            .sales-report-root .target-header-kpi > div > div {
-              min-width: 0;
-              border-radius: 0.55rem;
-              padding: 0.45rem !important;
-            }
-            .sales-report-root .target-header-kpi > div > div:first-child {
-              grid-row: span 2;
-              display: flex;
-              flex-direction: column;
-              justify-content: center;
-            }
-            .sales-report-root .target-header-kpi > div > div:first-child div:last-child {
-              font-size: 1.4rem !important;
-            }
-            .sales-report-root .target-header-kpi > div > div:not(:first-child) div:first-child {
-              font-size: 0.62rem !important;
-            }
-            .sales-report-root .target-header-kpi > div > div:not(:first-child) div:last-child {
-              overflow: hidden;
-              text-overflow: ellipsis;
-              font-size: 0.78rem !important;
-            }
-            .sales-report-root[data-active="매출현황"] > section > div:first-of-type,
-            .sales-report-root[data-active="거래처별 상세"] > section > div:first-of-type,
-            .sales-report-root[data-active="품목분석"] > section > div:first-of-type {
-              margin-bottom: 0.6rem !important;
-            }
-            .sales-report-root[data-active="매출현황"] section > div.rounded-2xl {
-              padding: 0.75rem !important;
-            }
-            .sales-report-root[data-active="매출현황"] section h2 {
-              font-size: 1rem !important;
-            }
-            .sales-report-root[data-active="매출현황"] section select,
-            .sales-report-root[data-active="매출현황"] section input:not([type="checkbox"]) {
-              width: 100% !important;
-              min-width: 0;
-            }
-            .sales-report-root[data-active="매출현황"] section label:has(input[type="checkbox"]) {
-              min-height: 38px;
-              padding: 0.45rem 0.65rem !important;
-              font-size: 0.7rem !important;
-            }
-            .sales-report-root[data-active="매출현황"] section button {
-              font-size: 0.72rem !important;
-            }
-            .sales-report-root > section {
-              padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)) !important;
-            }
-            .sales-report-root .mobile-app-header {
-              padding-top: env(safe-area-inset-top);
-            }
-            .sales-report-root .mobile-period-sticky {
-              top: -12px !important;
-            }
-            .sales-report-root .mobile-dashboard-view,
-            .sales-report-root .mobile-sales-view {
-              max-width: 520px;
-              margin-left: auto;
-              margin-right: auto;
-            }
-            .sales-report-root .mobile-sales-grid {
-              min-width: 0;
-            }
-            /* 모바일 대시보드: 기준정보 카드 아래 핵심 카드만 좌우 폭을 넓힙니다. */
-            .sales-report-root .mobile-dashboard-card {
-              width: calc(100% + 1rem);
-              margin-left: -0.5rem;
-              margin-right: -0.5rem;
-            }
-            /* 모바일 매출현황 필터는 작은 글씨를 유지하도록 공통 16px 폼 규칙보다 우선합니다. */
-            .sales-report-root .mobile-order-age-filter {
-              min-height: 36px !important;
-              height: 36px !important;
-              width: auto !important;
-              font-size: 9.5px !important;
-              line-height: 1.15 !important;
-            }
-            .sales-report-root .mobile-all-filter {
-              min-height: 32px !important;
-              height: 32px !important;
-              font-size: 9px !important;
-              line-height: 1 !important;
-              white-space: nowrap;
-            }
-            .sales-report-root label.mobile-new-filter {
-              min-height: 32px !important;
-              height: 32px !important;
-              padding-top: 0 !important;
-              padding-bottom: 0 !important;
-              font-size: 9px !important;
-              line-height: 1 !important;
-              white-space: nowrap;
-            }
-            .sales-report-root .mobile-manager-filter {
-              min-height: 32px !important;
-              height: 32px !important;
-              width: auto !important;
-              font-size: 9px !important;
-              line-height: 1.1 !important;
-            }
-          }
-
-        `}</style>
-        {isMobile && (
-          <MobilePeriodBar
-            month={dashMonth}
-            date={dashDate}
-            setMonth={setDashMonth}
-            setDate={setDashDate}
-            timeGone={tg}
-          />
-        )}
-        {!isMobile && active !== "EST 입력" && (
-        <div
-          className={
-            active === "대시보드"
-              ? "mb-4 space-y-4"
-              : ["매출현황", "거래처별 상세", "품목분석"].includes(active)
-                ? "mb-2 space-y-1"
-                : "mb-4 space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
-          }
-        >
-          {active !== "대시보드" && active !== "EST 입력" && (
-          <div
-            className={
-              ["매출현황", "거래처별 상세", "품목분석"].includes(active)
-                ? "bg-white px-0 py-0"
-                : "rounded-2xl border border-gray-200 bg-slate-50 p-3 shadow-sm"
-            }
-          >
-            <div className="report-controls flex flex-wrap items-end gap-2">
+      <section className="min-w-0 p-4 lg:p-5">
+        <div className="mb-4 space-y-3 rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+          <div className="rounded-2xl border border-gray-300/70 bg-slate-50/75 p-3 shadow-sm backdrop-blur">
+            <div className="flex flex-wrap items-end gap-2">
               <label className="w-[135px] text-[12px] font-semibold text-slate-600">
                 기준년월
                 <input
@@ -6208,17 +4645,7 @@ export default function SalesReportClient() {
               <HeaderTimeInfo title="총일수" value={tg.totalDays} />
               <HeaderTimeInfo title="진행일수" value={tg.progressedDays} />
               <HeaderTimeInfo title="잔여일수" value={tg.remainingDays} />
-              {active === "EST 입력" && !isEstEntryPeriodOpen(dashMonth) && estHeaderSummary && (
-                <div className="est-header-summary ml-auto rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-right text-[12px] font-extrabold text-slate-800 shadow-sm">
-                  <div className="mb-0.5 text-[10px] text-orange-700">{estHeaderSummary.manager}</div>
-                  <span>매장 EST 합계 : {won(estHeaderSummary.storeEst)}</span>
-                  <span className="mx-2 text-slate-400">/</span>
-                  <span>비매장 EST 합계 : {won(estHeaderSummary.nonStoreEst)}</span>
-                  <span className="mx-2 text-slate-400">|</span>
-                  <span>Target 합계 : {won(estHeaderSummary.targetTotal)}</span>
-                </div>
-              )}
-              {!isMobile && active === "매출현황" && (
+              {active === "매출현황" && (
                 <SalesTargetHeaderKpi
                   stores={stores}
                   sales={sales}
@@ -6230,44 +4657,34 @@ export default function SalesReportClient() {
               )}
             </div>
           </div>
-          )}
 
-          {!isMobile && active === "대시보드" && (
+          {active === "대시보드" && (
             <DashboardTopKpis
               stores={stores}
               sales={sales}
               targets={targets}
               ests={ests}
-              setEsts={setEsts}
-              isAdmin={isAdmin}
               itemCosts={itemCosts}
               month={dashMonth}
               date={dashDate}
-              timeGone={tg}
             />
           )}
         </div>
-        )}
 
-        {!isMobile && active === "EST 입력" && (
+        {active === "EST 입력" && (
           <EstQuickEntry
             stores={stores}
-            setStores={setStores}
             sales={sales}
             ests={ests}
             setEsts={setEsts}
             targets={targets}
             setTargets={setTargets}
             month={dashMonth}
-            canEdit={isAdmin || isEstEntryPeriodOpen(dashMonth)}
+            canEdit={isAdmin || isEstEntryOpen}
             isAdmin={isAdmin}
-            managerConfigs={managerConfigs}
-            pendingNewStoreEsts={pendingNewStoreEsts}
-            setPendingNewStoreEsts={setPendingNewStoreEsts}
-            onSummaryChange={setEstHeaderSummary}
           />
         )}
-        {!isMobile && active === "대시보드" && (
+        {active === "대시보드" && (
           <Dashboard
             stores={stores}
             sales={sales}
@@ -6279,7 +4696,7 @@ export default function SalesReportClient() {
             codeMappings={codeMappings}
           />
         )}
-        {!isMobile && active === "매출현황" && (
+        {active === "매출현황" && (
           <SalesStatus
             stores={stores}
             sales={sales}
@@ -6291,7 +4708,7 @@ export default function SalesReportClient() {
             codeMappings={codeMappings}
           />
         )}
-        {!isMobile && active === "거래처별 상세" && (
+        {active === "거래처별 상세" && (
           <ItemAnalysis
             stores={stores}
             sales={sales}
@@ -6300,16 +4717,23 @@ export default function SalesReportClient() {
             pageTitle="거래처별 상세"
           />
         )}
-        {!isMobile && active === "품목분석" && (
+        {active === "품목분석" && (
           <ItemShipmentAnalysis
             stores={stores}
             sales={sales}
-            itemMasters={itemMasters}
             month={dashMonth}
             date={dashDate}
           />
         )}
-        {!isMobile && isAdmin && active === "월초관리" && (
+        {active === "매입가 정보" && (
+          <ItemCostStatus
+            sales={sales}
+            itemCosts={itemCosts}
+            setItemCosts={setItemCosts}
+            isAdmin={isAdmin}
+          />
+        )}
+        {isAdmin && active === "월초관리" && (
           <MonthStartManagement
             stores={stores}
             setStores={setStores}
@@ -6326,623 +4750,16 @@ export default function SalesReportClient() {
             setTimeConfigs={setTimeConfigs}
             codeMappings={codeMappings}
             setCodeMappings={setCodeMappings}
-            itemMasters={itemMasters}
-            setItemMasters={setItemMasters}
-            managerConfigs={managerConfigs}
-            setManagerConfigs={setManagerConfigs}
-            pendingNewStoreEsts={pendingNewStoreEsts}
-            setPendingNewStoreEsts={setPendingNewStoreEsts}
-            notificationBusy={notificationBusy}
-            onSendUpdateNotification={sendUpdateNotification}
-          />
-        )}
-        {!isMobile && ["EST 입력", "대시보드", "매출현황", "거래처별 상세", "품목분석"].includes(active) && (
-          <DesktopEndMarker
-            label={
-              active === "EST 입력"
-                ? "마지막 거래처입니다"
-                : active === "대시보드"
-                  ? "대시보드의 마지막 항목입니다"
-                  : active === "매출현황"
-                    ? "매출현황의 마지막 거래처입니다"
-                    : active === "거래처별 상세"
-                      ? "거래처별 상세의 마지막 항목입니다"
-                      : "품목분석의 마지막 품목입니다"
-            }
-          />
-        )}
-        {isMobile && active === "대시보드" && (
-          <MobileDashboard
-            stores={stores}
-            sales={sales}
-            targets={targets}
-            ests={ests}
-            month={dashMonth}
-            date={dashDate}
-          />
-        )}
-        {isMobile && active === "매출현황" && (
-          <MobileSalesStatus
-            stores={stores}
-            sales={sales}
-            ests={ests}
-            month={dashMonth}
-            date={dashDate}
           />
         )}
       </section>
-      {isMobile && (
-        <nav className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-[100] grid grid-cols-2 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
-          <button type="button" onClick={() => setActive("대시보드")} className={`flex h-[58px] flex-col items-center justify-center gap-0.5 text-[9px] font-black ${active === "대시보드" ? "text-blue-600" : "text-slate-500"}`}>
-            <span className="text-[18px]">◔</span><span>대시보드</span>
-          </button>
-          <button type="button" onClick={() => setActive("매출현황")} className={`flex h-[58px] flex-col items-center justify-center gap-0.5 text-[9px] font-black ${active === "매출현황" ? "text-blue-600" : "text-slate-500"}`}>
-            <span className="text-[18px]">▤</span><span>매출현황</span>
-          </button>
-        </nav>
-      )}
     </main>
   );
 }
 
-function DesktopEndMarker({ label }: { label: string }) {
-  return (
-    <div className="desktop-end-marker hidden shrink-0 items-center justify-center py-2 text-[11px] font-bold text-slate-400 md:flex">
-      <span className="rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5">{label}</span>
-    </div>
-  );
-}
-
-function MobilePeriodBar({
-  month,
-  date,
-  setMonth,
-  setDate,
-  timeGone,
-}: {
-  month: string;
-  date: string;
-  setMonth: (value: string) => void;
-  setDate: (value: string) => void;
-  timeGone: ReturnType<typeof getTimeGone>;
-}) {
-  const [open, setOpen] = useState(true);
-  const monthLabel = month ? `${month.slice(0, 4)}년 ${month.slice(5, 7)}월` : "-";
-  const dateLabel = date ? `${date.slice(5, 7)}/${date.slice(8, 10)}` : "-";
-  const dayName = date ? ["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T00:00:00`).getDay()] : "";
-  const dayValue = (value: number) => `${Number.isInteger(value) ? value : value.toFixed(1)}일`;
-
-  return (
-    <div className="mobile-period-sticky sticky top-0 z-[70] -mx-3 mb-3 bg-white px-3 pb-2">
-      <div className="mobile-period-card rounded-2xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
-        <div className="grid grid-cols-[1fr_auto_1fr_auto_1.15fr] items-center gap-1 text-center">
-          <label className="relative cursor-pointer">
-            <div className="text-[8px] font-bold text-slate-500">기준년월</div>
-            <div className="mt-1 whitespace-nowrap text-[11px] font-black text-slate-900">▣ {monthLabel}</div>
-            <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="기준년월 변경" />
-          </label>
-          <span className="text-slate-300">·</span>
-          <label className="relative cursor-pointer">
-            <div className="text-[8px] font-bold text-slate-500">기준일</div>
-            <div className="mt-1 whitespace-nowrap text-[11px] font-black text-slate-900">▣ {dateLabel} ({dayName})</div>
-            <input type="date" value={date} min={monthStart(month)} max={monthEnd(month)} onChange={(event) => setDate(event.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="기준일 변경" />
-          </label>
-          <span className="text-slate-300">|</span>
-          <div>
-            <div className="text-[8px] font-bold uppercase text-slate-500">TIME GONE</div>
-            <div className="mt-1 text-[12px] font-black text-blue-600">{pct(timeGone.timeGoneRate)}</div>
-          </div>
-        </div>
-        {open && (
-          <div className="mt-2 grid grid-cols-3 border-t border-slate-100 pt-2 text-center">
-            <MobileDayMetric label="총일수" value={dayValue(timeGone.totalDays)} />
-            <MobileDayMetric label="진행일수" value={dayValue(timeGone.progressedDays)} bordered />
-            <MobileDayMetric label="잔여일수" value={dayValue(timeGone.remainingDays)} bordered />
-          </div>
-        )}
-        <button type="button" onClick={() => setOpen((prev) => !prev)} className="absolute right-5 mt-[-24px] flex h-7 w-7 items-center justify-center text-[15px] text-slate-500" aria-label="기간 정보 접기/펼치기">{open ? "⌄" : "⌃"}</button>
-      </div>
-    </div>
-  );
-}
-
-function MobileDayMetric({ label, value, bordered = false }: { label: string; value: string; bordered?: boolean }) {
-  return (
-    <div className={bordered ? "border-l border-slate-200" : ""}>
-      <div className="text-[8px] font-semibold text-slate-500">{label}</div>
-      <div className="mt-1 text-[12px] font-black text-slate-900">{value}</div>
-    </div>
-  );
-}
-
-function MobileDashboard({
-  stores,
-  sales,
-  targets,
-  ests,
-  month,
-  date,
-}: {
-  stores: Store[];
-  sales: SalesRecord[];
-  targets: TargetRecord[];
-  ests: EstRecord[];
-  month: string;
-  date: string;
-}) {
-  const data = useMemo(() => {
-    const storesByCode = storeMap(stores);
-    const allMonthRows = sales.filter(
-      (row) => row.period === "current" && inRange(row.saleDate, monthStart(month), monthEnd(month)),
-    );
-    const currentRows = allMonthRows.filter((row) => row.saleDate <= date);
-    const { storeTarget, nonStoreTarget, storeEst, nonStoreEst } = metricsByStoreType(stores, targets, ests, month);
-    const target = storeTarget + nonStoreTarget;
-    const est = storeEst + nonStoreEst;
-    const fullMonthSales = sum(allMonthRows, "salesAmount");
-    const currentSales = sum(currentRows, "salesAmount");
-    const profit = sum(currentRows, "profitAmount");
-    const profitRate = currentSales ? (profit / currentSales) * 100 : 0;
-    const managerMap = new Map<string, { sales: number; est: number }>();
-
-    currentRows.forEach((row) => {
-      const store = storesByCode.get(row.storeCode);
-      const manager = store?.manager || row.manager || "미지정";
-      const item = managerMap.get(manager) || { sales: 0, est: 0 };
-      item.sales += Number(row.salesAmount || 0);
-      managerMap.set(manager, item);
-    });
-    ests.filter((row) => row.month === month).forEach((row) => {
-      const store = storesByCode.get(row.storeCode);
-      const manager = store?.manager || "미지정";
-      const item = managerMap.get(manager) || { sales: 0, est: 0 };
-      item.est += Number(row.amount || 0);
-      managerMap.set(manager, item);
-    });
-
-    return {
-      target,
-      est,
-      fullMonthSales,
-      currentSales,
-      currentToFullRate: fullMonthSales ? (currentSales / fullMonthSales) * 100 : 0,
-      estRate: est ? (currentSales / est) * 100 : 0,
-      targetRate: target ? (currentSales / target) * 100 : 0,
-      profit,
-      profitRate,
-      managers: Array.from(managerMap.entries())
-        .map(([manager, value]) => ({ manager, ...value, rate: value.est ? (value.sales / value.est) * 100 : 0 }))
-        .filter((row) => row.sales || row.est)
-        .sort((a, b) => b.sales - a.sales),
-    };
-  }, [stores, sales, targets, ests, month, date]);
-
-  return (
-    <div className="mobile-dashboard-view space-y-2.5 pb-24">
-      <section className="mobile-dashboard-card rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <h2 className="text-[13px] font-black text-slate-900">매출 현황</h2>
-        <div className="mt-2 divide-y divide-dashed divide-slate-200">
-          <MobileHeroMetric icon="▥" label="당월 전체 매출" value={`${won(data.fullMonthSales)}원`} />
-          <MobileHeroMetric icon="⌁" label="당일까지 매출" value={`${won(data.currentSales)}원`} side={pct(data.currentToFullRate)} />
-        </div>
-      </section>
-
-      <section className="mobile-dashboard-card grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <MobileProgressMetric title="EST 달성률" value={data.estRate} amount={data.est} tone="purple" />
-        <MobileProgressMetric title="Target 달성률" value={data.targetRate} amount={data.target} tone="orange" bordered />
-      </section>
-
-      <section className="mobile-dashboard-card grid grid-cols-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex items-center gap-2 border-r border-slate-200 pr-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-lg">◉</div>
-          <div>
-            <div className="text-[9px] font-bold text-emerald-700">이익금</div>
-            <div className="mt-0.5 text-[15px] font-black text-emerald-600">{won(data.profit)}원</div>
-          </div>
-        </div>
-        <div className="flex flex-col justify-center pl-3">
-          <div className="text-[9px] font-bold text-slate-500">이익률</div>
-          <div className="mt-0.5 text-[16px] font-black text-emerald-600">{pct(data.profitRate)}</div>
-        </div>
-      </section>
-
-      <section className="mobile-dashboard-card rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h2 className="text-[12px] font-black text-slate-900">담당자별 현황 <span className="text-[8px] font-semibold text-slate-400">(당월 전체 매출 기준)</span></h2>
-          <span className="text-[9px] font-bold text-blue-600">전체보기 ›</span>
-        </div>
-        <div className="mt-2 space-y-1.5">
-          {data.managers.slice(0, 6).map((row, index) => {
-            const managerTones = ["bg-blue-50 text-blue-600", "bg-emerald-50 text-emerald-600", "bg-purple-50 text-purple-600", "bg-orange-50 text-orange-600", "bg-slate-100 text-slate-600"];
-            const barTones = ["bg-blue-500", "bg-emerald-500", "bg-purple-500", "bg-orange-500", "bg-slate-400"];
-            return (
-              <div key={row.manager} className="grid grid-cols-[32px_1fr_auto_76px_12px] items-center gap-2 py-1">
-                <span className={`flex h-7 w-7 items-center justify-center rounded-full text-[9px] font-black ${managerTones[index % managerTones.length]}`}>{row.manager}</span>
-                <span className="text-right text-[10px] font-black text-slate-800">{won(row.sales)}원</span>
-                <span className="text-[9px] font-bold text-slate-500">EST&nbsp; {row.est ? pct(row.rate) : "-"}</span>
-                <span className="h-1.5 overflow-hidden rounded-full bg-slate-200"><i className={`block h-full rounded-full ${barTones[index % barTones.length]}`} style={{ width: `${Math.min(100, Math.max(0, row.rate))}%` }} /></span>
-                <span className="text-slate-400">›</span>
-              </div>
-            );
-          })}
-          {!data.managers.length && <p className="py-5 text-center text-xs text-slate-400">표시할 실적이 없습니다.</p>}
-        </div>
-      </section>
-
-      <p className="px-1 text-[9px] font-semibold text-slate-400">ⓘ 매출 금액은 공급가액 기준입니다.</p>
-    </div>
-  );
-}
-
-function MobileHeroMetric({ icon, label, value, side }: { icon: string; label: string; value: string; side?: string }) {
-  return (
-    <div className="flex items-center gap-3 py-2.5 first:pt-1">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-lg font-black text-blue-600">{icon}</div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[17px] font-black leading-none tracking-tight text-slate-900">{value}</div>
-        <div className="mt-1 text-[9px] font-semibold text-slate-500">{label}</div>
-      </div>
-      {side && <div className="text-[12px] font-black text-blue-600">{side}</div>}
-    </div>
-  );
-}
-
-function MobileProgressMetric({ title, value, amount, tone, bordered = false }: { title: string; value: number; amount: number; tone: "purple" | "orange"; bordered?: boolean }) {
-  const text = tone === "purple" ? "text-purple-600" : "text-orange-500";
-  const bar = tone === "purple" ? "bg-purple-600" : "bg-orange-500";
-  return (
-    <div className={`p-3 ${bordered ? "border-l border-slate-200" : ""}`}>
-      <div className={`text-[9px] font-black ${text}`}>{title}</div>
-      <div className={`mt-1 text-[20px] font-black ${text}`}>{pct(value)}</div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.min(100, Math.max(0, value))}%` }} /></div>
-      <div className="mt-2 text-[8px] font-semibold text-slate-500">금액&nbsp; {won(amount)}원</div>
-    </div>
-  );
-}
-
-const KOREAN_INITIALS = ["ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
-
-function koreanInitials(value: string) {
-  return Array.from(value).map((char) => {
-    const code = char.charCodeAt(0);
-    if (code < 0xac00 || code > 0xd7a3) return char;
-    return KOREAN_INITIALS[Math.floor((code - 0xac00) / 588)] || char;
-  }).join("");
-}
-
-function mobileStoreSearchMatches(name: string, keyword: string) {
-  const q = keyword.trim().toLowerCase().replace(/\s+/g, "");
-  if (!q) return true;
-
-  const normalizedName = name.toLowerCase().replace(/\s+/g, "");
-  if (normalizedName.includes(q)) return true;
-
-  // 거래처명의 한글 음절을 초성 문자열로 바꿔서 ㄱㄴㄷ 형태 검색을 지원합니다.
-  return koreanInitials(normalizedName).includes(q);
-}
-
-function MobileSalesStatus({
-  stores,
-  sales,
-  ests,
-  month,
-  date,
-}: {
-  stores: Store[];
-  sales: SalesRecord[];
-  ests: EstRecord[];
-  month: string;
-  date: string;
-}) {
-  const [search, setSearch] = useState("");
-  const [manager, setManager] = useState("전체");
-  const [newOnly, setNewOnly] = useState(false);
-  const [orderAge, setOrderAge] = useState("전체");
-  const [selected, setSelected] = useState<string | null>(null);
-  const [history, setHistory] = useState<PriorYearStoreHistoryRow[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setHistory(null);
-    loadPriorYearStoreHistory(month)
-      .then((rows) => { if (!cancelled) setHistory(rows); })
-      .catch(() => { if (!cancelled) setHistory([]); });
-    return () => { cancelled = true; };
-  }, [month]);
-
-  const allRows = useMemo(() => {
-    const storesByCode = storeMap(stores);
-    const estByCode = new Map<string, number>();
-    ests.filter((row) => row.month === month).forEach((row) => {
-      estByCode.set(row.storeCode, (estByCode.get(row.storeCode) || 0) + Number(row.amount || 0));
-    });
-    const priorCodes = new Set((history || []).map((row) => norm(row.store_code)));
-    const priorNames = new Set((history || []).map((row) => normalizeStoreNameKey(row.store_name)));
-    const map = new Map<string, {
-      code: string; name: string; manager: string; channel: string; fullMonthSales: number;
-      currentSales: number; profitAmount: number; est: number; lastOrder: string; isNew: boolean;
-    }>();
-
-    sales.filter((row) => row.period === "current" && inRange(row.saleDate, monthStart(month), monthEnd(month)) && Boolean(row.storeName.trim())).forEach((row) => {
-      const store = storesByCode.get(row.storeCode);
-      const key = row.storeCode || row.storeName;
-      const item = map.get(key) || {
-        code: row.storeCode,
-        name: row.storeName,
-        manager: store?.manager || row.manager || "미지정",
-        channel: store?.storeType || row.storeType || "-",
-        fullMonthSales: 0,
-        currentSales: 0,
-        profitAmount: 0,
-        est: estByCode.get(row.storeCode) || 0,
-        lastOrder: "",
-        isNew: history !== null && !priorCodes.has(norm(row.storeCode)) && !priorNames.has(normalizeStoreNameKey(row.storeName)),
-      };
-      item.fullMonthSales += Number(row.salesAmount || 0);
-      if (row.saleDate <= date) {
-        item.currentSales += Number(row.salesAmount || 0);
-        item.profitAmount += Number(row.profitAmount || 0);
-        if (!item.lastOrder || row.saleDate > item.lastOrder) item.lastOrder = row.saleDate;
-      }
-      map.set(key, item);
-    });
-    return Array.from(map.values());
-  }, [stores, sales, ests, month, date, history]);
-
-  const rows = useMemo(() => {
-    const keyword = search.trim();
-    return allRows
-      .filter((row) => mobileStoreSearchMatches(row.name, keyword))
-      .filter((row) => manager === "전체" || row.manager === manager)
-      .filter((row) => !newOnly || row.isNew)
-      .filter((row) => {
-        if (orderAge === "전체") return true;
-        const elapsed = daysBetween(row.lastOrder, date);
-        if (orderAge === "7일 미만") return elapsed < 7;
-        if (orderAge === "7~13일") return elapsed >= 7 && elapsed < 14;
-        return elapsed >= 14;
-      })
-      .sort((a, b) => b.currentSales - a.currentSales);
-  }, [allRows, search, manager, newOnly, orderAge, date]);
-
-  const managers = useMemo(() => Array.from(new Set(stores.map((row) => row.manager).filter(Boolean))).sort(), [stores]);
-  const selectedRow = allRows.find((row) => (row.code || row.name) === selected) || null;
-
-  const orderStatus = (lastOrder: string) => {
-    if (!lastOrder) return { label: "발주 없음", cls: "bg-slate-100 text-slate-500" };
-    const elapsed = daysBetween(lastOrder, date);
-    if (elapsed < 7) return { label: "7일 미만", cls: "bg-emerald-50 text-emerald-600" };
-    if (elapsed < 14) return { label: "7일 경과", cls: "bg-orange-50 text-orange-500" };
-    return { label: "14일 경과", cls: "bg-red-50 text-red-500" };
-  };
-
-  return (
-    <div className="mobile-sales-view pb-24">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-[14px] font-black text-slate-900">매출현황</h2>
-        <div className="flex items-center gap-1.5">
-          <select value={orderAge} onChange={(event) => setOrderAge(event.target.value)} className="mobile-order-age-filter h-9 rounded-xl border border-slate-200 bg-white px-2 font-bold text-slate-600 shadow-sm">
-            <option value="전체">발주일 경과 필터</option>
-            <option value="7일 미만">7일 미만</option>
-            <option value="7~13일">7~13일</option>
-            <option value="14일 이상">14일 이상</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="mb-2 flex items-center gap-0">
-        <button type="button" onClick={() => setNewOnly(false)} className={`mobile-all-filter h-8 rounded-l-lg border px-4 font-black ${!newOnly ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600"}`}>전체 {allRows.length}</button>
-        <label className="mobile-new-filter flex h-8 items-center gap-2 rounded-r-lg border border-l-0 border-slate-200 bg-white px-3 font-black text-slate-700">
-          신규
-          <input type="checkbox" checked={newOnly} onChange={(event) => setNewOnly(event.target.checked)} className="peer sr-only" />
-          <span className="relative h-4 w-7 rounded-full bg-slate-200 transition peer-checked:bg-blue-500 after:absolute after:left-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-3" />
-        </label>
-        <select value={manager} onChange={(event) => setManager(event.target.value)} className="mobile-manager-filter ml-auto h-8 rounded-lg border border-slate-200 bg-white px-2 font-bold text-slate-600">
-          <option>전체</option>
-          {managers.map((item) => <option key={item}>{item}</option>)}
-        </select>
-      </div>
-
-      <div className="relative mb-2">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-slate-400">⌕</span>
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="거래처명 검색 · 초성 가능 (예: ㅁㅅㅌㅊ)"
-          className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-8 pr-9 text-[10.5px] font-bold text-slate-800 outline-none transition placeholder:font-semibold placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-          aria-label="거래처명 검색"
-          autoComplete="off"
-        />
-        {search && (
-          <button
-            type="button"
-            onClick={() => setSearch("")}
-            className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[12px] font-black text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-            aria-label="검색어 지우기"
-          >
-            ×
-          </button>
-        )}
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm">
-        <div className="mobile-sales-grid grid grid-cols-[1.45fr_.65fr_.75fr_1.5fr_1.05fr_12px] items-center gap-1 bg-slate-50 px-2 py-2 text-[7.5px] font-black text-slate-600">
-          <span>거래처명</span><span className="text-center">담당자</span><span className="text-center">채널</span><span className="text-center">마지막 발주일</span><span className="text-right text-blue-600">당일까지 매출</span><span />
-        </div>
-        <div className="divide-y divide-slate-100">
-          {rows.map((row) => {
-            const key = row.code || row.name;
-            const status = orderStatus(row.lastOrder);
-            return (
-              <button key={key} type="button" onClick={() => setSelected(key)} className="mobile-sales-grid grid w-full grid-cols-[1.45fr_.65fr_.75fr_1.5fr_1.05fr_12px] items-center gap-1 px-2 py-2.5 text-left hover:bg-slate-50">
-                <span className="truncate text-[10px] font-black text-slate-900">{row.name}</span>
-                <span className="mx-auto rounded-full bg-slate-100 px-1.5 py-0.5 text-[7px] font-black text-slate-600">{row.manager}</span>
-                <span className={`mx-auto rounded-full px-1.5 py-0.5 text-[7px] font-black ${row.channel === "매장" ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-500"}`}>{row.channel}</span>
-                <span className="flex min-w-0 items-center justify-center gap-1 whitespace-nowrap text-[7.5px] font-bold text-slate-700"><span>▣</span><span>{row.lastOrder || "-"}</span><span className={`rounded-full px-1.5 py-0.5 text-[6.5px] font-black ${status.cls}`}>{status.label}</span></span>
-                <span className="text-right text-[9px] font-black text-slate-900">{won(row.currentSales)}원</span>
-                <span className="text-[13px] text-slate-400">›</span>
-              </button>
-            );
-          })}
-          {!rows.length && <div className="py-12 text-center text-xs text-slate-400">조건에 맞는 거래처가 없습니다.</div>}
-        </div>
-      </div>
-
-      {selectedRow && (() => {
-        const estRate = selectedRow.est ? (selectedRow.currentSales / selectedRow.est) * 100 : 0;
-        const profitRate = selectedRow.currentSales ? (selectedRow.profitAmount / selectedRow.currentSales) * 100 : 0;
-        return (
-          <div className="fixed inset-0 z-[120] bg-slate-900/20" onMouseDown={() => setSelected(null)}>
-            <div className="absolute inset-x-0 bottom-0 rounded-t-[24px] border border-slate-200 bg-white px-3 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-              <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-300" />
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-[16px]">▥</div>
-                <h3 className="min-w-0 flex-1 truncate text-[15px] font-black text-slate-900">{selectedRow.name}</h3>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[7px] font-black text-slate-600">{selectedRow.manager}</span>
-                <span className={`rounded-full px-2 py-0.5 text-[7px] font-black ${selectedRow.channel === "매장" ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-500"}`}>{selectedRow.channel}</span>
-                <button type="button" onClick={() => setSelected(null)} className="ml-auto text-[22px] leading-none text-slate-500">×</button>
-              </div>
-              <div className="mt-3 grid grid-cols-4 gap-1.5">
-                <MobileDetailMetric title="당월 전체 매출" value={`${won(selectedRow.fullMonthSales)}원`} sub="" />
-                <MobileDetailMetric title="당일까지 매출" value={`${won(selectedRow.currentSales)}원`} sub={selectedRow.fullMonthSales ? `달성률 ${pct((selectedRow.currentSales / selectedRow.fullMonthSales) * 100)}` : "달성률 -"} tone="blue" progress={selectedRow.fullMonthSales ? (selectedRow.currentSales / selectedRow.fullMonthSales) * 100 : 0} />
-                <MobileDetailMetric title="Time Gone 대비 EST 진척률" value={selectedRow.est ? pct(estRate) : "-"} sub="" tone="purple" progress={estRate} />
-                <MobileDetailMetric title="이익금액 / 이익률" value={`${won(selectedRow.profitAmount)}원`} sub={pct(profitRate)} tone="orange" progress={profitRate} />
-              </div>
-              <button type="button" className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-50 text-[11px] font-black text-blue-900">▣ 거래처 상세 보기 <span>›</span></button>
-            </div>
-          </div>
-        );
-      })()}
-    </div>
-  );
-}
-
-function MobileDetailMetric({ title, value, sub, tone, progress }: { title: string; value: string; sub: string; tone?: "blue" | "purple" | "orange"; progress?: number }) {
-  const bar = tone === "purple" ? "bg-purple-600" : tone === "orange" ? "bg-orange-500" : "bg-blue-600";
-  return (
-    <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-2">
-      <div className="min-h-[24px] text-[7px] font-bold leading-tight text-slate-500">{title}</div>
-      <div className="mt-1 break-all text-[11px] font-black leading-tight text-slate-900">{value}</div>
-      {sub && <div className="mt-1 text-[7px] font-black text-slate-600">{sub}</div>}
-      {typeof progress === "number" && <div className="mt-2 h-1 overflow-hidden rounded-full bg-slate-200"><div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} /></div>}
-    </div>
-  );
-}
-
-function BrandEstProgress({
-  stores,
-  sales,
-  ests,
-  month,
-  date,
-  compact = false,
-}: {
-  stores: Store[];
-  sales: SalesRecord[];
-  ests: EstRecord[];
-  month: string;
-  date?: string;
-  compact?: boolean;
-}) {
-  const rows = useMemo(() => {
-    const storesByCode = storeMap(stores);
-    const byBrand = new Map<string, { est: number; sales: number; stores: Set<string> }>();
-    const ensure = (brand: string) => {
-      const key = displayBrand(brand) || "미지정";
-      if (!byBrand.has(key)) byBrand.set(key, { est: 0, sales: 0, stores: new Set<string>() });
-      return byBrand.get(key)!;
-    };
-
-    ests.filter((row) => row.month === month).forEach((row) => {
-      const store = storesByCode.get(row.storeCode);
-      if (!store || store.status !== "거래중") return;
-      const item = ensure(store.brand);
-      item.est += Number(row.amount || 0);
-      item.stores.add(row.storeCode);
-    });
-    sales.filter((row) =>
-      row.period === "current" &&
-      inRange(row.saleDate, monthStart(month), date && date.startsWith(month) ? date : monthEnd(month))
-    ).forEach((row) => {
-      const store = storesByCode.get(row.storeCode);
-      const item = ensure(store?.brand || row.brand);
-      item.sales += Number(row.salesAmount || 0);
-      item.stores.add(row.storeCode);
-    });
-
-    return Array.from(byBrand.entries())
-      .map(([brand, value]) => ({
-        brand,
-        ...value,
-        rate: value.est ? (value.sales / value.est) * 100 : 0,
-      }))
-      .filter((row) => row.est || row.sales)
-      .sort((a, b) => b.rate - a.rate || b.sales - a.sales);
-  }, [stores, sales, ests, month, date]);
-
-  const totalEst = rows.reduce((total, row) => total + row.est, 0);
-  const totalSales = rows.reduce((total, row) => total + row.sales, 0);
-  const totalRate = totalEst ? (totalSales / totalEst) * 100 : 0;
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-[#FFFDF2] px-4 py-3">
-        <div>
-          <div className="text-sm font-extrabold text-slate-900">브랜드별 EST 진척률</div>
-          <div className="mt-0.5 text-[11px] font-semibold text-slate-500">당일까지 매출 ÷ 당월 EST</div>
-        </div>
-        <div className="rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-extrabold text-orange-700">
-          전체 {pct(totalRate)}
-        </div>
-      </div>
-      <div className={`overflow-auto ${compact ? "max-h-[270px]" : "max-h-[340px]"}`}>
-        <table className="w-full min-w-[700px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
-          <thead>
-            <tr>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-amber-50 px-3 py-2">브랜드</th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-amber-50 px-3 py-2">거래처 수</th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFFDF2] px-3 py-2">당월 EST</th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-[#FFF7FA] px-3 py-2">당일까지 매출</th>
-              <th className="sticky top-0 z-10 border border-slate-300 bg-amber-50 px-3 py-2">EST 진척률</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.brand} className="hover:bg-amber-50/40">
-                <td className="border border-slate-300 px-3 py-2 text-left font-extrabold">{row.brand}</td>
-                <td className="border border-slate-300 px-3 py-2">{won(row.stores.size)}</td>
-                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.est)}</td>
-                <td className="border border-slate-300 px-3 py-2 text-right font-extrabold text-blue-700">{won(row.sales)}</td>
-                <td className="border border-slate-300 px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                      <div className={`h-full rounded-full ${row.rate >= 100 ? "bg-emerald-500" : row.rate >= 70 ? "bg-amber-400" : "bg-orange-400"}`} style={{ width: `${Math.min(100, Math.max(0, row.rate))}%` }} />
-                    </div>
-                    <span className={`w-16 text-right font-extrabold ${row.rate >= 100 ? "text-emerald-700" : "text-orange-700"}`}>{pct(row.rate)}</span>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {!rows.length && <tr><td colSpan={5} className="border border-slate-300 p-8 text-slate-500">표시할 브랜드 EST가 없습니다.</td></tr>}
-          </tbody>
-          <tfoot>
-            <tr className="bg-slate-100 font-extrabold">
-              <td className="border border-slate-300 px-3 py-2 text-left">합계</td>
-              <td className="border border-slate-300 px-3 py-2">-</td>
-              <td className="border border-slate-300 px-3 py-2 text-right">{won(totalEst)}</td>
-              <td className="border border-slate-300 px-3 py-2 text-right text-blue-700">{won(totalSales)}</td>
-              <td className="border border-slate-300 px-3 py-2 text-right text-orange-700">{pct(totalRate)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
-  );
-}
 
 function EstQuickEntry({
   stores,
-  setStores,
   sales,
   ests,
   setEsts,
@@ -6951,13 +4768,8 @@ function EstQuickEntry({
   month,
   canEdit,
   isAdmin,
-  managerConfigs,
-  pendingNewStoreEsts,
-  setPendingNewStoreEsts,
-  onSummaryChange,
 }: {
   stores: Store[];
-  setStores: (v: Store[]) => void;
   sales: SalesRecord[];
   ests: EstRecord[];
   setEsts: React.Dispatch<React.SetStateAction<EstRecord[]>>;
@@ -6966,87 +4778,10 @@ function EstQuickEntry({
   month: string;
   canEdit: boolean;
   isAdmin: boolean;
-  managerConfigs: ManagerConfig[];
-  pendingNewStoreEsts: PendingNewStoreEst[];
-  setPendingNewStoreEsts: React.Dispatch<React.SetStateAction<PendingNewStoreEst[]>>;
-  onSummaryChange: (summary: EstHeaderSummary | null) => void;
 }) {
-  const activeManagers = useMemo(
-    () => managerConfigs
-      .filter((config) => config.active)
-      .map((config) => ({ ...config, name: config.name.trim().toUpperCase() }))
-      .filter((config, index, list) => list.findIndex((item) => item.name === config.name) === index)
-      .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, "ko-KR")),
-    [managerConfigs],
-  );
-  const [selectedManager, setSelectedManager] = useState<Manager>("");
-  const [newStoreType, setNewStoreType] = useState<StoreType>("매장");
-  const [newStoreName, setNewStoreName] = useState("");
-  const [newStoreEstAmount, setNewStoreEstAmount] = useState(0);
-  const [newStoreModalOpen, setNewStoreModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [entryStatusView, setEntryStatusView] = useState<"all" | "entered" | "missing">("all");
-
-  const addPendingNewStoreEst = () => {
-    const name = newStoreName.trim();
-    if (!selectedManager) return alert("담당자를 먼저 선택해주세요.");
-    if (!name) return alert("신규 거래처명을 입력해주세요.");
-    if (newStoreEstAmount <= 0) return alert("EST 금액을 0원보다 크게 입력해주세요.");
-    const normalizedSelectedManager = norm(selectedManager).trim().toUpperCase();
-    const duplicate = pendingNewStoreEsts.some(
-      (row) =>
-        row.month === month &&
-        norm(row.manager).trim().toUpperCase() === normalizedSelectedManager &&
-        normalizeStoreNameKey(row.storeName) === normalizeStoreNameKey(name),
-    );
-    if (duplicate) return alert("같은 월·담당자·거래처명으로 등록된 신규 EST가 이미 있습니다.");
-    setPendingNewStoreEsts((prev) => [
-      ...prev,
-      {
-        id: `pending-est-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        month,
-        manager: selectedManager,
-        storeType: newStoreType,
-        storeName: name,
-        amount: newStoreEstAmount,
-        createdAt: new Date().toISOString(),
-      },
-    ]);
-    setNewStoreName("");
-    setNewStoreEstAmount(0);
-    setNewStoreModalOpen(false);
-    alert(`${name} 신규 거래처 EST를 월초관리에 등록했습니다.`);
-  };
-
-  useEffect(() => {
-    if (!activeManagers.length) {
-      setSelectedManager("");
-      return;
-    }
-    if (!activeManagers.some((config) => config.name === selectedManager)) {
-      setSelectedManager(activeManagers[0].name);
-    }
-  }, [activeManagers, selectedManager]);
-  const [statusView, setStatusView] = useState<"active" | "paused" | "ended">("active");
-  const [channelView, setChannelView] = useState<"all" | "store" | "nonStore">("all");
-  const [entryView, setEntryView] = useState<"store" | "brand">("store");
-  const [openBrand, setOpenBrand] = useState("");
-  const [editingStoreCode, setEditingStoreCode] = useState("");
-  const [frozenRowOrder, setFrozenRowOrder] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<
-    | "brand"
-    | "name"
-    | "manager"
-    | "channel"
-    | "status"
-    | "prevYearSales"
-    | "prevSales"
-    | "prevEst"
-    | "prevEstRate"
-    | "est"
-    | "estDifference"
-  >("name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [selectedManager, setSelectedManager] = useState<Manager>("SY");
+  const [search, setSearch] = useState("");
+  const normalizedSearch = search.trim().toLowerCase();
   const prevMonth = previousMonth(month);
   const prevYearMonthValue = previousYearMonth(month);
 
@@ -7131,281 +4866,48 @@ function EstQuickEntry({
   }, [sales, month, prevYearMonthValue]);
 
   const rows = useMemo(() => {
-    const statusOrder: Record<Store["status"], number> = {
-      거래중: 0,
-      거래중단: 1,
-      거래종료: 2,
-    };
-
-    const getSortValue = (store: Store): string | number => {
-      const prevYearSales = prevYearSalesMap.get(store.code) || 0;
-      const prevSales = prevSalesMap.get(store.code) || 0;
-      const prevEst = prevEstMap.get(store.code) || 0;
-      const est = estMap.get(store.code) || 0;
-
-      switch (sortKey) {
-        case "brand":
-          return displayBrand(store.brand);
-        case "manager":
-          return store.manager || "";
-        case "channel":
-          return store.storeType === "매장" ? "매장" : "비매장";
-        case "status":
-          return statusOrder[store.status];
-        case "prevYearSales":
-          return prevYearSales;
-        case "prevSales":
-          return prevSales;
-        case "prevEst":
-          return prevEst;
-        case "prevEstRate":
-          return prevEst ? (prevSales / prevEst) * 100 : -1;
-        case "est":
-          return est;
-        case "estDifference":
-          return est - prevEst;
-        case "name":
-        default:
-          return store.name || "";
-      }
-    };
-
-    const filtered = stores
-      .filter((store) => {
-        if (statusView === "active") return store.status === "거래중";
-        if (statusView === "paused") return store.status === "거래중단";
-        return store.status === "거래종료";
-      })
-      .filter((store) => store.manager.trim().toUpperCase() === selectedManager)
-      .filter((store) => {
-        if (channelView === "store") return store.storeType === "매장";
-        if (channelView === "nonStore") return store.storeType !== "매장";
-        return true;
-      })
-      .filter((store) => {
-        const query = searchTerm.trim().toLowerCase();
-        if (!query) return true;
-        return [displayBrand(store.brand), store.name, store.code, store.manager]
-          .some((value) => String(value || "").toLowerCase().includes(query));
-      })
-      .filter((store) => {
-        const entered = Number(estMap.get(store.code) || 0) !== 0;
-        if (entryStatusView === "entered") return entered;
-        if (entryStatusView === "missing") return !entered;
-        return true;
-      });
-
-    const sorted = [...filtered].sort((a, b) => {
-      const av = getSortValue(a);
-      const bv = getSortValue(b);
-      const direction = sortDirection === "asc" ? 1 : -1;
-
-      if (typeof av === "number" && typeof bv === "number") {
-        return (av - bv) * direction;
-      }
-
-      return String(av).localeCompare(String(bv), "ko-KR", { numeric: true }) * direction;
-    });
-
-    if (!editingStoreCode || frozenRowOrder.length === 0) return sorted;
-    const orderMap = new Map<string, number>(frozenRowOrder.map((code, index) => [code, index]));
-    return [...sorted].sort((a, b) =>
-      (orderMap.get(a.code) ?? Number.MAX_SAFE_INTEGER) -
-      (orderMap.get(b.code) ?? Number.MAX_SAFE_INTEGER),
-    );
-  }, [
-    stores,
-    selectedManager,
-    statusView,
-    channelView,
-    sortKey,
-    sortDirection,
-    prevYearSalesMap,
-    prevSalesMap,
-    prevEstMap,
-    estMap,
-    editingStoreCode,
-    frozenRowOrder,
-    searchTerm,
-    entryStatusView,
-  ]);
-
-  const openBrandStores = useMemo(() => {
-    if (!openBrand) return [];
     return stores
-      .filter((store) => displayBrand(store.brand) === openBrand)
-      .filter((store) => store.manager.trim().toUpperCase() === selectedManager)
+      .filter((store) => store.status !== "거래종료")
+      .filter((store) => EST_ENTRY_MANAGERS.includes(store.manager))
+      .filter((store) => store.manager === selectedManager)
+      .filter((store) => {
+        if (!normalizedSearch) return true;
+        return [store.code, store.name, store.brand, store.channel, store.storeType]
+          .some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
+      })
       .sort((a, b) => a.name.localeCompare(b.name, "ko-KR", { numeric: true }));
-  }, [stores, openBrand, selectedManager]);
+  }, [stores, selectedManager, normalizedSearch]);
 
-  const brandEntryRows = useMemo(() => {
-    const grouped = new Map<string, Store[]>();
-    rows.forEach((store) => {
-      const brand = displayBrand(store.brand) || "미지정";
-      grouped.set(brand, [...(grouped.get(brand) || []), store]);
-    });
-    return Array.from(grouped.entries())
-      .map(([brand, groupedStores]) => ({
-        brand,
-        stores: groupedStores,
-        est: groupedStores.reduce((sum, store) => sum + Number(estMap.get(store.code) || 0), 0),
-        prevEst: groupedStores.reduce((sum, store) => sum + Number(prevEstMap.get(store.code) || 0), 0),
-        prevSales: groupedStores.reduce((sum, store) => sum + Number(prevSalesMap.get(store.code) || 0), 0),
-        prevYearSales: groupedStores.reduce((sum, store) => sum + Number(prevYearSalesMap.get(store.code) || 0), 0),
-      }))
-      .sort((a, b) => a.brand.localeCompare(b.brand, "ko-KR", { numeric: true }));
-  }, [rows, estMap, prevEstMap, prevSalesMap, prevYearSalesMap]);
+  const allEntryStores = useMemo(
+    () =>
+      stores.filter(
+        (store) =>
+          store.status !== "거래종료" &&
+          EST_ENTRY_MANAGERS.includes(store.manager),
+      ),
+    [stores],
+  );
 
-  const managerInfo = useMemo(() => {
-    const managerStores = stores.filter(
-      (store) =>
-        store.manager.trim().toUpperCase() === selectedManager,
-    );
-
-    return {
-      total: managerStores.length,
-      store: managerStores.filter((store) => store.storeType === "매장").length,
-      nonStore: managerStores.filter((store) => store.storeType !== "매장").length,
-      active: managerStores.filter((store) => store.status === "거래중").length,
-      paused: managerStores.filter((store) => store.status === "거래중단").length,
-      ended: managerStores.filter((store) => store.status === "거래종료").length,
-    };
-  }, [stores, selectedManager]);
-
-  const filteredEstTotal = rows.reduce(
+  const totalEst = rows.reduce(
     (total, store) => total + Number(estMap.get(store.code) || 0),
     0,
   );
-  const filteredStoreCount = rows.filter((store) => store.storeType === "매장").length;
-  const filteredNonStoreCount = rows.filter((store) => store.storeType !== "매장").length;
-  const storeEstTotal = rows
+  const storeEstTotal = allEntryStores
     .filter((store) => store.storeType === "매장")
     .reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0);
-  const nonStoreEstTotal = rows
+  const nonStoreEstTotal = allEntryStores
     .filter((store) => store.storeType !== "매장")
     .reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0);
-  const selectedManagerEstSummary = useMemo(() => {
-    const selectedStores = stores.filter(
-      (store) => store.manager.trim().toUpperCase() === selectedManager,
-    );
-    const selectedCodes = new Set(selectedStores.map((store) => store.code));
-    const totals = { storeEst: 0, nonStoreEst: 0 };
-    ests
-      .filter((row) => row.month === month && selectedCodes.has(row.storeCode))
-      .forEach((row) => {
-        const store = selectedStores.find((item) => item.code === row.storeCode);
-        if (store?.storeType === "매장") totals.storeEst += Number(row.amount || 0);
-        else totals.nonStoreEst += Number(row.amount || 0);
-      });
-    return totals;
-  }, [stores, ests, month, selectedManager]);
-
-  const selectedChannelLabel =
-    channelView === "store" ? "매장" : channelView === "nonStore" ? "비매장" : "전체 채널";
-  const selectedStatusLabel =
-    statusView === "active" ? "거래중" : statusView === "paused" ? "거래중지" : "거래종료";
-  const selectedManagerConfig = activeManagers.find((config) => config.name === selectedManager);
-  const canEditTarget = canEdit && Boolean(selectedManagerConfig?.canTarget);
-  const targetTotal = targetByType.store + targetByType.nonStore;
-
-  useEffect(() => {
-    if (!selectedManager) {
-      onSummaryChange(null);
-      return;
-    }
-    onSummaryChange({
-      manager: selectedManager,
-      storeEst: selectedManagerEstSummary.storeEst,
-      nonStoreEst: selectedManagerEstSummary.nonStoreEst,
-      targetTotal,
-    });
-    return () => onSummaryChange(null);
-  }, [selectedManager, selectedManagerEstSummary.storeEst, selectedManagerEstSummary.nonStoreEst, targetTotal, onSummaryChange]);
-
-  const selectedManagerStoreCodes = useMemo(
-    () =>
-      new Set(
-        stores
-          .filter(
-            (store) =>
-              store.manager.trim().toUpperCase() === selectedManager,
-          )
-          .map((store) => store.code),
-      ),
-    [stores, selectedManager],
-  );
-
-  const selectedManagerEstInputCount = useMemo(
-    () =>
-      ests.filter(
-        (row) =>
-          row.month === month &&
-          selectedManagerStoreCodes.has(row.storeCode) &&
-          Number(row.amount || 0) !== 0,
-      ).length,
-    [ests, month, selectedManagerStoreCodes],
-  );
-
-  const openBrandEstTotal = useMemo(
-    () =>
-      openBrandStores.reduce(
-        (total, store) => total + Number(estMap.get(store.code) || 0),
-        0,
-      ),
-    [openBrandStores, estMap],
-  );
-
-  const openBrandEnteredCount = useMemo(
-    () =>
-      openBrandStores.filter(
-        (store) => Number(estMap.get(store.code) || 0) !== 0,
-      ).length,
-    [openBrandStores, estMap],
-  );
-
-  const resetSelectedManagerEst = () => {
-    if (!canEdit || !selectedManager) return;
-
-    if (selectedManagerEstInputCount === 0) {
-      alert(`${selectedManager} 담당자의 ${month} 당월 EST 입력값이 없습니다.`);
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `${selectedManager} 담당자의 ${month} 당월 EST ${selectedManagerEstInputCount}건을 모두 0으로 초기화하시겠습니까?\n\n전월 EST, Target, 거래처 정보는 유지됩니다.`,
-    );
-
-    if (!confirmed) return;
-
-    setEsts((prev) =>
-      prev.map((row) =>
-        row.month === month && selectedManagerStoreCodes.has(row.storeCode)
-          ? { ...row, amount: 0 }
-          : row,
-      ),
-    );
-
-    alert(
-      `${selectedManager} 담당자의 ${month} 당월 EST ${selectedManagerEstInputCount}건을 초기화했습니다.`,
-    );
-  };
-
-  const handleSort = (key: typeof sortKey) => {
-    if (sortKey === key) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setSortDirection("asc");
-  };
-
-  const sortMark = (key: typeof sortKey) => {
-    if (sortKey !== key) return "↕";
-    return sortDirection === "asc" ? "↑" : "↓";
-  };
+  const managerEstTotals = EST_ENTRY_MANAGERS.map((manager) => ({
+    manager,
+    amount: allEntryStores
+      .filter((store) => store.manager === manager)
+      .reduce((total, store) => total + Number(estMap.get(store.code) || 0), 0),
+  }));
+  const canEditTarget = canEdit && (isAdmin || selectedManager === "SY");
 
   const updateEst = (store: Store, amount: number) => {
-    if (!canEdit || store.status !== "거래중") return;
+    if (!canEdit) return;
     setEsts((prev) => {
       const exists = prev.some((row) => row.month === month && row.storeCode === store.code);
       if (exists) {
@@ -7417,33 +4919,6 @@ function EstQuickEntry({
       }
       return [...prev, { storeCode: store.code, storeName: store.name, month, amount }];
     });
-  };
-
-  const updateBrandEst = (groupedStores: Store[], amount: number) => {
-    if (!canEdit) return;
-    const activeStores = groupedStores.filter((store) => store.status === "거래중");
-    if (!activeStores.length) return;
-    const representative = activeStores[0];
-    const groupedCodes = new Set(groupedStores.map((store) => store.code));
-    setEsts((prev) => {
-      const next = prev.map((row) =>
-        row.month === month && groupedCodes.has(row.storeCode)
-          ? { ...row, amount: row.storeCode === representative.code ? amount : 0 }
-          : row,
-      );
-      const representativeExists = next.some(
-        (row) => row.month === month && row.storeCode === representative.code,
-      );
-      return representativeExists
-        ? next
-        : [...next, { storeCode: representative.code, storeName: representative.name, month, amount }];
-    });
-  };
-
-  const updateStoreStatus = (store: Store, status: Store["status"]) => {
-    if (!canEdit) return;
-    if (!isAdmin && status === "거래종료") return;
-    setStores(stores.map((row) => row.code === store.code ? { ...row, status } : row));
   };
 
   const updateTargetByType = (storeType: StoreType, amount: number) => {
@@ -7467,187 +4942,42 @@ function EstQuickEntry({
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-end justify-between gap-2 px-1 pb-1">
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-5 gap-y-1">
-          <h2 className="text-lg font-black tracking-tight text-slate-900">0. EST 입력</h2>
-          <p className="text-[11px] font-semibold text-slate-500">
-            브랜드 또는 거래처별로 EST 목표를 입력하고 관리합니다.
-          </p>
-        </div>
-        <div className="text-[11px] font-bold text-slate-500">
-          {selectedManager} 담당 · 매장 {won(managerInfo.store)}개 · 비매장 {won(managerInfo.nonStore)}개 · 전체 {won(managerInfo.total)}개
-        </div>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-end gap-3 border-b border-slate-200 bg-white px-4 py-3">
-          <label className="w-[150px] shrink-0">
-            <span className="mb-1 block text-[10px] font-extrabold text-slate-500">담당자</span>
-            <select
-              value={selectedManager}
-              onChange={(event) => setSelectedManager(event.target.value)}
-              className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-extrabold text-slate-800 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
-              aria-label="EST 담당자 선택"
-            >
-              {activeManagers.map((config) => {
-                const managerStoreCount = stores.filter(
-                  (store) => store.manager.trim().toUpperCase() === config.name,
-                ).length;
-                return (
-                  <option key={config.name} value={config.name}>
-                    {config.name} ({managerStoreCount})
-                  </option>
-                );
-              })}
-            </select>
-          </label>
-
-          <div className="flex min-h-10 items-center gap-4 pb-0.5 text-[12px] font-bold text-slate-600">
-            <span>
-              거래처 <strong className="text-slate-900">{won(managerInfo.total)}개</strong>
-            </span>
-            <span className="h-4 w-px bg-slate-200" />
-            <span>
-              매장 <strong className="text-slate-900">{won(managerInfo.store)}개</strong>
-            </span>
-            <span className="h-4 w-px bg-slate-200" />
-            <span>
-              비매장 <strong className="text-slate-900">{won(managerInfo.nonStore)}개</strong>
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={resetSelectedManagerEst}
-            disabled={!canEdit || selectedManagerEstInputCount === 0}
-            className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-3 text-[11px] font-extrabold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-40"
-            title={`${selectedManager} 담당자의 ${month} 당월 EST만 초기화합니다.`}
-          >
-            당월 EST 초기화 ({selectedManagerEstInputCount}건)
-          </button>
-
-          <div className="ml-auto flex min-w-0 flex-wrap items-end justify-end gap-2">
-            <label className="relative block w-[260px] max-w-full">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
-              <input
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="거래처명 · 코드 · 브랜드 검색"
-                className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 text-xs font-semibold outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
-              />
-            </label>
-
-            <div className="flex items-center rounded-xl border border-violet-200 bg-violet-50 p-1 text-xs font-extrabold">
-              <button
-                type="button"
-                onClick={() => setEntryView("store")}
-                className={`rounded-lg px-3 py-2 transition ${entryView === "store" ? "bg-white text-violet-700 shadow-sm" : "text-slate-600"}`}
-              >
-                거래처별 입력
-              </button>
-              <button
-                type="button"
-                onClick={() => setEntryView("brand")}
-                className={`rounded-lg px-3 py-2 transition ${entryView === "brand" ? "bg-white text-violet-700 shadow-sm" : "text-slate-600"}`}
-              >
-                브랜드별 입력
-              </button>
-            </div>
-
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-extrabold text-slate-500">채널</span>
-              <select
-                value={channelView}
-                onChange={(e) => setChannelView(e.target.value as "all" | "store" | "nonStore")}
-                className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-orange-400"
-                aria-label="매장 비매장 채널 필터"
-              >
-                <option value="all">전체 채널</option>
-                <option value="store">매장</option>
-                <option value="nonStore">비매장</option>
-              </select>
-            </label>
-
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-extrabold text-slate-500">입력상태</span>
-              <select
-                value={entryStatusView}
-                onChange={(event) => setEntryStatusView(event.target.value as "all" | "entered" | "missing")}
-                className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-violet-500"
-                aria-label="EST 입력상태 필터"
-              >
-                <option value="all">전체</option>
-                <option value="entered">입력 완료</option>
-                <option value="missing">미입력</option>
-              </select>
-            </label>
-
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-extrabold text-slate-500">거래상태</span>
-              <select
-                value={statusView}
-                onChange={(event) => setStatusView(event.target.value as "active" | "paused" | "ended")}
-                className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-violet-500"
-                aria-label="거래상태 필터"
-              >
-                <option value="active">거래중</option>
-                <option value="paused">거래중지</option>
-                <option value="ended">거래종료</option>
-              </select>
-            </label>
-
-            <button
-              type="button"
-              onClick={() => setNewStoreModalOpen(true)}
-              disabled={!selectedManager}
-              className="h-9 rounded-lg border border-emerald-600 bg-emerald-600 px-4 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
-            >
-              + 신규 거래처 생성
-            </button>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-stretch gap-3 bg-slate-50/40 px-4 py-3">
-          <div className="grid min-w-[560px] flex-1 grid-cols-3 gap-3">
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-3 shadow-sm">
-              <div className="text-[11px] font-extrabold text-slate-500">매장 EST 합계</div>
-              <div className="mt-1 text-xl font-black tracking-tight text-slate-900">
-                {won(selectedManagerEstSummary.storeEst)}원
-              </div>
-              <div className="mt-1 text-[10px] font-bold text-slate-400">
-                {selectedManager} · 매장 {won(managerInfo.store)}개
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 shadow-sm">
-              <div className="text-[11px] font-extrabold text-slate-500">비매장 EST 합계</div>
-              <div className="mt-1 text-xl font-black tracking-tight text-slate-900">
-                {won(selectedManagerEstSummary.nonStoreEst)}원
-              </div>
-              <div className="mt-1 text-[10px] font-bold text-slate-400">
-                {selectedManager} · 비매장 {won(managerInfo.nonStore)}개
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-4 py-3 shadow-sm">
-              <div className="text-[11px] font-extrabold text-slate-500">전체 EST 합계</div>
-              <div className="mt-1 text-xl font-black tracking-tight text-slate-900">
-                {won(selectedManagerEstSummary.storeEst + selectedManagerEstSummary.nonStoreEst)}원
-              </div>
-              <div className="mt-1 text-[10px] font-bold text-slate-400">
-                전체 거래처 {won(managerInfo.total)}개
-              </div>
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {EST_ENTRY_MANAGERS.map((manager) => (
+                <button
+                  key={manager}
+                  type="button"
+                  onClick={() => setSelectedManager(manager)}
+                  className={`rounded-xl px-4 py-2 text-sm font-bold ${
+                    selectedManager === manager
+                      ? "bg-orange-500 text-white shadow"
+                      : "bg-orange-50 text-orange-900 hover:bg-orange-100"
+                  }`}
+                >
+                  {manager}
+                </button>
+              ))}
             </div>
           </div>
 
-          {selectedManagerConfig?.canTarget && (
-            <div className="w-[360px] max-w-full shrink-0 overflow-hidden rounded-xl border border-orange-200 bg-orange-50/50 shadow-sm">
-              <div className="border-b border-orange-200 bg-orange-100/70 px-4 py-2 text-left text-[13px] font-extrabold text-slate-900">
-                Target 입력
-              </div>
-              <div className="grid grid-cols-2 divide-x divide-orange-200">
-                <label className="px-3 py-2.5 text-center text-[12px] font-bold text-slate-700">
+          <div className="flex flex-wrap items-start justify-end gap-2">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="거래처명/코드/채널 검색"
+              className="h-9 w-[240px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
+            />
+            <div className="rounded-lg bg-orange-100 px-3 py-2 text-xs font-bold text-orange-900">
+              {selectedManager} EST {won(totalEst)}
+            </div>
+            <div className="rounded-lg bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-900">
+              <div>매장 EST {won(storeEstTotal)}</div>
+              {selectedManager === "SY" && (
+                <label className="mt-2 block text-[11px] font-bold text-emerald-900">
                   매장 Target
                   <input
                     type="text"
@@ -7656,10 +4986,15 @@ function EstQuickEntry({
                     value={targetByType.store ? won(targetByType.store) : ""}
                     onChange={(e) => updateTargetByType("매장", num(e.target.value))}
                     placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                    className="mt-1 h-8 w-full min-w-0 rounded-lg border border-orange-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                    className="mt-1 h-8 w-[150px] rounded-lg border border-emerald-200 bg-white px-2 text-right text-xs font-extrabold text-slate-900 outline-none focus:border-emerald-500 disabled:bg-slate-100 disabled:text-slate-500"
                   />
                 </label>
-                <label className="px-3 py-2.5 text-center text-[12px] font-bold text-slate-700">
+              )}
+            </div>
+            <div className="rounded-lg bg-blue-100 px-3 py-2 text-xs font-bold text-blue-900">
+              <div>비매장 EST {won(nonStoreEstTotal)}</div>
+              {selectedManager === "SY" && (
+                <label className="mt-2 block text-[11px] font-bold text-blue-900">
                   비매장 Target
                   <input
                     type="text"
@@ -7668,372 +5003,117 @@ function EstQuickEntry({
                     value={targetByType.nonStore ? won(targetByType.nonStore) : ""}
                     onChange={(e) => updateTargetByType("비매장", num(e.target.value))}
                     placeholder={canEditTarget ? "0" : "입력 기간 종료"}
-                    className="mt-1 h-8 w-full min-w-0 rounded-lg border border-orange-200 bg-white px-2 text-right text-[13px] font-extrabold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                    className="mt-1 h-8 w-[150px] rounded-lg border border-blue-200 bg-white px-2 text-right text-xs font-extrabold text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
                   />
                 </label>
-              </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
-        <div
-          className="flex min-h-[420px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm"
-          style={{ height: "clamp(470px, calc(100vh - 300px), 760px)" }}
-        >
-          <div className="isolate min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3 pr-2">
-            {entryView === "brand" ? (
-              <table className="w-full min-w-[980px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
-                <thead>
-                  <tr>
-                    <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">브랜드</th>
-                    <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">포함 거래처 / 센터</th>
-                    <th className="sticky top-0 z-20 border border-slate-300 bg-[#F7FCEB] px-3 py-2">전년동월 매출</th>
-                    <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2">전월 매출</th>
-                    <th className="sticky top-0 z-20 border border-slate-300 bg-[#F3FAFD] px-3 py-2">전월 EST</th>
-                    <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-100 px-3 py-2">{month} 브랜드 EST 입력</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {brandEntryRows.map((row) => (
-                    <tr key={row.brand} className="hover:bg-orange-50/60">
-                      <td className="border border-slate-300 px-3 py-2 font-extrabold text-orange-800">{row.brand}</td>
-                      <td className="max-w-[420px] border border-slate-300 px-3 py-2 text-left">
-                        <div className="truncate font-semibold text-slate-800" title={row.stores.map((store) => store.name).join("\n")}>
-                          {row.stores.map((store) => store.name).join(" · ")}
-                        </div>
-                      </td>
-                      <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.prevYearSales)}</td>
-                      <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.prevSales)}</td>
-                      <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.prevEst)}</td>
-                      <td className="border border-slate-300 px-3 py-2">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          disabled={!canEdit || !row.stores.some((store) => store.status === "거래중")}
-                          value={row.est ? won(row.est) : ""}
-                          onChange={(event) => updateBrandEst(row.stores, num(event.target.value))}
-                          placeholder="0"
-                          title="같은 브랜드의 여러 센터를 한 거래처로 묶어 입력합니다."
-                          className="h-9 w-full min-w-[170px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                  {!brandEntryRows.length && (
-                    <tr><td colSpan={6} className="border border-slate-300 p-8 text-slate-500">선택한 조건에 해당하는 브랜드가 없습니다.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            ) : (
-            <table className="w-full min-w-[1770px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
-              <thead>
-                <tr className="bg-slate-100">
-                  {[
-                    ["brand", "브랜드", "bg-slate-100"],
-                    ["name", "거래처명", "bg-slate-100"],
-                    ["manager", "담당자", "bg-slate-100"],
-                    ["channel", "채널", "bg-slate-100"],
-                    ["status", "거래상태", "bg-slate-100"],
-                    ["prevYearSales", "전년동월 매출", "bg-[#F7FCEB]"],
-                    ["prevSales", "전월 매출", "bg-[#F3FAFD]"],
-                    ["prevEst", "전월 EST", "bg-[#F3FAFD]"],
-                    ["prevEstRate", "전월 EST 달성률", "bg-[#F3FAFD]"],
-                    ["est", `${month} EST 입력`, "bg-yellow-100"],
-                    ["estDifference", "전월 EST 대비 차이", "bg-yellow-100"],
-                  ].map(([key, label, background]) => (
-                    <th
-                      key={key}
-                      className={`sticky top-0 z-20 border border-slate-300 px-3 py-2 font-bold text-black ${background}`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleSort(key as typeof sortKey)}
-                        className="inline-flex w-full items-center justify-center gap-1.5 whitespace-nowrap hover:text-orange-700"
-                        title={`${label} 정렬`}
+      <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+        <div className="max-h-[68vh] overflow-auto isolate">
+          <table className="w-full min-w-[1450px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">거래처명</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">담당자</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">채널</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-emerald-50 px-3 py-2 font-bold text-emerald-800">전년동월 매출</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-800">전월 매출</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-purple-50 px-3 py-2 font-bold text-purple-800">전월 EST</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-yellow-50 px-3 py-2 font-bold text-yellow-900">전월 EST 달성률</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">{month} EST 입력</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-cyan-50 px-3 py-2 font-bold text-cyan-800">전월 EST 대비 차이</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((store) => {
+                const value = estMap.get(store.code) || 0;
+                const prevYearSales = prevYearSalesMap.get(store.code) || 0;
+                const prevSales = prevSalesMap.get(store.code) || 0;
+                const prevEst = prevEstMap.get(store.code) || 0;
+                const prevEstRate = prevEst ? (prevSales / prevEst) * 100 : 0;
+                const estDifference = Number(value || 0) - Number(prevEst || 0);
+                const isCriticalRate = Boolean(prevEst && prevEstRate < 30);
+                const rateTone = !prevEst
+                  ? "bg-slate-100 text-slate-500 ring-slate-200"
+                  : isCriticalRate
+                    ? "bg-red-600 text-white ring-red-300 shadow-red-300 animate-pulse"
+                    : prevEstRate > 120
+                      ? "bg-yellow-100 text-yellow-900 ring-yellow-300"
+                      : prevEstRate >= 80
+                        ? "bg-emerald-100 text-emerald-800 ring-emerald-300"
+                        : "bg-slate-100 text-slate-700 ring-slate-200";
+                const differenceTone = estDifference > 0
+                  ? "text-emerald-700 bg-emerald-50"
+                  : estDifference < 0
+                    ? "text-red-600 bg-red-50"
+                    : "text-slate-500 bg-slate-50";
+                return (
+                  <tr key={store.code} className="hover:bg-orange-50/60">
+                    <td className="border border-slate-300 px-3 py-2 text-center font-semibold text-slate-900">{store.name}</td>
+                    <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{store.manager}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.storeType === "매장" ? "매장" : "비매장"}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevYearSales)}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevSales)}</td>
+                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevEst)}</td>
+                    <td className="border border-slate-300 px-3 py-2">
+                      <span
+                        className={`inline-flex min-w-[86px] justify-center rounded-full px-3 py-1.5 text-xs font-extrabold ring-2 shadow-sm ${rateTone}`}
+                        style={isCriticalRate ? { animationDuration: "0.65s" } : undefined}
                       >
-                        <span className={key === "prevEst" || key === "prevEstRate" || key === "est" || key === "estDifference" ? "text-[14px]" : ""}>
-                          {label}
-                        </span>
-                        <span className={`text-[11px] ${sortKey === key ? "text-orange-600" : "text-slate-400"}`}>
-                          {sortMark(key as typeof sortKey)}
-                        </span>
-                      </button>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((store) => {
-                  const value = estMap.get(store.code) || 0;
-                  const prevYearSales = prevYearSalesMap.get(store.code) || 0;
-                  const prevSales = prevSalesMap.get(store.code) || 0;
-                  const prevEst = prevEstMap.get(store.code) || 0;
-                  const prevEstRate = prevEst ? (prevSales / prevEst) * 100 : 0;
-                  const estDifference = Number(value || 0) - Number(prevEst || 0);
-                  const isCriticalRate = Boolean(prevEst && prevEstRate < 30);
-                  const rateTone = !prevEst
-                    ? "bg-slate-100 text-slate-500 ring-slate-200"
-                    : isCriticalRate
-                      ? "bg-red-600 text-white ring-red-300 shadow-red-300 animate-pulse"
-                      : prevEstRate > 120
-                        ? "bg-yellow-100 text-yellow-900 ring-yellow-300"
-                        : prevEstRate >= 80
-                          ? "bg-emerald-100 text-emerald-800 ring-emerald-300"
-                          : "bg-slate-100 text-slate-700 ring-slate-200";
-                  const differenceTone = estDifference > 0
-                    ? "text-emerald-700 bg-emerald-50"
-                    : estDifference < 0
-                      ? "text-red-600 bg-red-50"
-                      : "text-slate-500 bg-slate-50";
-                  return (
-                    <tr key={store.code} className="hover:bg-orange-50/60">
-                      <td className="border border-slate-300 px-3 py-2 text-center">
-                        <button
-                          type="button"
-                          onClick={() => setOpenBrand(displayBrand(store.brand))}
-                          className="max-w-[190px] truncate rounded-lg bg-orange-50 px-2 py-1 font-extrabold text-orange-800 hover:bg-orange-100 hover:underline"
-                          title={`${displayBrand(store.brand)} 거래처별 매출 및 EST 입력`}
-                        >
-                          {displayBrand(store.brand)}
-                        </button>
-                      </td>
-                      <td className="border border-slate-300 px-3 py-2 text-center font-semibold text-slate-900">{store.name}</td>
-                      <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{store.manager}</td>
-                      <td className="border border-slate-300 px-3 py-2 text-slate-700">{store.storeType === "매장" ? "매장" : "비매장"}</td>
-                      <td className="border border-slate-300 px-3 py-2">
-                        <select
-                          value={store.status}
-                          disabled={!canEdit}
-                          onChange={(e) => updateStoreStatus(store, e.target.value as Store["status"])}
-                          className={`h-8 min-w-[106px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-extrabold outline-none disabled:opacity-70 ${
-                            store.status === "거래중"
-                              ? "text-black"
-                              : store.status === "거래중단"
-                                ? "text-blue-600"
-                                : "text-red-600"
-                          }`}
-                        >
-                          <option value="거래중">거래중</option>
-                          <option value="거래중단">거래중지</option>
-                          {isAdmin && <option value="거래종료">거래종료</option>}
-                        </select>
-                      </td>
-                      <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevYearSales)}</td>
-                      <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevSales)}</td>
-                      <td className="border border-slate-300 px-3 py-2 text-right font-semibold text-slate-900">{won(prevEst)}</td>
-                      <td className="border border-slate-300 px-3 py-2">
-                        <span
-                          className={`inline-flex min-w-[86px] justify-center rounded-full px-3 py-1.5 text-xs font-extrabold ring-2 shadow-sm ${rateTone}`}
-                          style={isCriticalRate ? { animationDuration: "0.65s" } : undefined}
-                        >
-                          {isCriticalRate ? "🚨 " : ""}{prevEst ? pct(prevEstRate) : "-"}
-                        </span>
-                      </td>
-                      <td className="border border-slate-300 px-3 py-2">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          disabled={!canEdit || store.status !== "거래중"}
-                          value={value ? won(value) : ""}
-                          onFocus={() => {
-                            setEditingStoreCode(store.code);
-                            setFrozenRowOrder(rows.map((row) => row.code));
-                          }}
-                          onChange={(e) => updateEst(store, num(e.target.value))}
-                          onBlur={() => {
-                            setEditingStoreCode("");
-                            setFrozenRowOrder([]);
-                          }}
-                          placeholder={store.status === "거래중" ? "0" : "입력 제외"}
-                          title={
-                            store.status === "거래중"
-                              ? `${month} EST 입력`
-                              : "거래중단·거래종료 거래처는 당월 EST를 입력할 수 없습니다."
-                          }
-                          className="h-9 w-full min-w-[150px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-orange-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                        />
-                      </td>
-                      <td className={`border border-slate-300 px-3 py-2 text-right font-extrabold ${differenceTone}`}>
-                        {value || prevEst
-                          ? `${estDifference > 0 ? "+" : ""}${won(estDifference)}`
-                          : "-"}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {!rows.length && (
-                  <tr>
-                    <td colSpan={11} className="border border-slate-300 p-8 text-center text-slate-500">
-                      선택한 담당자·채널·거래상태에 해당하는 거래처가 없습니다.
+                        {isCriticalRate ? "🚨 " : ""}{prevEst ? pct(prevEstRate) : "-"}
+                      </span>
+                    </td>
+                    <td className="border border-slate-300 px-3 py-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        disabled={!canEdit}
+                        value={value ? won(value) : ""}
+                        onChange={(e) => updateEst(store, num(e.target.value))}
+                        placeholder="0"
+                        className="h-9 w-full min-w-[150px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold text-slate-900 outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                      />
+                    </td>
+                    <td className={`border border-slate-300 px-3 py-2 text-right font-extrabold ${differenceTone}`}>
+                      {value || prevEst
+                        ? `${estDifference > 0 ? "+" : ""}${won(estDifference)}`
+                        : "-"}
                     </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-            )}
-            <div aria-hidden="true" className="h-3" />
-          </div>
-
-          <div className="flex min-h-[48px] shrink-0 flex-wrap items-center justify-between gap-x-5 gap-y-2 border-t border-slate-300 bg-slate-50 px-4 py-2.5 text-[12px] font-bold text-slate-700">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <span className="font-extrabold text-slate-900">
-                현재 필터 거래처 <strong className="text-orange-600">{won(rows.length)}개</strong>
-              </span>
-              <span>매장 {won(filteredStoreCount)}개</span>
-              <span>비매장 {won(filteredNonStoreCount)}개</span>
-              <span className="text-slate-500">
-                {selectedManager} · {selectedChannelLabel} · {selectedStatusLabel}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <span>매장 EST <strong className="text-slate-900">{won(storeEstTotal)}</strong></span>
-              <span>비매장 EST <strong className="text-slate-900">{won(nonStoreEstTotal)}</strong></span>
-              <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-slate-900">
-                필터 EST 합계 <strong className="text-orange-700">{won(filteredEstTotal)}</strong>
-              </span>
-            </div>
-          </div>
+                );
+              })}
+              {!rows.length && (
+                <tr>
+                  <td colSpan={9} className="border border-slate-300 p-8 text-center text-slate-500">
+                    표시할 거래처가 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-
-      {openBrand && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/35 p-4" onMouseDown={() => setOpenBrand("")}>
-          <div className="flex max-h-[82vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-slate-200 bg-orange-50 px-5 py-3">
-              <div>
-                <h3 className="text-base font-black text-slate-900">{openBrand}</h3>
-              </div>
-              <button type="button" onClick={() => setOpenBrand("")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50">닫기</button>
-            </div>
-            <div className="border-b border-amber-200 bg-[#FFFDF2] px-4 py-3">
-              <div className="grid gap-2 sm:grid-cols-3">
-                <div className="rounded-xl border border-amber-200 bg-white px-4 py-2.5 text-center shadow-sm">
-                  <div className="text-[11px] font-bold text-slate-500">브랜드 거래처</div>
-                  <div className="mt-1 text-base font-black text-slate-900">{won(openBrandStores.length)}개</div>
-                </div>
-                <div className="rounded-xl border border-amber-200 bg-white px-4 py-2.5 text-center shadow-sm">
-                  <div className="text-[11px] font-bold text-slate-500">EST 입력 거래처</div>
-                  <div className="mt-1 text-base font-black text-slate-900">{won(openBrandEnteredCount)}개</div>
-                </div>
-                <div className="rounded-xl border border-orange-300 bg-orange-50 px-4 py-2.5 text-center shadow-sm">
-                  <div className="text-[11px] font-extrabold text-orange-800">{month} 입력 EST 총합계</div>
-                  <div className="mt-1 text-xl font-black text-orange-700">{won(openBrandEstTotal)}원</div>
-                </div>
-              </div>
-            </div>
-            <div className="min-h-0 flex-1 overflow-auto p-4">
-              <table className="w-full min-w-[760px] border-separate border-spacing-0 text-center text-[12px]">
-                <thead>
-                  <tr>
-                    <th className="sticky top-0 z-10 border border-slate-300 bg-slate-100 px-3 py-2">거래처명</th>
-                    <th className="sticky top-0 z-10 border border-slate-300 bg-[#F7FCEB] px-3 py-2">전년동월 매출</th>
-                    <th className="sticky top-0 z-10 border border-slate-300 bg-[#F3FAFD] px-3 py-2">전월 매출</th>
-                    <th className="sticky top-0 z-10 border border-slate-300 bg-yellow-100 px-3 py-2">{month} EST 입력</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {openBrandStores.map((store) => {
-                    const value = estMap.get(store.code) || 0;
-                    return (
-                      <tr key={store.code} className="hover:bg-orange-50/50">
-                        <td className="border border-slate-300 px-3 py-2 text-left font-bold text-slate-900">{store.name}</td>
-                        <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(prevYearSalesMap.get(store.code) || 0)}</td>
-                        <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(prevSalesMap.get(store.code) || 0)}</td>
-                        <td className="border border-slate-300 px-3 py-2">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            disabled={!canEdit || store.status !== "거래중"}
-                            value={value ? won(value) : ""}
-                            onChange={(event) => updateEst(store, num(event.target.value))}
-                            placeholder={store.status === "거래중" ? "0" : "입력 제외"}
-                            className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {!openBrandStores.length && (
-                    <tr><td colSpan={4} className="border border-slate-300 p-8 text-slate-500">선택한 담당자에게 연결된 브랜드 거래처가 없습니다.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-amber-200 bg-[#FFF9E3] px-5 py-3">
-              <span className="text-xs font-bold text-slate-600">
-                입력 {won(openBrandEnteredCount)}개 / 전체 {won(openBrandStores.length)}개
-              </span>
-              <span className="rounded-xl border border-orange-300 bg-white px-4 py-2 text-sm font-black text-orange-700 shadow-sm">
-                브랜드 EST 총합계&nbsp; {won(openBrandEstTotal)}원
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-      {newStoreModalOpen && (
-        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/35 p-4" onMouseDown={() => setNewStoreModalOpen(false)}>
-          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="신규 거래처 생성">
-            <div className="flex items-center justify-between border-b border-emerald-200 bg-emerald-50 px-5 py-4">
-              <div>
-                <h3 className="text-base font-black text-slate-900">신규 거래처 생성</h3>
-                <p className="mt-1 text-xs font-semibold text-slate-500">담당자 {selectedManager || "미선택"} · {month} EST</p>
-              </div>
-              <button type="button" onClick={() => setNewStoreModalOpen(false)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50">닫기</button>
-            </div>
-            <div className="space-y-4 p-5">
-              <label className="block text-xs font-extrabold text-slate-700">담당자
-                <input value={selectedManager} disabled className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-extrabold text-slate-700" />
-              </label>
-              <label className="block text-xs font-extrabold text-slate-700">구분
-                <select value={newStoreType} onChange={(e) => setNewStoreType(e.target.value as StoreType)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold outline-none focus:border-emerald-500">
-                  <option value="매장">매장</option>
-                  <option value="비매장">비매장</option>
-                </select>
-              </label>
-              <label className="block text-xs font-extrabold text-slate-700">거래처명
-                <input value={newStoreName} onChange={(e) => setNewStoreName(e.target.value)} placeholder="신규 거래처명" className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold outline-none focus:border-emerald-500" autoFocus />
-              </label>
-              <label className="block text-xs font-extrabold text-slate-700">거래상태
-                <input value="거래중" disabled className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-extrabold text-emerald-700" />
-              </label>
-              <label className="block text-xs font-extrabold text-slate-700">EST 금액
-                <input type="text" inputMode="numeric" value={newStoreEstAmount ? won(newStoreEstAmount) : ""} onChange={(e) => setNewStoreEstAmount(num(e.target.value))} placeholder="0" className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-emerald-500" />
-              </label>
-              <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">월초부터 월말까지 언제든 등록할 수 있으며, 관리자가 월초관리에서 거래처 코드를 연결합니다.</p>
-            </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
-              <button type="button" onClick={() => setNewStoreModalOpen(false)} className="h-9 rounded-lg border border-slate-300 bg-white px-4 text-xs font-extrabold text-slate-700">취소</button>
-              <button type="button" onClick={addPendingNewStoreEst} disabled={!selectedManager} className="h-9 rounded-lg bg-emerald-600 px-5 text-xs font-extrabold text-white hover:bg-emerald-700 disabled:bg-slate-300">등록</button>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
-
   );
-
 }
 
 function ItemCostStatus({
   sales,
   itemCosts,
   setItemCosts,
-  itemMasters,
-  setItemMasters,
-  month,
   isAdmin,
 }: {
   sales: SalesRecord[];
   itemCosts: ItemCostRecord[];
   setItemCosts: React.Dispatch<React.SetStateAction<ItemCostRecord[]>>;
-  itemMasters: ItemMasterRecord[];
-  setItemMasters: React.Dispatch<React.SetStateAction<ItemMasterRecord[]>>;
-  month: string;
   isAdmin: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [showChangedOnly, setShowChangedOnly] = useState(false);
-  const [showNewOnly, setShowNewOnly] = useState(false);
   const [openItemCode, setOpenItemCode] = useState("");
   const normalizedSearch = search.trim().toLowerCase();
 
@@ -8079,42 +5159,19 @@ function ItemCostStatus({
     });
   }, [setItemCosts]);
 
-  const itemMasterByCode = useMemo(
-    () => new Map(itemMasters.map((item) => [item.itemCode, item])),
-    [itemMasters],
-  );
-
-  const firstSaleMonthByItem = useMemo(() => {
-    const map = new Map<string, string>();
-    sales.forEach((row) => {
-      const key = row.itemCode || row.itemName || "미지정";
-      const saleMonth = row.saleDate?.slice(0, 7) || row.refMonth;
-      if (!saleMonth) return;
-      const current = map.get(key);
-      if (!current || saleMonth < current) map.set(key, saleMonth);
-    });
-    return map;
-  }, [sales]);
-
   const itemBaseRows = useMemo(() => {
     const map = new Map<
       string,
-      { itemCode: string; itemName: string; category: string; supplier: string; estimatedCost: number; isNewItem: boolean }
+      { itemCode: string; itemName: string; estimatedCost: number }
     >();
     sales.forEach((row) => {
       const key = row.itemCode || row.itemName || "미지정";
       if (!map.has(key)) {
         const quantity = Number(row.quantity || 0);
-        const master = itemMasterByCode.get(row.itemCode);
         map.set(key, {
           itemCode: row.itemCode || "-",
-          itemName: master?.itemName || row.itemName || "미지정",
-          category: master?.category || "미지정",
-          supplier: master?.supplier || "미지정",
+          itemName: row.itemName || "미지정",
           estimatedCost: quantity ? Number(row.costAmount || 0) / quantity : 0,
-          isNewItem: master?.source === "sales"
-            ? master.firstSeenMonth === month
-            : !master && firstSaleMonthByItem.get(key) === month,
         });
       }
     });
@@ -8123,29 +5180,19 @@ function ItemCostStatus({
       if (!map.has(key)) {
         map.set(key, {
           itemCode: item.itemCode || "-",
-          itemName: itemMasterByCode.get(item.itemCode)?.itemName || item.itemName || "미지정",
-          category: itemMasterByCode.get(item.itemCode)?.category || "미지정",
-          supplier: itemMasterByCode.get(item.itemCode)?.supplier || "미지정",
+          itemName: item.itemName || "미지정",
           estimatedCost: Number(item.currentCost || 0),
-          isNewItem: itemMasterByCode.get(item.itemCode)?.source === "sales"
-            ? itemMasterByCode.get(item.itemCode)?.firstSeenMonth === month
-            : !itemMasterByCode.has(item.itemCode) && firstSaleMonthByItem.get(key) === month,
         });
       }
     });
     return Array.from(map.values()).sort((a, b) =>
       a.itemName.localeCompare(b.itemName, "ko-KR", { numeric: true }),
     );
-  }, [sales, itemCosts, itemMasterByCode, firstSaleMonthByItem, month]);
+  }, [sales, itemCosts]);
 
   const costMap = useMemo(
     () => new Map(itemCosts.map((item) => [item.itemCode, item])),
     [itemCosts],
-  );
-
-  const newItemCount = useMemo(
-    () => itemBaseRows.filter((row) => row.isNewItem).length,
-    [itemBaseRows],
   );
 
   const rows = useMemo(() => {
@@ -8182,15 +5229,14 @@ function ItemCostStatus({
       })
       .filter((row) => {
         if (showChangedOnly && !row.nextCost && !row.history.length) return false;
-        if (showNewOnly && !row.isNewItem) return false;
         if (!normalizedSearch) return true;
-        return [row.itemCode, row.itemName, row.category, row.supplier, row.memo]
+        return [row.itemCode, row.itemName, row.memo]
           .some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
       });
-  }, [itemBaseRows, costMap, normalizedSearch, showChangedOnly, showNewOnly]);
+  }, [itemBaseRows, costMap, normalizedSearch, showChangedOnly]);
 
   const upsertItemCost = (
-    base: { itemCode: string; itemName: string; category: string; supplier: string; estimatedCost: number; isNewItem: boolean },
+    base: { itemCode: string; itemName: string; estimatedCost: number },
     patch: Partial<ItemCostRecord>,
   ) => {
     if (!isAdmin) return;
@@ -8216,36 +5262,6 @@ function ItemCostStatus({
           currentCost: Number(base.estimatedCost || 0),
           history: [],
           ...patch,
-        },
-      ];
-    });
-  };
-
-  const updateItemMaster = (
-    row: (typeof rows)[number],
-    patch: Partial<Pick<ItemMasterRecord, "category" | "supplier">>,
-  ) => {
-    if (!isAdmin) return;
-    setItemMasters((prev) => {
-      const exists = prev.some((item) => item.itemCode === row.itemCode);
-      if (exists) {
-        return prev.map((item) =>
-          item.itemCode === row.itemCode
-            ? { ...item, itemName: row.itemName, ...patch }
-            : item,
-        );
-      }
-      return [
-        ...prev,
-        {
-          itemCode: row.itemCode,
-          itemName: row.itemName,
-          category: patch.category || row.category || "미지정",
-          supplier: patch.supplier || row.supplier || "미지정",
-          source: "sales",
-          firstSeenMonth: month,
-          active: true,
-          memo: "매출 로우 파일에서 자동 추가",
         },
       ];
     });
@@ -8282,20 +5298,17 @@ function ItemCostStatus({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col space-y-3">
-      <div className="bg-white py-1">
-        <div className="flex flex-wrap items-end justify-end gap-3">
-          <div className="flex items-center gap-2">
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
             <div className="text-base font-extrabold text-slate-900">매입가 정보</div>
-            <span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ring-1 ${newItemCount > 0 ? "bg-amber-100 text-amber-800 ring-amber-300" : "bg-slate-100 text-slate-500 ring-slate-200"}`}>
-              신규품목 {newItemCount.toLocaleString("ko-KR")}건
-            </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="품목코드/품목명/카테고리/매입처/메모 검색"
+              placeholder="품목코드/품목명/메모 검색"
               className="h-9 w-[260px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
             />
             <label className="flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 text-xs font-bold text-slate-700">
@@ -8306,36 +5319,26 @@ function ItemCostStatus({
               />
               변동 품목만
             </label>
-            <label className="flex h-9 items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-800">
-              <input
-                type="checkbox"
-                checked={showNewOnly}
-                onChange={(e) => setShowNewOnly(e.target.checked)}
-              />
-              당월 신규 품목만
-            </label>
           </div>
         </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-        <div className="max-h-[78vh] overflow-y-auto overflow-x-hidden isolate">
-          <table className="w-full table-fixed border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
+        <div className="max-h-[70vh] overflow-auto isolate">
+          <table className="w-full min-w-[1350px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
             <thead>
-              <tr className="bg-slate-100 text-[13px]">
-                <th className="sticky top-0 z-20 w-[5%] border border-slate-300 bg-slate-100 px-2 py-2 font-bold text-slate-700">품목코드</th>
-                <th className="sticky top-0 z-20 w-[25%] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목명</th>
-                <th className="sticky top-0 z-20 w-[8%] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목 카테고리</th>
-                <th className="sticky top-0 z-20 w-[8%] border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">매입처</th>
-                <th className="sticky top-0 z-20 w-[6%] border border-slate-300 bg-[#F3FAFD] px-2 py-2 font-bold text-black">현재 매입가</th>
-                <th className="sticky top-0 z-20 w-[6%] border border-slate-300 bg-orange-50 px-2 py-2 font-bold text-orange-800">다음 매입가</th>
-                <th className="sticky top-0 z-20 w-[8%] border border-slate-300 bg-orange-50 px-1 py-2 font-bold text-orange-800">적용 예정일</th>
-                <th className="sticky top-0 z-20 w-[5%] border border-slate-300 bg-slate-100 px-1 py-2 font-bold text-slate-700">상태</th>
-                <th className="sticky top-0 z-20 w-[4%] border border-slate-300 bg-slate-100 px-1 py-2 font-bold text-slate-700">D-Day</th>
-                <th className="sticky top-0 z-20 w-[6%] border border-slate-300 bg-slate-100 px-1 py-2 font-bold text-slate-700">변동금액</th>
-                <th className="sticky top-0 z-20 w-[5%] border border-slate-300 bg-slate-100 px-1 py-2 font-bold text-slate-700">변동률</th>
-                <th className="sticky top-0 z-20 w-[7%] border border-slate-300 bg-slate-100 px-1 py-2 font-bold text-slate-700">메모</th>
-                <th className="sticky top-0 z-20 w-[5%] border border-slate-300 bg-slate-100 px-1 py-2 font-bold text-slate-700">History</th>
+              <tr className="bg-slate-100">
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목코드</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">품목명</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-800">현재 매입가</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">다음 매입가</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2 font-bold text-orange-800">적용 예정일</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">상태</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">D-Day</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">변동금액</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">변동률</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">메모</th>
+                <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">History</th>
               </tr>
             </thead>
             <tbody>
@@ -8345,35 +5348,10 @@ function ItemCostStatus({
                 const diffTone = row.diff > 0 ? "text-red-600" : row.diff < 0 ? "text-blue-600" : "text-slate-500";
                 return (
                   <Fragment key={row.itemCode}>
-                    <tr className={row.isNewItem ? "bg-amber-50 hover:bg-amber-100" : isDueSoon ? "bg-red-50 hover:bg-red-100" : isUpcoming ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-slate-50"}>
-                      <td className="w-[5%] border border-slate-300 px-2 py-2 text-[13px] font-bold text-slate-800">{row.itemCode}</td>
-                      <td className="w-[25%] border border-slate-300 px-1.5 py-2 text-left font-semibold text-slate-900">
-                        <div className="flex min-w-0 items-center gap-1 whitespace-nowrap">
-                          <span className="whitespace-nowrap text-[13px] font-bold tracking-[-0.02em] text-slate-900" title={row.itemName}>{row.itemName}</span>
-                          {row.isNewItem && (
-                            <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">당월 신규</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="w-[8%] border border-slate-300 px-2 py-2">
-                        <input
-                          type="text"
-                          disabled={!isAdmin}
-                          value={row.category}
-                          onChange={(e) => updateItemMaster(row, { category: e.target.value || "미지정" })}
-                          className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-center text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-700"
-                        />
-                      </td>
-                      <td className="w-[8%] border border-slate-300 px-2 py-2">
-                        <input
-                          type="text"
-                          disabled={!isAdmin}
-                          value={row.supplier}
-                          onChange={(e) => updateItemMaster(row, { supplier: e.target.value || "미지정" })}
-                          className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-center text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-700"
-                        />
-                      </td>
-                      <td className="w-[6%] border border-slate-300 px-2 py-2">
+                    <tr className={isDueSoon ? "bg-red-50 hover:bg-red-100" : isUpcoming ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-slate-50"}>
+                      <td className="border border-slate-300 px-3 py-2 text-slate-700">{row.itemCode}</td>
+                      <td className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">{row.itemName}</td>
+                      <td className="border border-slate-300 px-3 py-2">
                         <input
                           type="text"
                           inputMode="numeric"
@@ -8381,10 +5359,10 @@ function ItemCostStatus({
                           value={row.currentCost ? won(row.currentCost) : ""}
                           onChange={(e) => upsertItemCost(row, { currentCost: num(e.target.value) })}
                           placeholder="0"
-                          className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          className="h-9 w-full min-w-[120px] rounded-lg border border-slate-300 bg-white px-3 text-right text-sm font-bold outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
-                      <td className="w-[6%] border border-slate-300 px-2 py-2">
+                      <td className="border border-slate-300 px-3 py-2">
                         <input
                           type="text"
                           inputMode="numeric"
@@ -8392,7 +5370,7 @@ function ItemCostStatus({
                           value={row.nextCost ? won(row.nextCost) : ""}
                           onChange={(e) => upsertItemCost(row, { nextCost: num(e.target.value) || undefined })}
                           placeholder="변경 예정가"
-                          className="h-9 w-full rounded-lg border border-orange-300 bg-orange-50 px-3 text-right text-sm font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          className="h-9 w-full min-w-[120px] rounded-lg border border-orange-300 bg-orange-50 px-3 text-right text-sm font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
                       <td className="border border-slate-300 px-3 py-2">
@@ -8401,7 +5379,7 @@ function ItemCostStatus({
                           disabled={!isAdmin}
                           value={row.effectiveDate}
                           onChange={(e) => upsertItemCost(row, { effectiveDate: e.target.value || undefined })}
-                          className="h-8 w-full rounded-lg border border-slate-300 bg-white px-1 text-[10px] font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold outline-none focus:border-orange-500 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
                       <td className="border border-slate-300 px-3 py-2">
@@ -8425,7 +5403,7 @@ function ItemCostStatus({
                           value={row.memo}
                           onChange={(e) => upsertItemCost(row, { memo: e.target.value })}
                           placeholder="예: 공급가 인상, 환율 반영"
-                          className="h-8 w-full rounded-lg border border-slate-300 bg-white px-1.5 text-[10px] outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                          className="h-9 w-full min-w-[180px] rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
                         />
                       </td>
                       <td className="border border-slate-300 px-3 py-2">
@@ -8451,7 +5429,7 @@ function ItemCostStatus({
                     </tr>
                     {openItemCode === row.itemCode && (
                       <tr>
-                        <td colSpan={13} className="border border-slate-300 bg-slate-50 p-3">
+                        <td colSpan={11} className="border border-slate-300 bg-slate-50 p-3">
                           <div className="text-left text-xs font-bold text-slate-700">{row.itemName} 매입가 History</div>
                           <div className="mt-2 overflow-auto rounded-xl border border-slate-300 bg-white">
                             <table className="w-full min-w-[760px] text-center text-[11px]">
@@ -8508,18 +5486,13 @@ function ItemCostStatus({
               })}
               {!rows.length && (
                 <tr>
-                  <td colSpan={13} className="border border-slate-300 p-8 text-center text-slate-500">
+                  <td colSpan={11} className="border border-slate-300 p-8 text-center text-slate-500">
                     표시할 품목이 없습니다.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-          <div className="flex h-36 items-start justify-center pt-5">
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-400">
-              마지막 품목입니다.
-            </span>
-          </div>
         </div>
       </div>
     </div>
@@ -8562,8 +5535,6 @@ function KpiGroup({
     color?: string;
     format?: "won" | "percent" | "number";
     highlightClass?: string;
-    separatorBefore?: boolean;
-    onClick?: () => void;
   }[];
   className?: string;
 }) {
@@ -8584,21 +5555,13 @@ function KpiGroup({
           return (
             <div
               key={item.title}
-              role={item.onClick ? "button" : undefined}
-              tabIndex={item.onClick ? 0 : undefined}
-              onClick={item.onClick}
-              onKeyDown={(event) => {
-                if (!item.onClick || (event.key !== "Enter" && event.key !== " ")) return;
-                event.preventDefault();
-                item.onClick();
-              }}
-              className={`flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 rounded-lg px-1.5 py-0.5 first:pt-0 last:pb-0 ${item.separatorBefore ? "mt-1 border-t border-slate-400 pt-1.5" : ""} ${item.highlightClass || ""}`}
+              className={`flex min-h-[31px] flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 rounded-lg px-1.5 py-0.5 first:pt-0 last:pb-0 ${item.highlightClass || ""}`}
             >
-              <p className="shrink-0 break-keep text-[12px] font-semibold text-black">
+              <p className="shrink-0 break-keep text-[13px] font-semibold text-black">
                 {item.title}
               </p>
               <p
-                className={`min-w-0 max-w-full flex-1 whitespace-normal break-all text-right text-[15px] font-bold leading-tight tracking-tight md:text-[15px] xl:text-[16px] 2xl:text-[17px] ${item.color || "text-black"}`}
+                className={`min-w-0 max-w-full flex-1 whitespace-normal break-all text-right text-[16px] font-bold leading-tight tracking-tight md:text-[16px] xl:text-[17px] 2xl:text-[18px] ${item.color || "text-black"}`}
               >
                 {value}
               </p>
@@ -8616,8 +5579,9 @@ function metricsByStoreType(
   ests: EstRecord[],
   month: string,
 ) {
-  const storesByCode = storeMap(stores);
-  const storeCodes = new Set(stores.filter((s) => s.storeType === "매장").map((s) => s.code));
+  const storeCodes = new Set(
+    stores.filter((s) => s.storeType === "매장").map((s) => s.code),
+  );
 
   const targetTypeOf = (t: TargetRecord) => {
     if (t.storeType === "매장" || t.storeType === "비매장") return t.storeType;
@@ -8632,15 +5596,12 @@ function metricsByStoreType(
     .filter((t) => t.month === month && targetTypeOf(t) !== "매장")
     .reduce((a, b) => a + b.amount, 0);
   const storeEst = ests
-    .filter((e) => e.month === month && storesByCode.has(e.storeCode) && storeCodes.has(e.storeCode))
+    .filter((e) => e.month === month && storeCodes.has(e.storeCode))
     .reduce((a, b) => a + b.amount, 0);
   const nonStoreEst = ests
-    .filter((e) => e.month === month && storesByCode.has(e.storeCode) && !storeCodes.has(e.storeCode))
+    .filter((e) => e.month === month && !storeCodes.has(e.storeCode))
     .reduce((a, b) => a + b.amount, 0);
-  const unregisteredEst = ests
-    .filter((e) => e.month === month && !storesByCode.has(e.storeCode))
-    .reduce((a, b) => a + b.amount, 0);
-  return { storeTarget, nonStoreTarget, storeEst, nonStoreEst, unregisteredEst };
+  return { storeTarget, nonStoreTarget, storeEst, nonStoreEst };
 }
 
 function SalesTargetHeaderKpi({
@@ -8675,137 +5636,211 @@ function SalesTargetHeaderKpi({
   const rate = targetTotal ? (currentSales / targetTotal) * 100 : 0;
 
   return (
-    <div className="target-header-kpi ml-auto min-w-[430px] rounded-xl border border-yellow-300 bg-yellow-100 px-4 py-2 shadow-sm">
-      <div className="grid grid-cols-[1.25fr_1fr_1fr_1fr] items-center gap-2 text-black">
-        <div className="rounded-lg bg-yellow-200 px-3 py-2 text-center">
-          <div className="text-[12px] font-extrabold">TARGET 달성률</div>
-          <div className="mt-0.5 text-[30px] font-black leading-none">{targetTotal ? pct(rate) : "-"}</div>
-        </div>
-        <div className="text-center">
-          <div className="text-[11px] font-bold">매장 Target</div>
-          <div className="mt-1 text-[16px] font-black">{won(storeTarget)}</div>
-        </div>
-        <div className="text-center">
-          <div className="text-[11px] font-bold">비매장 Target</div>
-          <div className="mt-1 text-[16px] font-black">{won(nonStoreTarget)}</div>
-        </div>
-        <div className="text-center">
-          <div className="text-[11px] font-bold">총 Target</div>
-          <div className="mt-1 text-[16px] font-black">{won(targetTotal)}</div>
-        </div>
+    <div className="ml-auto min-w-[240px] rounded-xl border border-yellow-300 bg-yellow-100 px-5 py-2.5 text-right shadow-sm">
+      <div className="text-[11px] font-extrabold tracking-wide text-black">
+        TARGET 달성률
+      </div>
+      <div className="mt-0.5 text-[34px] font-black leading-none tracking-tight text-black">
+        {targetTotal ? pct(rate) : "-"}
+      </div>
+      <div className="mt-1 text-[10px] font-bold text-black">
+        {won(currentSales)} / {won(targetTotal)}
       </div>
     </div>
   );
 }
+
 function DashboardTopKpis({
   stores,
   sales,
   targets,
   ests,
-  setEsts,
-  isAdmin,
   itemCosts,
   month,
   date,
-  timeGone,
 }: {
   stores: Store[];
   sales: SalesRecord[];
   targets: TargetRecord[];
   ests: EstRecord[];
-  setEsts: React.Dispatch<React.SetStateAction<EstRecord[]>>;
-  isAdmin: boolean;
   itemCosts: ItemCostRecord[];
   month: string;
   date: string;
-  timeGone: ReturnType<typeof getTimeGone>;
 }) {
-  void setEsts;
-  void isAdmin;
-  void itemCosts;
-
-  const currentRows = sales.filter(
-    (row) => row.period === "current" && inRange(row.saleDate, monthStart(month), date),
+  const current = sales.filter(
+    (s) =>
+      s.period === "current" && inRange(s.saleDate, monthStart(month), date),
   );
-  const fullMonthRows = sales.filter(
-    (row) => row.period === "current" && inRange(row.saleDate, monthStart(month), monthEnd(month)),
+  const currentFullMonth = sales.filter(
+    (s) =>
+      s.period === "current" &&
+      inRange(s.saleDate, monthStart(month), monthEnd(month)),
   );
-  const currentSales = sum(currentRows, "salesAmount");
-  const fullMonthSales = sum(fullMonthRows, "salesAmount");
-  const profitAmount = sum(currentRows, "profitAmount");
-  const profitRate = weightedProfitRate(currentRows);
-  const { storeTarget, nonStoreTarget, storeEst, nonStoreEst, unregisteredEst } =
+  const stMap = storeMap(stores);
+  const storeTypeOf = (row: SalesRecord) =>
+    stMap.get(row.storeCode)?.storeType || row.storeType || "비매장";
+  const currentStoreSales = current
+    .filter((s) => storeTypeOf(s) === "매장")
+    .reduce((total, row) => total + Number(row.salesAmount || 0), 0);
+  const currentNonStoreSales = current
+    .filter((s) => storeTypeOf(s) !== "매장")
+    .reduce((total, row) => total + Number(row.salesAmount || 0), 0);
+  const nextMonth = addMonths(month, 1);
+  const nextMonthNonStoreOrderAmount = sales
+    .filter(
+      (s) =>
+        s.period === "current" &&
+        inRange(s.saleDate, monthStart(nextMonth), monthEnd(nextMonth)) &&
+        storeTypeOf(s) !== "매장",
+    )
+    .reduce((total, row) => total + Number(row.salesAmount || 0), 0);
+  const currentSales = sum(current, "salesAmount");
+  const fullMonthSales = sum(currentFullMonth, "salesAmount");
+  const profitAmount = sum(current, "profitAmount");
+  const profitRate = weightedProfitRate(current);
+  const { storeTarget, nonStoreTarget, storeEst, nonStoreEst } =
     metricsByStoreType(stores, targets, ests, month);
   const targetTotal = storeTarget + nonStoreTarget;
-  const estTotal = storeEst + nonStoreEst + unregisteredEst;
-  const expectedSalesByTimeGone = fullMonthSales * (timeGone.timeGoneRate / 100);
-  const timeGoneCompare = expectedSalesByTimeGone
-    ? (currentSales / expectedSalesByTimeGone) * 100
-    : 0;
+  const estTotal = storeEst + nonStoreEst;
 
-  const cards = [
-    {
-      title: "당일까지 매출",
-      value: `${won(currentSales)}원`,
-      subLabel: "Time gone 대비",
-      subValue: pct(timeGoneCompare),
-      icon: "▣",
-    },
-    {
-      title: "당월 전체 매출",
-      value: `${won(fullMonthSales)}원`,
-      icon: "▣",
-    },
-    {
-      title: "EST (당월)",
-      value: `${won(estTotal)}원`,
-      subLabel: "EST 진행률",
-      subValue: pct(estTotal ? (currentSales / estTotal) * 100 : 0),
-      icon: "◎",
-    },
-    {
-      title: "Target (당월)",
-      value: `${won(targetTotal)}원`,
-      subLabel: "Target 진행률",
-      subValue: pct(targetTotal ? (currentSales / targetTotal) * 100 : 0),
-      icon: "⚑",
-    },
-  ];
+  const scheduledCostItems = itemCosts.filter(
+    (item) => item.effectiveDate && Number(item.nextCost || 0) > 0,
+  );
+  const overdueCount = scheduledCostItems.filter((item) => {
+    const dday = daysBetween(today(), item.effectiveDate || today());
+    return dday < 0;
+  }).length;
+  const dueTodayCount = scheduledCostItems.filter((item) => {
+    const dday = daysBetween(today(), item.effectiveDate || today());
+    return dday === 0;
+  }).length;
+  const dueSoonCount = scheduledCostItems.filter((item) => {
+    const dday = daysBetween(today(), item.effectiveDate || today());
+    return dday > 0 && dday <= 7;
+  }).length;
+  const upcomingCount = scheduledCostItems.filter((item) => {
+    const dday = daysBetween(today(), item.effectiveDate || today());
+    return dday > 7 && dday <= 30;
+  }).length;
+  const recentHistoryCount = itemCosts.reduce((total, item) => {
+    return (
+      total +
+      (item.history || []).filter((history) => {
+        const diff = daysBetween(history.changedAt, today());
+        return diff >= 0 && diff <= 30;
+      }).length
+    );
+  }, 0);
+  const activeCostAlertCount = overdueCount + dueTodayCount + dueSoonCount + upcomingCount;
 
   return (
-    <div className="grid grid-cols-[repeat(4,minmax(0,1fr))_minmax(220px,0.9fr)] gap-3">
-      {cards.map((card) => (
-        <div key={card.title} className="min-h-[124px] rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-          <div className="flex items-center gap-2 text-[12px] font-extrabold text-slate-700">
-            <span className="text-lg text-slate-600" aria-hidden="true">{card.icon}</span>
-            <span>{card.title}</span>
-          </div>
-          <div className="mt-5 whitespace-nowrap text-[24px] font-black tracking-tight text-slate-950">{card.value}</div>
-          {card.subLabel && (
-            <div className="mt-5 flex items-center justify-between gap-3 text-[11px] font-bold text-slate-500">
-              <span>{card.subLabel}</span>
-              <span className="text-[14px] font-black text-blue-600">{card.subValue}</span>
-            </div>
-          )}
-        </div>
-      ))}
-
-      <div className="min-h-[124px] rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-        <div className="flex items-center gap-2 text-[12px] font-extrabold text-slate-700">
-          <span className="text-lg text-emerald-600" aria-hidden="true">ⓦ</span>
-          <span>이익금액 / 이익률</span>
-        </div>
-        <div className="mt-4 grid gap-2">
-          <div className="grid grid-cols-[72px_1fr] items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
-            <span className="text-[11px] font-bold text-slate-600">이익금액</span>
-            <span className="text-right text-[14px] font-black text-emerald-600">{won(profitAmount)}원</span>
-          </div>
-          <div className="grid grid-cols-[72px_1fr] items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
-            <span className="text-[11px] font-bold text-slate-600">이익률</span>
-            <span className="text-right text-[14px] font-black text-emerald-600">{pct(profitRate)}</span>
-          </div>
-        </div>
-      </div>
+    <div className="grid w-full grid-cols-1 gap-2 lg:grid-cols-5">
+      <KpiGroup
+        items={[
+          { title: "매장 Target", value: storeTarget, format: "won" },
+          { title: "비매장 Target", value: nonStoreTarget, format: "won" },
+          {
+            title: "총 Target",
+            value: targetTotal,
+            format: "won",
+            color: "text-slate-900",
+          },
+          {
+            title: "Target 달성률",
+            value: targetTotal ? (currentSales / targetTotal) * 100 : 0,
+            format: "percent",
+            color: "text-black",
+            highlightClass: "bg-yellow-200/90 ring-1 ring-yellow-300/90",
+          },
+        ]}
+      />
+      <KpiGroup
+        className="bg-sky-50/95 ring-1 ring-sky-200/90"
+        items={[
+          { title: "매장 EST", value: storeEst, format: "won" },
+          { title: "비매장 EST", value: nonStoreEst, format: "won" },
+          {
+            title: "총 EST",
+            value: estTotal,
+            format: "won",
+            color: "text-slate-900",
+          },
+          {
+            title: "EST 달성률",
+            value: estTotal ? (currentSales / estTotal) * 100 : 0,
+            format: "percent",
+            color: "text-slate-900",
+          },
+        ]}
+      />
+      <KpiGroup
+        items={[
+          {
+            title: "당월 매장 매출",
+            value: currentStoreSales,
+            format: "won",
+            color: "text-slate-900",
+          },
+          {
+            title: "당월 비매장 매출",
+            value: currentNonStoreSales,
+            format: "won",
+            color: "text-slate-900",
+          },
+          { title: "당일까지 매출", value: currentSales, format: "won" },
+          { title: "당월 전체 매출", value: fullMonthSales, format: "won" },
+        ]}
+      />
+      <KpiGroup
+        items={[
+          {
+            title: "이익금액",
+            value: profitAmount,
+            format: "won",
+            color: "text-slate-900",
+          },
+          {
+            title: "이익률",
+            value: profitRate,
+            format: "percent",
+            color: "text-slate-900",
+          },
+          {
+            title: "익월 비매장 발주 접수액",
+            value: nextMonthNonStoreOrderAmount,
+            format: "won",
+            color: "text-slate-900",
+          },
+        ]}
+      />
+      <KpiGroup
+        items={[
+          {
+            title: "매입가 알림",
+            value: activeCostAlertCount ? `${activeCostAlertCount}건` : "정상",
+            color: overdueCount || dueTodayCount || dueSoonCount
+              ? "text-red-600"
+              : upcomingCount
+                ? "text-amber-600"
+                : "text-emerald-700",
+          },
+          {
+            title: "오늘 적용",
+            value: `${dueTodayCount}건${overdueCount ? ` / 지남 ${overdueCount}건` : ""}`,
+            color: overdueCount || dueTodayCount ? "text-red-600" : "text-slate-500",
+          },
+          {
+            title: "7일 이내",
+            value: `${dueSoonCount}건`,
+            color: dueSoonCount ? "text-orange-600" : "text-slate-500",
+          },
+          {
+            title: "30일 이내",
+            value: `${upcomingCount}건 · 최근변경 ${recentHistoryCount}건`,
+            color: upcomingCount || recentHistoryCount ? "text-amber-600" : "text-slate-500",
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -8829,406 +5864,255 @@ function Dashboard({
   timeGone: ReturnType<typeof getTimeGone>;
   codeMappings: StoreCodeMapping[];
 }) {
-  const [dashboardPriorHistory, setDashboardPriorHistory] = useState<PriorYearStoreHistoryRow[] | null>(null);
+  void targets;
+  void timeGone;
+  void codeMappings;
 
-  useEffect(() => {
-    let cancelled = false;
-    setDashboardPriorHistory(null);
-    loadPriorYearStoreHistory(month)
-      .then((rows) => { if (!cancelled) setDashboardPriorHistory(rows); })
-      .catch((error) => {
-        console.error("대시보드 신규 거래처 이력 조회 실패", error);
-        if (!cancelled) setDashboardPriorHistory([]);
-      });
-    return () => { cancelled = true; };
-  }, [month]);
+  const managers = ["SY", "KT", "SW", "NH"];
+  const stMap = storeMap(stores);
+  const managerOfSale = (row: SalesRecord) =>
+    stMap.get(row.storeCode)?.manager || row.manager || "미지정";
+  const managerOfEst = (row: EstRecord) =>
+    stMap.get(row.storeCode)?.manager || "미지정";
 
-  const storesByCode = storeMap(stores);
-  const currentRows = sales.filter(
-    (row) => row.period === "current" && inRange(row.saleDate, monthStart(month), date),
+  const current = sales.filter(
+    (s) =>
+      s.period === "current" && inRange(s.saleDate, monthStart(month), date),
   );
-  const fullMonthRows = sales.filter(
-    (row) => row.period === "current" && inRange(row.saleDate, monthStart(month), monthEnd(month)),
+  const currentFullMonth = sales.filter(
+    (s) =>
+      s.period === "current" &&
+      inRange(s.saleDate, monthStart(month), monthEnd(month)),
   );
-  const prevMonthRows = sales.filter(
-    (row) => row.period === "prevMonth" && row.refMonth === month,
+  const prevMonth = sales.filter(
+    (s) => s.period === "prevMonth" && s.refMonth === month,
   );
-  const prevYearRows = sales.filter(
-    (row) => row.period === "prevYear" && row.refMonth === month,
+  const prevYear = sales.filter(
+    (s) => s.period === "prevYear" && s.refMonth === month,
   );
 
-  const storeTypeOf = (row: SalesRecord) => {
-    const master = storesByCode.get(row.storeCode);
-    return normalizeStoreType(master?.storeType || row.storeType, master?.channel || row.channel) === "매장"
-      ? "매장"
-      : "비매장";
-  };
-  const managerOf = (row: SalesRecord) => {
-    const master = storesByCode.get(row.storeCode);
-    return norm(master?.manager || row.manager).trim().toUpperCase() || "미지정";
-  };
-  const brandOf = (row: SalesRecord) => {
-    const master = storesByCode.get(row.storeCode);
-    return displayBrand(master?.brand || row.brand);
-  };
+  const rows = managers.map((manager) => {
+    const currentRows = current.filter((s) => managerOfSale(s) === manager);
+    const currentFullRows = currentFullMonth.filter(
+      (s) => managerOfSale(s) === manager,
+    );
+    const prevMonthRows = prevMonth.filter((s) => managerOfSale(s) === manager);
+    const prevYearRows = prevYear.filter((s) => managerOfSale(s) === manager);
+    const managerEst = ests
+      .filter((e) => e.month === month && managerOfEst(e) === manager)
+      .reduce((total, row) => total + Number(row.amount || 0), 0);
+    const currentSales = sum(currentRows, "salesAmount");
+    const prevMonthSales = sum(prevMonthRows, "salesAmount");
+    const prevYearSales = sum(prevYearRows, "salesAmount");
+    const profitAmount = sum(currentRows, "profitAmount");
 
-  const { storeTarget, nonStoreTarget, storeEst, nonStoreEst, unregisteredEst } =
-    metricsByStoreType(stores, targets, ests, month);
-  const totalTarget = storeTarget + nonStoreTarget;
-  const totalEst = storeEst + nonStoreEst + unregisteredEst;
-
-  const comparisonRows = ["매장", "비매장"].map((type) => {
-    const isStore = type === "매장";
-    const currentTypeRows = currentRows.filter((row) => storeTypeOf(row) === type);
-    const fullTypeRows = fullMonthRows.filter((row) => storeTypeOf(row) === type);
-    const prevMonthTypeRows = prevMonthRows.filter((row) => storeTypeOf(row) === type);
-    const prevYearTypeRows = prevYearRows.filter((row) => storeTypeOf(row) === type);
-    const currentSales = sum(currentTypeRows, "salesAmount");
-    const fullSales = sum(fullTypeRows, "salesAmount");
-    const est = isStore ? storeEst : nonStoreEst;
-    const target = isStore ? storeTarget : nonStoreTarget;
-    const profit = sum(currentTypeRows, "profitAmount");
     return {
-      type,
-      prevYearSales: sum(prevYearTypeRows, "salesAmount"),
-      prevMonthSales: sum(prevMonthTypeRows, "salesAmount"),
+      manager,
+      prevYearSales,
+      prevMonthSales,
       currentSales,
-      timeGoneRate: fullSales ? (currentSales / fullSales) * 100 : 0,
-      fullSales,
-      est,
-      estRate: est ? (currentSales / est) * 100 : 0,
-      target,
-      targetRate: target ? (currentSales / target) * 100 : 0,
-      profit,
-      profitRate: weightedProfitRate(currentTypeRows),
+      fullMonthSales: sum(currentFullRows, "salesAmount"),
+      prevYearRate: prevYearSales
+        ? ((currentSales - prevYearSales) / prevYearSales) * 100
+        : 0,
+      prevMonthRate: prevMonthSales
+        ? ((currentSales - prevMonthSales) / prevMonthSales) * 100
+        : 0,
+      est: managerEst,
+      estRate: managerEst ? (currentSales / managerEst) * 100 : 0,
+      profitAmount,
+      profitRate: weightedProfitRate(currentRows),
     };
   });
 
-  const comparisonTotal = {
-    prevYearSales: sum(prevYearRows, "salesAmount"),
-    prevMonthSales: sum(prevMonthRows, "salesAmount"),
-    currentSales: sum(currentRows, "salesAmount"),
-    fullSales: sum(fullMonthRows, "salesAmount"),
-    est: totalEst,
-    target: totalTarget,
-    profit: sum(currentRows, "profitAmount"),
-    profitRate: sum(currentRows, "salesAmount")
-      ? (sum(currentRows, "profitAmount") / sum(currentRows, "salesAmount")) * 100
-      : 0,
-  };
-
-  const managerRows = useMemo(() => {
-    const managers = new Set<string>();
-    stores.forEach((store) => {
-      const manager = norm(store.manager).trim().toUpperCase();
-      if (manager) managers.add(manager);
-    });
-    fullMonthRows.forEach((row) => managers.add(managerOf(row)));
-    ests.filter((row) => row.month === month).forEach((row) => {
-      const store = storesByCode.get(row.storeCode);
-      managers.add(norm(store?.manager).trim().toUpperCase() || "미지정");
-    });
-
-    const priority = ["SY", "NH", "KT", "BM"];
-    return Array.from(managers)
-      .map((manager) => {
-        const managerSales = fullMonthRows.filter((row) => managerOf(row) === manager);
-        const storeSales = sum(managerSales.filter((row) => storeTypeOf(row) === "매장"), "salesAmount");
-        const nonStoreSales = sum(managerSales.filter((row) => storeTypeOf(row) !== "매장"), "salesAmount");
-        const est = ests
-          .filter((row) => {
-            if (row.month !== month) return false;
-            const store = storesByCode.get(row.storeCode);
-            const rowManager = norm(store?.manager).trim().toUpperCase() || "미지정";
-            return rowManager === manager;
-          })
-          .reduce((total, row) => total + Number(row.amount || 0), 0);
-        const totalSales = storeSales + nonStoreSales;
-        return {
-          manager,
-          storeSales,
-          nonStoreSales,
-          totalSales,
-          est,
-          rate: est ? (totalSales / est) * 100 : 0,
-        };
-      })
-      .filter((row) => row.totalSales || row.est)
-      .sort((a, b) => {
-        const ai = priority.indexOf(a.manager);
-        const bi = priority.indexOf(b.manager);
-        if (ai !== -1 || bi !== -1) {
-          if (ai === -1) return 1;
-          if (bi === -1) return -1;
-          return ai - bi;
-        }
-        return b.totalSales - a.totalSales || a.manager.localeCompare(b.manager, "ko-KR");
-      });
-  }, [stores, fullMonthRows, ests, month]);
-
-  const managerTotals = managerRows.reduce(
+  const total = rows.reduce(
     (acc, row) => ({
-      storeSales: acc.storeSales + row.storeSales,
-      nonStoreSales: acc.nonStoreSales + row.nonStoreSales,
-      totalSales: acc.totalSales + row.totalSales,
+      prevYearSales: acc.prevYearSales + row.prevYearSales,
+      prevMonthSales: acc.prevMonthSales + row.prevMonthSales,
+      currentSales: acc.currentSales + row.currentSales,
+      fullMonthSales: acc.fullMonthSales + row.fullMonthSales,
       est: acc.est + row.est,
+      profitAmount: acc.profitAmount + row.profitAmount,
     }),
-    { storeSales: 0, nonStoreSales: 0, totalSales: 0, est: 0 },
+    {
+      prevYearSales: 0,
+      prevMonthSales: 0,
+      currentSales: 0,
+      fullMonthSales: 0,
+      est: 0,
+      profitAmount: 0,
+    },
   );
 
-  const brandTopRows = useMemo(() => {
-    const map = new Map<string, number>();
-    fullMonthRows.forEach((row) => {
-      const brand = brandOf(row);
-      map.set(brand, (map.get(brand) || 0) + Number(row.salesAmount || 0));
-    });
-    const total = sum(fullMonthRows, "salesAmount");
-    return Array.from(map.entries())
-      .map(([brand, amount]) => ({
-        brand,
-        amount,
-        share: total ? (amount / total) * 100 : 0,
-      }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 5);
-  }, [fullMonthRows, stores]);
-
-  const dashboardPriorKeys = useMemo(() => {
-    if (dashboardPriorHistory === null) return null;
-    const keys = new Set<string>();
-    dashboardPriorHistory.forEach((row) => {
-      const manual = codeMappings.find((mapping) =>
-        (norm(mapping.oldCode) && norm(mapping.oldCode) === norm(row.store_code)) ||
-        (normalizeStoreNameKey(mapping.oldName) && normalizeStoreNameKey(mapping.oldName) === normalizeStoreNameKey(row.store_name))
-      );
-      const mappedCode = manual?.currentCode || row.store_code;
-      const mappedName = manual?.currentName || row.store_name;
-      const resolved = resolveStoreInfo(mappedCode, mappedName, {}, stores);
-      const codeKey = norm(resolved.code || mappedCode);
-      const nameKey = normalizeStoreNameKey(resolved.name || mappedName);
-      if (codeKey) keys.add(`code:${codeKey}`);
-      if (nameKey) keys.add(`name:${nameKey}`);
-    });
-    return keys;
-  }, [dashboardPriorHistory, stores, codeMappings]);
-
-  const newStoreRows = useMemo(() => {
-    if (!dashboardPriorKeys) return [];
-    const newCodes = new Set<string>();
-    currentRows.forEach((row) => {
-      const master = storesByCode.get(row.storeCode);
-      const codeKey = norm(master?.code || row.storeCode);
-      const nameKey = normalizeStoreNameKey(master?.name || row.storeName);
-      const existedBefore =
-        (codeKey && dashboardPriorKeys.has(`code:${codeKey}`)) ||
-        (nameKey && dashboardPriorKeys.has(`name:${nameKey}`));
-      if (!existedBefore) newCodes.add(row.storeCode);
-    });
-
-    const grouped = new Map<string, { storeCode: string; storeName: string; manager: string; storeType: string; sales: number }>();
-    fullMonthRows.forEach((row) => {
-      if (!newCodes.has(row.storeCode)) return;
-      const master = storesByCode.get(row.storeCode);
-      const existing = grouped.get(row.storeCode) || {
-        storeCode: row.storeCode,
-        storeName: master?.name || row.storeName || row.storeCode,
-        manager: norm(master?.manager || row.manager).trim().toUpperCase() || "미지정",
-        storeType: normalizeStoreType(master?.storeType || row.storeType, master?.channel || row.channel) === "매장" ? "매장" : "비매장",
-        sales: 0,
-      };
-      existing.sales += Number(row.salesAmount || 0);
-      grouped.set(row.storeCode, existing);
-    });
-    return Array.from(grouped.values()).sort((a, b) => b.sales - a.sales || a.storeName.localeCompare(b.storeName, "ko-KR"));
-  }, [dashboardPriorKeys, currentRows, fullMonthRows, stores]);
-
-  const newStoreTotalSales = newStoreRows.reduce((total, row) => total + row.sales, 0);
-  const newStoreStoreCount = newStoreRows.filter((row) => row.storeType === "매장").length;
-  const newStoreNonStoreCount = newStoreRows.length - newStoreStoreCount;
-  const topFiveTotal = brandTopRows.reduce((total, row) => total + row.amount, 0);
-  const totalFullMonthSales = sum(fullMonthRows, "salesAmount");
+  const dashboardManagerExcelRows = rows.map((r) => ({
+    담당자: r.manager,
+    전년동월: r.prevYearSales,
+    전년대비: pct(r.prevYearRate),
+    전월: r.prevMonthSales,
+    전월대비: pct(r.prevMonthRate),
+    당일까지매출: r.currentSales,
+    당월전체매출: r.fullMonthSales,
+    EST: r.est,
+    EST달성률: pct(r.estRate),
+    이익금액: r.profitAmount,
+    이익률: pct(r.profitRate),
+  }));
 
   return (
-    <div className="space-y-4 pb-8">
-      <style jsx global>{`
-        /* 대시보드 매출 비교 요약 전용 헤더: 공통 table th/가상요소 스타일과 완전히 분리 */
-        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th {
-          position: relative !important;
-          color: #ffffff !important;
-          -webkit-text-fill-color: #ffffff !important;
-          background: #1e293b !important;
-          background-color: #1e293b !important;
-          border-color: #475569 !important;
-          opacity: 1 !important;
-          visibility: visible !important;
-          overflow: visible !important;
-        }
-        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th::before,
-        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table > thead > tr > th::after {
-          content: none !important;
-          display: none !important;
-        }
-        .sales-report-root[data-active="대시보드"] table.dashboard-comparison-table .dashboard-comparison-header-label {
-          position: relative !important;
-          z-index: 10 !important;
-          display: block !important;
-          color: #ffffff !important;
-          -webkit-text-fill-color: #ffffff !important;
-          opacity: 1 !important;
-          visibility: visible !important;
-          text-shadow: none !important;
-        }
-      `}</style>
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex items-end gap-2">
-          <h2 className="text-[15px] font-black text-slate-900">매출 비교 요약</h2>
-          <span className="text-[10px] font-bold text-slate-400">(단위: 원)</span>
+    <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-300 px-4 py-3">
+        <div>
+          <div className="text-base font-extrabold text-slate-900">
+            담당자별 매출 요약
+          </div>
+          <div className="mt-1 text-xs font-medium text-slate-500">
+            담당자 SY / KT / SW / NH 기준 매출, EST, 이익 요약
+          </div>
         </div>
-        <div className="overflow-auto rounded-xl border border-slate-200">
-          <table className="dashboard-comparison-table w-full min-w-[1180px] border-separate border-spacing-0 text-center text-[11px]">
-            <thead>
-              <tr className="bg-slate-800 text-white">
-                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">구분</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">전년동월 매출</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">전월매출</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">당일까지 매출</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">Time gone</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">당월 전체 매출</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">EST (당월)</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">EST 대비</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">Target (당월)</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">Target 대비 진척률</span></th>
-                <th className="border-r border-slate-600 px-3 py-2.5"><span className="dashboard-comparison-header-label">이익금액</span></th>
-                <th className="px-3 py-2.5"><span className="dashboard-comparison-header-label">이익률</span></th>
+        <button
+          type="button"
+          onClick={() =>
+            exportExcel(dashboardManagerExcelRows, `담당자별_매출요약_${month}`)
+          }
+          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+        >
+          엑셀 다운로드
+        </button>
+      </div>
+      <div className="overflow-auto">
+        <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-center text-[12px] whitespace-nowrap">
+          <thead>
+            <tr className="bg-slate-100">
+              <th className="sticky top-0 z-10 border border-slate-300 bg-slate-100 px-3 py-2 font-bold text-slate-700">
+                담당자
+              </th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-emerald-50 px-3 py-2 font-bold text-emerald-800">
+                전년동월
+              </th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-emerald-50 px-3 py-2 font-bold text-emerald-800">
+                전년대비
+              </th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-800">
+                전월
+              </th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-blue-50 px-3 py-2 font-bold text-blue-800">
+                전월대비
+              </th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-yellow-50 px-3 py-2 font-bold text-yellow-800">
+                당일까지 매출
+              </th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-yellow-50 px-3 py-2 font-bold text-yellow-800">
+                당월 전체 매출
+              </th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-purple-50 px-3 py-2 font-bold text-purple-800">
+                EST
+              </th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-purple-50 px-3 py-2 font-bold text-purple-800">
+                EST 달성률
+              </th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-green-50 px-3 py-2 font-bold text-green-800">
+                이익금액
+              </th>
+              <th className="sticky top-0 z-10 border border-slate-300 bg-green-50 px-3 py-2 font-bold text-green-800">
+                이익률
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.manager} className="hover:bg-slate-50">
+                <td className="border border-slate-300 px-3 py-2 text-center text-sm font-extrabold text-slate-900">
+                  {r.manager}
+                </td>
+                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
+                  {won(r.prevYearSales)}
+                </td>
+                <td
+                  className={`border border-slate-300 px-3 py-2 text-right font-semibold ${r.prevYearRate >= 0 ? "text-emerald-700" : "text-red-600"}`}
+                >
+                  {pct(r.prevYearRate)}
+                </td>
+                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
+                  {won(r.prevMonthSales)}
+                </td>
+                <td
+                  className={`border border-slate-300 px-3 py-2 text-right font-semibold ${r.prevMonthRate >= 0 ? "text-emerald-700" : "text-red-600"}`}
+                >
+                  {pct(r.prevMonthRate)}
+                </td>
+                <td className="border border-slate-300 px-3 py-2 text-right text-blue-700 font-extrabold">
+                  {won(r.currentSales)}
+                </td>
+                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
+                  {won(r.fullMonthSales)}
+                </td>
+                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
+                  {won(r.est)}
+                </td>
+                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
+                  {pct(r.estRate)}
+                </td>
+                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
+                  {won(r.profitAmount)}
+                </td>
+                <td className="border border-slate-300 px-3 py-2 text-right font-semibold">
+                  {pct(r.profitRate)}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {comparisonRows.map((row) => (
-                <tr key={row.type} className="bg-white">
-                  <td className="border-b border-r border-slate-200 px-3 py-3 font-black text-slate-800">{row.type}</td>
-                  <td className="border-b border-r border-slate-200 px-3 py-3 font-bold">{won(row.prevYearSales)}</td>
-                  <td className="border-b border-r border-slate-200 px-3 py-3 font-bold">{won(row.prevMonthSales)}</td>
-                  <td className="border-b border-r border-slate-200 px-3 py-3 font-black text-blue-600">{won(row.currentSales)}</td>
-                  <td className="border-b border-r border-slate-200 px-3 py-3 font-bold">{pct(row.timeGoneRate)}</td>
-                  <td className="border-b border-r border-slate-200 px-3 py-3 font-black text-blue-600">{won(row.fullSales)}</td>
-                  <td className="border-b border-r border-slate-200 px-3 py-3 font-bold">{won(row.est)}</td>
-                  <td className="border-b border-r border-slate-200 px-3 py-3 font-bold">{pct(row.estRate)}</td>
-                  <td className="border-b border-r border-slate-200 px-3 py-3 font-bold">{won(row.target)}</td>
-                  <td className="border-b border-r border-slate-200 px-3 py-3 font-black text-blue-600">{pct(row.targetRate)}</td>
-                  <td className="border-b border-r border-slate-200 px-3 py-3 font-bold">{won(row.profit)}</td>
-                  <td className="border-b border-slate-200 px-3 py-3 font-bold">{pct(row.profitRate)}</td>
-                </tr>
-              ))}
-              <tr className="bg-slate-50">
-                <td className="border-r border-slate-200 px-3 py-3 font-black">합계</td>
-                <td className="border-r border-slate-200 px-3 py-3 font-black">{won(comparisonTotal.prevYearSales)}</td>
-                <td className="border-r border-slate-200 px-3 py-3 font-black">{won(comparisonTotal.prevMonthSales)}</td>
-                <td className="border-r border-slate-200 px-3 py-3 font-black text-blue-600">{won(comparisonTotal.currentSales)}</td>
-                <td className="border-r border-slate-200 px-3 py-3 font-black">{pct(timeGone.timeGoneRate)}</td>
-                <td className="border-r border-slate-200 px-3 py-3 font-black text-blue-600">{won(comparisonTotal.fullSales)}</td>
-                <td className="border-r border-slate-200 px-3 py-3 font-black">{won(comparisonTotal.est)}</td>
-                <td className="border-r border-slate-200 px-3 py-3 font-black">{pct(comparisonTotal.est ? (comparisonTotal.currentSales / comparisonTotal.est) * 100 : 0)}</td>
-                <td className="border-r border-slate-200 px-3 py-3 font-black">{won(comparisonTotal.target)}</td>
-                <td className="border-r border-slate-200 px-3 py-3 font-black text-blue-600">{pct(comparisonTotal.target ? (comparisonTotal.currentSales / comparisonTotal.target) * 100 : 0)}</td>
-                <td className="border-r border-slate-200 px-3 py-3 font-black">{won(comparisonTotal.profit)}</td>
-                <td className="px-3 py-3 font-black text-emerald-600">{pct(comparisonTotal.profitRate)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <div className="grid grid-cols-[1.32fr_0.86fr_0.86fr] items-start gap-4">
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="px-4 pb-2 pt-4">
-            <h2 className="text-[15px] font-black text-slate-900">담당자별 매출 현황 <span className="text-[10px] font-bold text-slate-400">(당월 전체 매출 기준)</span></h2>
-          </div>
-          <div className="px-3 pb-3">
-            <table className="w-full border-separate border-spacing-0 text-[11px]">
-              <thead><tr className="bg-slate-50 text-slate-600">
-                <th className="px-3 py-2 text-left">담당자</th><th className="px-3 py-2 text-right">매장 매출</th><th className="px-3 py-2 text-right">비매장 매출</th><th className="px-3 py-2 text-right">합계 매출</th><th className="px-3 py-2 text-right">EST</th><th className="px-3 py-2 text-right">진행률</th>
-              </tr></thead>
-              <tbody>
-                {managerRows.map((row) => (
-                  <tr key={row.manager} className="border-t border-slate-100">
-                    <td className="border-t border-slate-100 px-3 py-2.5 font-black text-slate-800">{row.manager}</td>
-                    <td className="border-t border-slate-100 px-3 py-2.5 text-right font-bold">{won(row.storeSales)}원</td>
-                    <td className="border-t border-slate-100 px-3 py-2.5 text-right font-bold">{won(row.nonStoreSales)}원</td>
-                    <td className="border-t border-slate-100 px-3 py-2.5 text-right font-black">{won(row.totalSales)}원</td>
-                    <td className="border-t border-slate-100 px-3 py-2.5 text-right font-bold">{won(row.est)}원</td>
-                    <td className="border-t border-slate-100 px-3 py-2.5 text-right font-black text-blue-600">{pct(row.rate)}</td>
-                  </tr>
-                ))}
-                <tr className="bg-slate-50">
-                  <td className="border-t border-slate-200 px-3 py-2.5 font-black">합계</td>
-                  <td className="border-t border-slate-200 px-3 py-2.5 text-right font-black">{won(managerTotals.storeSales)}원</td>
-                  <td className="border-t border-slate-200 px-3 py-2.5 text-right font-black">{won(managerTotals.nonStoreSales)}원</td>
-                  <td className="border-t border-slate-200 px-3 py-2.5 text-right font-black">{won(managerTotals.totalSales)}원</td>
-                  <td className="border-t border-slate-200 px-3 py-2.5 text-right font-black">{won(managerTotals.est)}원</td>
-                  <td className="border-t border-slate-200 px-3 py-2.5 text-right font-black">{pct(managerTotals.est ? (managerTotals.totalSales / managerTotals.est) * 100 : 0)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between px-4 pb-2 pt-4">
-            <h2 className="text-[15px] font-black text-slate-900">브랜드별 매출 TOP 5 <span className="text-[10px] font-bold text-slate-400">(당월 전체 매출 기준)</span></h2>
-          </div>
-          <div className="px-3 pb-3">
-            <table className="w-full border-separate border-spacing-0 text-[11px]">
-              <thead><tr className="bg-slate-50 text-slate-600"><th className="px-2 py-2 text-center">순위</th><th className="px-2 py-2 text-left">브랜드</th><th className="px-2 py-2 text-right">매출액</th><th className="px-2 py-2 text-right">비중 (전체 매출 대비)</th></tr></thead>
-              <tbody>
-                {brandTopRows.map((row, index) => (
-                  <tr key={row.brand}>
-                    <td className="border-t border-slate-100 px-2 py-2.5 text-center font-black">{index + 1}</td>
-                    <td className="border-t border-slate-100 px-2 py-2.5 font-bold">{row.brand}</td>
-                    <td className="border-t border-slate-100 px-2 py-2.5 text-right font-black">{won(row.amount)}원</td>
-                    <td className="border-t border-slate-100 px-2 py-2.5 text-right font-black">{pct(row.share)}</td>
-                  </tr>
-                ))}
-                <tr className="bg-slate-50"><td colSpan={2} className="border-t border-slate-200 px-2 py-2.5 font-black">합계</td><td className="border-t border-slate-200 px-2 py-2.5 text-right font-black">{won(topFiveTotal)}원</td><td className="border-t border-slate-200 px-2 py-2.5 text-right font-black">{pct(totalFullMonthSales ? (topFiveTotal / totalFullMonthSales) * 100 : 0)}</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="px-4 pb-2 pt-4">
-            <h2 className="text-[15px] font-black text-slate-900">이달의 신규 거래처 <span className="text-[10px] font-bold text-slate-400">(당월 전체 매출 기준)</span></h2>
-          </div>
-          <div className="mx-3 grid grid-cols-2 divide-x divide-emerald-200 rounded-xl bg-emerald-50/70 px-3 py-3">
-            <div className="text-center">
-              <div className="text-[10px] font-black text-emerald-700">신규 거래처 수</div>
-              <div className="mt-1 text-[22px] font-black text-emerald-600">{newStoreRows.length}개</div>
-              <div className="mt-1 text-[10px] font-bold text-emerald-700">(매장 {newStoreStoreCount}개 / 비매장 {newStoreNonStoreCount}개)</div>
-            </div>
-            <div className="text-center">
-              <div className="text-[10px] font-black text-emerald-700">신규 거래처 매출</div>
-              <div className="mt-1 text-[20px] font-black text-emerald-600">{won(newStoreTotalSales)}원</div>
-              <div className="mt-1 text-[10px] font-bold text-emerald-700">(전체 매출의 {pct(totalFullMonthSales ? (newStoreTotalSales / totalFullMonthSales) * 100 : 0)})</div>
-            </div>
-          </div>
-          <div className="px-3 pb-3 pt-3">
-            <table className="w-full border-separate border-spacing-0 text-[11px]">
-              <thead><tr className="bg-slate-50 text-slate-600"><th className="px-2 py-2 text-center">순위</th><th className="px-2 py-2 text-left">거래처명</th><th className="px-2 py-2 text-center">담당자</th><th className="px-2 py-2 text-center">채널</th><th className="px-2 py-2 text-right">매출액</th></tr></thead>
-              <tbody>
-                {newStoreRows.map((row, index) => (
-                  <tr key={row.storeCode}>
-                    <td className="border-t border-slate-100 px-2 py-2 text-center font-black">{index + 1}</td>
-                    <td className="border-t border-slate-100 px-2 py-2 font-bold">{row.storeName}</td>
-                    <td className="border-t border-slate-100 px-2 py-2 text-center font-bold">{row.manager}</td>
-                    <td className="border-t border-slate-100 px-2 py-2 text-center font-bold">{row.storeType}</td>
-                    <td className="border-t border-slate-100 px-2 py-2 text-right font-black">{won(row.sales)}원</td>
-                  </tr>
-                ))}
-                {!newStoreRows.length && <tr><td colSpan={5} className="border-t border-slate-100 px-3 py-8 text-center font-bold text-slate-400">이달의 신규 거래처가 없습니다.</td></tr>}
-                <tr className="bg-slate-50"><td colSpan={4} className="border-t border-slate-200 px-2 py-2.5 font-black">합계</td><td className="border-t border-slate-200 px-2 py-2.5 text-right font-black text-emerald-600">{won(newStoreTotalSales)}원</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
+            ))}
+            <tr className="bg-slate-100 font-extrabold">
+              <td className="border border-slate-300 px-3 py-2 text-center">
+                합계
+              </td>
+              <td className="border border-slate-300 px-3 py-2 text-right">
+                {won(total.prevYearSales)}
+              </td>
+              <td className="border border-slate-300 px-3 py-2 text-right">
+                {pct(
+                  total.prevYearSales
+                    ? ((total.currentSales - total.prevYearSales) /
+                        total.prevYearSales) *
+                        100
+                    : 0,
+                )}
+              </td>
+              <td className="border border-slate-300 px-3 py-2 text-right">
+                {won(total.prevMonthSales)}
+              </td>
+              <td className="border border-slate-300 px-3 py-2 text-right">
+                {pct(
+                  total.prevMonthSales
+                    ? ((total.currentSales - total.prevMonthSales) /
+                        total.prevMonthSales) *
+                        100
+                    : 0,
+                )}
+              </td>
+              <td className="border border-slate-300 px-3 py-2 text-right text-blue-700">
+                {won(total.currentSales)}
+              </td>
+              <td className="border border-slate-300 px-3 py-2 text-right">
+                {won(total.fullMonthSales)}
+              </td>
+              <td className="border border-slate-300 px-3 py-2 text-right">
+                {won(total.est)}
+              </td>
+              <td className="border border-slate-300 px-3 py-2 text-right">
+                {pct(total.est ? (total.currentSales / total.est) * 100 : 0)}
+              </td>
+              <td className="border border-slate-300 px-3 py-2 text-right">
+                {won(total.profitAmount)}
+              </td>
+              <td className="border border-slate-300 px-3 py-2 text-right">
+                {pct(
+                  total.currentSales
+                    ? (total.profitAmount / total.currentSales) * 100
+                    : 0,
+                )}
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -9239,9 +6123,6 @@ type ItemMetric = {
   sales: number;
   cost: number;
   profit: number;
-  // 업로드한 로우파일의 이익률을 매출 가중치로 집계합니다.
-  profitRateWeighted: number;
-  profitRateSales: number;
 };
 
 type ItemDetailSortKey =
@@ -9250,9 +6131,7 @@ type ItemDetailSortKey =
   | "itemCode"
   | "itemName"
   | "quantity"
-  | "saleUnitPrice"
   | "salesAmount"
-  | "costUnitPrice"
   | "costAmount"
   | "profitAmount"
   | "profitRate";
@@ -9300,27 +6179,14 @@ type ItemAnalysisRow = {
 };
 
 function emptyItemMetric(): ItemMetric {
-  return {
-    qty: 0,
-    sales: 0,
-    cost: 0,
-    profit: 0,
-    profitRateWeighted: 0,
-    profitRateSales: 0,
-  };
+  return { qty: 0, sales: 0, cost: 0, profit: 0 };
 }
 
 function addItemMetric(metric: ItemMetric, row: SalesRecord) {
-  const salesAmount = Number(row.salesAmount || 0);
-  const uploadedProfitRate = Number(row.profitRate || 0);
   metric.qty += Number(row.quantity || 0);
-  metric.sales += salesAmount;
+  metric.sales += Number(row.salesAmount || 0);
   metric.cost += Number(row.costAmount || 0);
   metric.profit += Number(row.profitAmount || 0);
-  if (Number.isFinite(uploadedProfitRate) && salesAmount !== 0) {
-    metric.profitRateWeighted += uploadedProfitRate * salesAmount;
-    metric.profitRateSales += salesAmount;
-  }
 }
 
 function itemMetricDiff(now: number, base: number) {
@@ -9343,168 +6209,7 @@ function itemSignedPct(n: number) {
 }
 
 function itemMarginRate(metric: ItemMetric) {
-  // 행과 Subtotal 모두 업로드 로우파일의 이익률을 기본값으로 사용합니다.
-  if (metric.profitRateSales) {
-    return metric.profitRateWeighted / metric.profitRateSales;
-  }
-  return 0;
-}
-
-type ItemSalePricePoint = {
-  saleDate: string;
-  saleUnitPrice: number;
-};
-
-function itemSalePriceTimeline(points: ItemSalePricePoint[]) {
-  const byDate = new Map<string, number[]>();
-
-  points
-    .filter(
-      (point) =>
-        Boolean(point.saleDate) &&
-        Number.isFinite(Number(point.saleUnitPrice)) &&
-        Number(point.saleUnitPrice) > 0,
-    )
-    .forEach((point) => {
-      const date = String(point.saleDate);
-      const price = Number(point.saleUnitPrice);
-      const current = byDate.get(date) || [];
-      if (!current.includes(price)) current.push(price);
-      byDate.set(date, current);
-    });
-
-  const daily = Array.from(byDate.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, prices]) => ({
-      date,
-      prices: prices.slice().sort((a, b) => a - b),
-    }));
-
-  if (!daily.length) {
-    return {
-      label: "-",
-      title: "판매단가 데이터 없음",
-      sortValue: 0,
-    };
-  }
-
-  // 같은 가격 구성이 이어지는 날짜는 한 구간으로 묶습니다.
-  // 거래처별로 같은 날 서로 다른 가격이 있으면 "7,250 / 7,500"처럼 모두 보존합니다.
-  const groups: {
-    start: string;
-    end: string;
-    prices: number[];
-  }[] = [];
-
-  for (const day of daily) {
-    const last = groups[groups.length - 1];
-    const key = day.prices.join("|");
-    const lastKey = last?.prices.join("|");
-
-    if (last && key === lastKey) {
-      last.end = day.date;
-    } else {
-      groups.push({
-        start: day.date,
-        end: day.date,
-        prices: day.prices,
-      });
-    }
-  }
-
-  const priceLabel = (prices: number[]) =>
-    prices.map((price) => won(price)).join(" / ");
-
-  return {
-    label: groups.map((group) => priceLabel(group.prices)).join(" → "),
-    title: groups
-      .map((group) => {
-        const start = group.start.slice(5).replace("-", "/");
-        const end = group.end.slice(5).replace("-", "/");
-        const period = start === end ? start : `${start}~${end}`;
-        return `${period}  ${priceLabel(group.prices)}원`;
-      })
-      .join("\n"),
-    sortValue: groups[groups.length - 1]?.prices[0] || 0,
-  };
-}
-
-type ItemCostPricePoint = {
-  saleDate: string;
-  costUnitPrice: number;
-};
-
-function itemCostPriceTimeline(points: ItemCostPricePoint[]) {
-  const byDate = new Map<string, number[]>();
-
-  points
-    .filter(
-      (point) =>
-        Boolean(point.saleDate) &&
-        Number.isFinite(Number(point.costUnitPrice)) &&
-        Number(point.costUnitPrice) > 0,
-    )
-    .forEach((point) => {
-      const date = String(point.saleDate);
-      const price = Number(point.costUnitPrice);
-      const current = byDate.get(date) || [];
-      if (!current.includes(price)) current.push(price);
-      byDate.set(date, current);
-    });
-
-  const daily = Array.from(byDate.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, prices]) => ({
-      date,
-      prices: prices.slice().sort((a, b) => a - b),
-    }));
-
-  if (!daily.length) {
-    return {
-      label: "-",
-      title: "매입가 데이터 없음",
-      sortValue: 0,
-    };
-  }
-
-  // 일별이익현황의 원가 단가를 날짜 순서로 보고, 같은 단가 구성이 이어지면 한 구간으로 묶습니다.
-  const groups: {
-    start: string;
-    end: string;
-    prices: number[];
-  }[] = [];
-
-  for (const day of daily) {
-    const last = groups[groups.length - 1];
-    const key = day.prices.join("|");
-    const lastKey = last?.prices.join("|");
-
-    if (last && key === lastKey) {
-      last.end = day.date;
-    } else {
-      groups.push({
-        start: day.date,
-        end: day.date,
-        prices: day.prices,
-      });
-    }
-  }
-
-  const priceLabel = (prices: number[]) =>
-    prices.map((price) => won(price)).join(" / ");
-
-  return {
-    label: groups.map((group) => priceLabel(group.prices)).join(" → "),
-    title: groups
-      .map((group) => {
-        const start = group.start.slice(5).replace("-", "/");
-        const end = group.end.slice(5).replace("-", "/");
-        const period = start === end ? start : `${start}~${end}`;
-        return `${period}  ${priceLabel(group.prices)}원`;
-      })
-      .join("\n"),
-    sortValue: groups[groups.length - 1]?.prices[0] || 0,
-  };
+  return metric.sales ? (metric.profit / metric.sales) * 100 : 0;
 }
 
 function itemStoreMatches(store: Store, search: string) {
@@ -9615,7 +6320,7 @@ function PopupTh({
     <th
       rowSpan={rowSpan}
       colSpan={colSpan}
-      className={`sticky ${top} z-50 border border-gray-300 px-3 py-2 font-bold shadow-[0_2px_0_0_#e2e8f0] ${className} text-center`}
+      className={`sticky ${top} z-50 border border-gray-300 px-3 py-2 font-bold shadow-[0_2px_0_0_#e2e8f0] ${className} ${right ? "text-right" : "text-left"}`}
     >
       {children}
     </th>
@@ -9650,7 +6355,7 @@ function ItemAnalysisSortableTh<K extends string>({
         title="정렬"
       >
         <span>{children}</span>
-        <span className="text-[11px] text-black">
+        <span className="text-[10px] text-slate-500">
           {sortArrow(sortConfig.key === sortKey, sortConfig.direction)}
         </span>
       </button>
@@ -9693,64 +6398,30 @@ function ItemAnalysis({
     key: ItemDetailSortKey;
     direction: SortDirection;
   }>({ key: "saleDate", direction: "asc" });
-  const defaultCurrentEnd = date.startsWith(month) ? date : monthEnd(month);
   const [analysisStart, setAnalysisStart] = useState(monthStart(month));
-  const [analysisEnd, setAnalysisEnd] = useState(defaultCurrentEnd);
-  const [prevAnalysisStart, setPrevAnalysisStart] = useState(sameDayPrevMonth(monthStart(month)));
-  const [prevAnalysisEnd, setPrevAnalysisEnd] = useState(sameDayPrevMonth(defaultCurrentEnd));
-  const [prevYearAnalysisStart, setPrevYearAnalysisStart] = useState(sameDayPrevYear(monthStart(month)));
-  const [prevYearAnalysisEnd, setPrevYearAnalysisEnd] = useState(sameDayPrevYear(defaultCurrentEnd));
-  const [appliedPeriods, setAppliedPeriods] = useState(() => ({
-    currentStart: monthStart(month),
-    currentEnd: defaultCurrentEnd,
-    prevStart: sameDayPrevMonth(monthStart(month)),
-    prevEnd: sameDayPrevMonth(defaultCurrentEnd),
-    prevYearStart: sameDayPrevYear(monthStart(month)),
-    prevYearEnd: sameDayPrevYear(defaultCurrentEnd),
-  }));
+  const [analysisEnd, setAnalysisEnd] = useState(
+    date.startsWith(month) ? date : monthEnd(month),
+  );
 
   useEffect(() => {
-    const nextCurrentStart = monthStart(month);
-    const nextCurrentEnd = date.startsWith(month) ? date : monthEnd(month);
-    const nextPrevStart = sameDayPrevMonth(nextCurrentStart);
-    const nextPrevEnd = sameDayPrevMonth(nextCurrentEnd);
-    const nextPrevYearStart = sameDayPrevYear(nextCurrentStart);
-    const nextPrevYearEnd = sameDayPrevYear(nextCurrentEnd);
-    setAnalysisStart(nextCurrentStart);
-    setAnalysisEnd(nextCurrentEnd);
-    setPrevAnalysisStart(nextPrevStart);
-    setPrevAnalysisEnd(nextPrevEnd);
-    setPrevYearAnalysisStart(nextPrevYearStart);
-    setPrevYearAnalysisEnd(nextPrevYearEnd);
-    setAppliedPeriods({
-      currentStart: nextCurrentStart, currentEnd: nextCurrentEnd,
-      prevStart: nextPrevStart, prevEnd: nextPrevEnd,
-      prevYearStart: nextPrevYearStart, prevYearEnd: nextPrevYearEnd,
-    });
+    setAnalysisStart(monthStart(month));
+    setAnalysisEnd(date.startsWith(month) ? date : monthEnd(month));
     setSelectedBrand("");
     setSelectedStoreCode("");
     setSelectedItemCode("");
   }, [month, date]);
 
-  const normalizePeriod = (start: string, end: string) =>
-    start <= end ? [start, end] as const : [end, start] as const;
-  const [currentStart, currentEnd] = normalizePeriod(appliedPeriods.currentStart, appliedPeriods.currentEnd);
-  const [prevStart, prevEnd] = normalizePeriod(appliedPeriods.prevStart, appliedPeriods.prevEnd);
-  const [prevYearStart, prevYearEnd] = normalizePeriod(appliedPeriods.prevYearStart, appliedPeriods.prevYearEnd);
-
-  function applyPeriodSearch() {
-    const [nextCurrentStart, nextCurrentEnd] = normalizePeriod(analysisStart, analysisEnd);
-    const [nextPrevStart, nextPrevEnd] = normalizePeriod(prevAnalysisStart, prevAnalysisEnd);
-    const [nextPrevYearStart, nextPrevYearEnd] = normalizePeriod(prevYearAnalysisStart, prevYearAnalysisEnd);
-    setAppliedPeriods({
-      currentStart: nextCurrentStart, currentEnd: nextCurrentEnd,
-      prevStart: nextPrevStart, prevEnd: nextPrevEnd,
-      prevYearStart: nextPrevYearStart, prevYearEnd: nextPrevYearEnd,
-    });
-    setSelectedBrand("");
-    setSelectedStoreCode("");
+  useEffect(() => {
     setSelectedItemCode("");
-  }
+  }, [analysisStart, analysisEnd]);
+
+  const currentStart =
+    analysisStart <= analysisEnd ? analysisStart : analysisEnd;
+  const currentEnd = analysisStart <= analysisEnd ? analysisEnd : analysisStart;
+  const prevStart = sameDayPrevMonth(currentStart);
+  const prevEnd = sameDayPrevMonth(currentEnd);
+  const prevYearStart = sameDayPrevYear(currentStart);
+  const prevYearEnd = sameDayPrevYear(currentEnd);
   const normalizedSearch = search.trim().toLowerCase();
   const storeByCode = useMemo(
     () => new Map(stores.map((s) => [s.code, s])),
@@ -10071,7 +6742,7 @@ function ItemAnalysis({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-base font-bold text-slate-900">{pageTitle}</div>
-            <div className="mt-1 text-sm text-slate-500">
+            <div className="mt-1 text-xs text-slate-500">
               현재 {currentStart} ~ {currentEnd} / 전월 {prevStart} ~ {prevEnd}{" "}
               / 전년 {prevYearStart} ~ {prevYearEnd}
             </div>
@@ -10093,25 +6764,28 @@ function ItemAnalysis({
             <button
               type="button"
               onClick={applySearch}
-              className="h-8 rounded-lg bg-slate-800 px-3 text-sm font-semibold text-white hover:bg-slate-700"
+              className="h-8 rounded-lg bg-slate-800 px-3 text-xs font-semibold text-white hover:bg-slate-700"
             >
               검색
             </button>
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-              <span className="font-bold text-slate-700">당월</span>
-              <input type="date" value={analysisStart} onChange={(e) => setAnalysisStart(e.target.value)} className="h-8 rounded-lg border border-slate-300 px-2 text-xs" />
-              <span>~</span>
-              <input type="date" value={analysisEnd} onChange={(e) => setAnalysisEnd(e.target.value)} className="h-8 rounded-lg border border-slate-300 px-2 text-xs" />
-              <span className="ml-1 font-bold text-slate-700">전월</span>
-              <input type="date" value={prevAnalysisStart} onChange={(e) => setPrevAnalysisStart(e.target.value)} className="h-8 rounded-lg border border-slate-300 px-2 text-xs" />
-              <span>~</span>
-              <input type="date" value={prevAnalysisEnd} onChange={(e) => setPrevAnalysisEnd(e.target.value)} className="h-8 rounded-lg border border-slate-300 px-2 text-xs" />
-              <span className="ml-1 font-bold text-slate-700">전년동월</span>
-              <input type="date" value={prevYearAnalysisStart} onChange={(e) => setPrevYearAnalysisStart(e.target.value)} className="h-8 rounded-lg border border-slate-300 px-2 text-xs" />
-              <span>~</span>
-              <input type="date" value={prevYearAnalysisEnd} onChange={(e) => setPrevYearAnalysisEnd(e.target.value)} className="h-8 rounded-lg border border-slate-300 px-2 text-xs" />
-              <button type="button" onClick={applyPeriodSearch} className="h-8 rounded-lg bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700">조회</button>
-            </div>
+            <label className="flex items-center gap-1 text-slate-600">
+              시작일
+              <input
+                type="date"
+                value={analysisStart}
+                onChange={(e) => setAnalysisStart(e.target.value)}
+                className="h-8 rounded-lg border border-slate-300 px-2 text-xs outline-none focus:border-blue-500"
+              />
+            </label>
+            <label className="flex items-center gap-1 text-slate-600">
+              종료일
+              <input
+                type="date"
+                value={analysisEnd}
+                onChange={(e) => setAnalysisEnd(e.target.value)}
+                className="h-8 rounded-lg border border-slate-300 px-2 text-xs outline-none focus:border-blue-500"
+              />
+            </label>
           </div>
           <div className="flex rounded-xl bg-slate-100 p-1 text-sm font-semibold">
             {(["브랜드별", "매장별"] as const).map((m) => (
@@ -10135,23 +6809,23 @@ function ItemAnalysis({
           <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">
             브랜드별 요약
           </div>
-          <div className="h-[clamp(300px,calc(100vh-430px),600px)] overflow-y-scroll overflow-x-hidden isolate" style={{ scrollbarGutter: "stable" }}>
-            <table className="w-full min-w-[1320px] connected-two-tier border-separate border-spacing-0 text-center text-[15px] leading-none whitespace-nowrap">
+          <div className="max-h-[65vh] overflow-auto isolate">
+            <table className="w-full min-w-[900px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
               <thead>
                 <tr>
                   <ItemAnalysisSortableTh rowSpan={2} sortKey="brand" sortConfig={brandSortConfig} onSort={requestBrandSort}>브랜드</ItemAnalysisSortableTh>
-                  <PopupTh colSpan={2} className="period-group-start bg-[#F7FCEB] text-center text-black">전년동월</PopupTh>
-                  <PopupTh colSpan={2} className="period-group-start bg-[#F3FAFD] text-center text-black">전월</PopupTh>
-                  <PopupTh colSpan={1} className="period-group-start bg-[#FFF7FA] text-center text-black">당월</PopupTh>
+                  <PopupTh colSpan={2} className="bg-emerald-100 text-center text-emerald-900">전년동월</PopupTh>
+                  <PopupTh colSpan={2} className="bg-blue-100 text-center text-blue-900">전월</PopupTh>
+                  <PopupTh colSpan={1} className="bg-yellow-100 text-center text-yellow-900">당월</PopupTh>
                   <ItemAnalysisSortableTh rowSpan={2} sortKey="storeCount" sortConfig={brandSortConfig} onSort={requestBrandSort} right>거래처수</ItemAnalysisSortableTh>
                   <PopupTh rowSpan={2}>상세</PopupTh>
                 </tr>
                 <tr>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="period-group-start bg-[#F7FCEB] text-black" sortKey="prevYear" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F7FCEB] text-black" sortKey="prevYearRate" sortConfig={brandSortConfig} onSort={requestBrandSort} right>당월 대비</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="period-group-start bg-[#F3FAFD] text-black" sortKey="prevMonth" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F3FAFD] text-black" sortKey="prevMonthRate" sortConfig={brandSortConfig} onSort={requestBrandSort} right>당월 대비</ItemAnalysisSortableTh>
-                  <ItemAnalysisSortableTh top="top-[37px]" className="period-group-start bg-[#FFF7FA] text-black" sortKey="current" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-emerald-50" sortKey="prevYear" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-emerald-50" sortKey="prevYearRate" sortConfig={brandSortConfig} onSort={requestBrandSort} right>당월 대비</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-blue-50" sortKey="prevMonth" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-blue-50" sortKey="prevMonthRate" sortConfig={brandSortConfig} onSort={requestBrandSort} right>당월 대비</ItemAnalysisSortableTh>
+                  <ItemAnalysisSortableTh top="top-[37px]" className="bg-yellow-50" sortKey="current" sortConfig={brandSortConfig} onSort={requestBrandSort} right>매출</ItemAnalysisSortableTh>
                 </tr>
               </thead>
               <tbody>
@@ -10171,7 +6845,7 @@ function ItemAnalysis({
                     <td className="border border-slate-300 p-2">
                       <button
                         onClick={() => setSelectedBrand(r.brand)}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-semibold text-black hover:border-blue-300 hover:bg-blue-50"
+                        className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white"
                       >
                         거래처 보기
                       </button>
@@ -10203,14 +6877,14 @@ function ItemAnalysis({
             {selectedBrand && (
               <button
                 onClick={backToTop}
-                className="rounded-lg bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+                className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
               >
                 ← 브랜드 목록
               </button>
             )}
           </div>
-          <div className="h-[clamp(300px,calc(100vh-430px),600px)] overflow-y-scroll overflow-x-hidden isolate" style={{ scrollbarGutter: "stable" }}>
-            <table className="w-full min-w-[900px] connected-two-tier border-separate border-spacing-0 text-center text-[12px] text-slate-900 whitespace-nowrap">
+          <div className="max-h-[65vh] overflow-auto isolate">
+            <table className="w-full min-w-[900px] border-separate border-spacing-0 text-center text-[12px] text-slate-900 whitespace-nowrap">
               {mode === "매장별" && !selectedBrand ? (
                 <>
                   <thead>
@@ -10218,13 +6892,13 @@ function ItemAnalysis({
                       <ItemAnalysisSortableTh rowSpan={2} sortKey="name" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처명</ItemAnalysisSortableTh>
                       <ItemAnalysisSortableTh rowSpan={2} sortKey="manager" sortConfig={storeSortConfig} onSort={requestStoreSort}>담당자</ItemAnalysisSortableTh>
                       <PopupTh rowSpan={2} className="bg-slate-100 text-center font-bold text-slate-900">구분</PopupTh>
-                      <PopupTh colSpan={3} className="period-group-start bg-white text-center text-[13px] font-extrabold text-black">Time Gone 대비</PopupTh>
+                      <PopupTh colSpan={3} className="bg-emerald-100 text-center text-[13px] font-extrabold text-slate-900">Time Gone 대비</PopupTh>
                       <PopupTh rowSpan={2} className="bg-slate-100 text-center font-bold text-slate-900">상세</PopupTh>
                     </tr>
                     <tr>
-                      <PopupTh top="top-[37px]" className="period-group-start bg-[#F7FCEB] text-center font-bold text-black">전년동월</PopupTh>
-                      <PopupTh top="top-[37px]" className="period-subgroup-start bg-[#F3FAFD] text-center font-bold text-black">전월</PopupTh>
-                      <ItemAnalysisSortableTh top="top-[37px]" className="period-group-start bg-[#FFF7FA] text-black" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당일까지 매출</ItemAnalysisSortableTh>
+                      <PopupTh top="top-[37px]" className="bg-emerald-50 text-center font-bold text-slate-900">전년동월</PopupTh>
+                      <PopupTh top="top-[37px]" className="bg-blue-50 text-center font-bold text-slate-900">전월</PopupTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-yellow-50 text-slate-900" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당일까지 매출</ItemAnalysisSortableTh>
                     </tr>
                   </thead>
                   <tbody>
@@ -10245,7 +6919,7 @@ function ItemAnalysis({
                         <td className="border border-slate-300 px-3 py-2 text-center whitespace-nowrap">
                           <button
                             onClick={() => setSelectedStoreCode(r.store.code)}
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-semibold text-black hover:border-blue-300 hover:bg-blue-50"
+                            className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white"
                           >
                             품목 보기
                           </button>
@@ -10269,17 +6943,17 @@ function ItemAnalysis({
                       <ItemAnalysisSortableTh rowSpan={2} sortKey="code" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처코드</ItemAnalysisSortableTh>
                       <ItemAnalysisSortableTh rowSpan={2} sortKey="name" sortConfig={storeSortConfig} onSort={requestStoreSort}>거래처명</ItemAnalysisSortableTh>
                       <ItemAnalysisSortableTh rowSpan={2} sortKey="manager" sortConfig={storeSortConfig} onSort={requestStoreSort}>담당자</ItemAnalysisSortableTh>
-                      <PopupTh colSpan={2} className="period-group-start bg-[#F7FCEB] text-center text-black">전년동월</PopupTh>
-                      <PopupTh colSpan={2} className="period-group-start bg-[#F3FAFD] text-center text-black">전월</PopupTh>
-                      <PopupTh colSpan={1} className="period-group-start bg-[#FFF7FA] text-center text-black">당월</PopupTh>
+                      <PopupTh colSpan={2} className="bg-emerald-100 text-center text-slate-900">전년동월</PopupTh>
+                      <PopupTh colSpan={2} className="bg-blue-100 text-center text-slate-900">전월</PopupTh>
+                      <PopupTh colSpan={1} className="bg-yellow-100 text-center text-slate-900">당월</PopupTh>
                       <PopupTh rowSpan={2}>상세</PopupTh>
                     </tr>
                     <tr>
-                      <PopupTh top="top-[37px]" className="period-group-start bg-[#F7FCEB] text-right text-black">매출</PopupTh>
-                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F7FCEB] text-black" sortKey="prevYearRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
-                      <PopupTh top="top-[37px]" className="period-group-start bg-[#F3FAFD] text-right text-black">매출</PopupTh>
-                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-[#F3FAFD] text-black" sortKey="prevMonthRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
-                      <ItemAnalysisSortableTh top="top-[37px]" className="period-group-start bg-[#FFF7FA] text-black" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>매출</ItemAnalysisSortableTh>
+                      <PopupTh top="top-[37px]" className="bg-emerald-50 text-right text-slate-900">매출</PopupTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-emerald-50" sortKey="prevYearRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
+                      <PopupTh top="top-[37px]" className="bg-blue-50 text-right text-slate-900">매출</PopupTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-blue-50" sortKey="prevMonthRate" sortConfig={storeSortConfig} onSort={requestStoreSort} right>당월 대비</ItemAnalysisSortableTh>
+                      <ItemAnalysisSortableTh top="top-[37px]" className="bg-yellow-50" sortKey="current" sortConfig={storeSortConfig} onSort={requestStoreSort} right>매출</ItemAnalysisSortableTh>
                     </tr>
                   </thead>
                   <tbody>
@@ -10295,7 +6969,7 @@ function ItemAnalysis({
                         <td className={`border border-slate-300 p-2 text-right ${itemMetricDiff(r.current, r.prevMonth) >= 0 ? "text-emerald-600" : "text-red-600"}`}>{itemSignedPct(itemMetricRate(r.current, r.prevMonth))}</td>
                         <td className="border border-slate-300 p-2 text-right font-bold text-slate-900">{won(r.current)}</td>
                         <td className="border border-slate-300 p-2">
-                          <button onClick={() => setSelectedStoreCode(r.store.code)} className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-semibold text-black hover:border-blue-300 hover:bg-blue-50">품목 보기</button>
+                          <button onClick={() => setSelectedStoreCode(r.store.code)} className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white">품목 보기</button>
                         </td>
                       </tr>
                     ))}
@@ -10319,21 +6993,21 @@ function ItemAnalysis({
               <div className="text-sm font-bold text-slate-800">
                 {selectedStore.name} 품목별 비교
               </div>
-              <div className="mt-1 text-sm text-slate-500">
+              <div className="mt-1 text-xs text-slate-500">
                 선택한 기간의 당일까지 매출과 전월·전년동월 동일기간 매출을 비교합니다.
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={backToStores}
-                className="rounded-lg bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+                className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
               >
                 ← 거래처 목록
               </button>
             </div>
           </div>
-          <div className="h-[clamp(300px,calc(100vh-430px),600px)] overflow-y-scroll overflow-x-hidden isolate" style={{ scrollbarGutter: "stable" }}>
-            <table className="w-full min-w-[820px] connected-two-tier border-separate border-spacing-0 text-center text-[13px] whitespace-nowrap">
+          <div className="max-h-[65vh] overflow-auto isolate">
+            <table className="w-full min-w-[820px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
               <thead>
                 <tr>
                   <ItemAnalysisSortableTh
@@ -10354,7 +7028,7 @@ function ItemAnalysis({
                   </ItemAnalysisSortableTh>
                   <PopupTh
                     colSpan={3}
-                    className="period-group-start bg-white text-center font-extrabold text-black"
+                    className="bg-emerald-100 text-center font-extrabold text-slate-900"
                   >
                     Time Gone 대비
                   </PopupTh>
@@ -10363,7 +7037,7 @@ function ItemAnalysis({
                 <tr>
                   <ItemAnalysisSortableTh
                     top="top-[37px]"
-                    className="period-group-start bg-[#F7FCEB] text-black"
+                    className="bg-emerald-50"
                     sortKey="prevYearSales"
                     sortConfig={itemSortConfig}
                     onSort={requestItemSort}
@@ -10373,7 +7047,7 @@ function ItemAnalysis({
                   </ItemAnalysisSortableTh>
                   <ItemAnalysisSortableTh
                     top="top-[37px]"
-                    className="period-subgroup-start bg-[#F3FAFD] text-black"
+                    className="bg-blue-50"
                     sortKey="prevMonthSales"
                     sortConfig={itemSortConfig}
                     onSort={requestItemSort}
@@ -10383,7 +7057,7 @@ function ItemAnalysis({
                   </ItemAnalysisSortableTh>
                   <ItemAnalysisSortableTh
                     top="top-[37px]"
-                    className="period-subgroup-start bg-[#FFF7FA] text-black"
+                    className="bg-yellow-50"
                     sortKey="currentSales"
                     sortConfig={itemSortConfig}
                     onSort={requestItemSort}
@@ -10435,7 +7109,7 @@ function ItemAnalysis({
                     <td className="border border-slate-300 p-2">
                       <button
                         onClick={() => setSelectedItemCode(r.itemCode)}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-semibold text-black transition hover:border-blue-300 hover:bg-blue-50"
+                        className="rounded-lg bg-slate-800 px-3 py-1 text-xs font-semibold text-white"
                       >
                         상세
                       </button>
@@ -10469,13 +7143,13 @@ function ItemAnalysis({
                   <div className="text-sm font-bold text-slate-800">
                     {selectedStore.name} / {selectedItem.itemName}
                   </div>
-                  <div className="mt-1 text-sm text-slate-500">
+                  <div className="mt-1 text-xs text-slate-500">
                     품목코드 {selectedItem.itemCode} / 현재기간 상세 발주 원본
                   </div>
                 </div>
                 <button
                   onClick={backToItems}
-                  className="rounded-lg bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+                  className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
                 >
                   ← 품목 목록
                 </button>
@@ -10529,8 +7203,8 @@ function ItemAnalysis({
               <div className="border-b border-slate-300 px-4 py-3 text-sm font-bold text-slate-800">
                 상세 발주 원본
               </div>
-              <div className="h-[clamp(300px,calc(100vh-360px),620px)] overflow-auto pb-20 isolate" style={{ scrollbarGutter: "stable" }}>
-                <table className="w-full min-w-[1100px] connected-two-tier border-separate border-spacing-0 text-center text-[13px] whitespace-nowrap">
+              <div className="max-h-[55vh] overflow-auto isolate">
+                <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-center text-[11px] whitespace-nowrap">
                   <thead>
                     <tr>
                       {(
@@ -10540,9 +7214,7 @@ function ItemAnalysis({
                           ["itemCode", "상품코드", false],
                           ["itemName", "상품명", false],
                           ["quantity", "수량", true],
-                          ["saleUnitPrice", "판매단가", true],
                           ["salesAmount", "매출금액", true],
-                          ["costUnitPrice", "매입단가", true],
                           ["costAmount", "원가금액", true],
                           ["profitAmount", "이익금액", true],
                           ["profitRate", "이익률", true],
@@ -10556,7 +7228,7 @@ function ItemAnalysis({
                             title="정렬"
                           >
                             <span>{label}</span>
-                            <span className="text-[11px] text-black">
+                            <span className="text-[10px] text-slate-500">
                               {sortArrow(
                                 detailSortConfig.key === key,
                                 detailSortConfig.direction,
@@ -10585,14 +7257,8 @@ function ItemAnalysis({
                         <td className="border border-gray-300 p-2 text-right">
                           {won(r.quantity)}
                         </td>
-                        <td className="border border-gray-300 p-2 text-right font-semibold text-blue-700">
-                          {r.saleUnitPrice ? won(r.saleUnitPrice) : "-"}
-                        </td>
                         <td className="border border-gray-300 p-2 text-right font-bold text-slate-900">
                           {won(r.salesAmount)}
-                        </td>
-                        <td className="border border-gray-300 p-2 text-right font-semibold text-amber-700">
-                          {r.costUnitPrice ? won(r.costUnitPrice) : "-"}
                         </td>
                         <td className="border border-gray-300 p-2 text-right">
                           {won(r.costAmount)}
@@ -10608,7 +7274,7 @@ function ItemAnalysis({
                     {!sortedDetailRows.length && (
                       <tr>
                         <td
-                          colSpan={11}
+                          colSpan={9}
                           className="border border-gray-300 p-8 text-center text-slate-500"
                         >
                           상세 데이터가 없습니다.
@@ -10636,24 +7302,14 @@ function itemCategoryFromName(itemName: string) {
   return "기타";
 }
 
-function itemSpecificationFromName(itemName: string) {
-  const name = String(itemName || "").trim();
-  // 신규 품목은 품목명 끝의 [규격] 값을 자동으로 사용합니다.
-  // 예: "슈레이버 치즈 [2.27kg*4ea]" -> "2.27kg*4ea"
-  const match = name.match(/\[([^\[\]]+)\]\s*$/);
-  return match?.[1]?.trim() || "";
-}
-
 function ItemShipmentAnalysis({
   stores,
   sales,
-  itemMasters,
   month,
   date,
 }: {
   stores: Store[];
   sales: SalesRecord[];
-  itemMasters: ItemMasterRecord[];
   month: string;
   date: string;
 }) {
@@ -10666,7 +7322,6 @@ function ItemShipmentAnalysis({
   );
   const [categoryFilter, setCategoryFilter] = useState("전체");
   const [profitRateFilter, setProfitRateFilter] = useState("전체");
-  const [newItemFilter, setNewItemFilter] = useState<"전체" | "당월 신규">("전체");
 
   useEffect(() => {
     setAnalysisStart(monthStart(month));
@@ -10674,7 +7329,6 @@ function ItemShipmentAnalysis({
     setSelectedItemCode("");
     setCategoryFilter("전체");
     setProfitRateFilter("전체");
-    setNewItemFilter("전체");
   }, [month, date]);
 
   const currentStart =
@@ -10687,21 +7341,6 @@ function ItemShipmentAnalysis({
     () => new Map(stores.map((s) => [s.code, s])),
     [stores],
   );
-  const itemMasterByCode = useMemo(
-    () => new Map(itemMasters.map((item) => [item.itemCode, item])),
-    [itemMasters],
-  );
-  const firstSaleMonthByItem = useMemo(() => {
-    const map = new Map<string, string>();
-    sales.forEach((row) => {
-      const key = row.itemCode || row.itemName || "미지정";
-      const saleMonth = row.saleDate?.slice(0, 7) || row.refMonth;
-      if (!saleMonth) return;
-      const current = map.get(key);
-      if (!current || saleMonth < current) map.set(key, saleMonth);
-    });
-    return map;
-  }, [sales]);
 
   const itemRows = useMemo(() => {
     const map = new Map<
@@ -10709,39 +7348,23 @@ function ItemShipmentAnalysis({
       {
         itemCode: string;
         itemName: string;
-        specification: string;
         category: string;
         current: ItemMetric;
         prevMonth: ItemMetric;
-        currentSalePricePoints: ItemSalePricePoint[];
-        prevMonthSalePricePoints: ItemSalePricePoint[];
         storeCodes: Set<string>;
-        isNewItem: boolean;
       }
     >();
 
     const ensure = (row: SalesRecord) => {
       const key = row.itemCode || row.itemName || "미지정";
       if (!map.has(key)) {
-        const itemMaster = itemMasterByCode.get(row.itemCode);
-        const resolvedItemName = itemMaster?.itemName || row.itemName || "미지정";
-        const resolvedSpecification =
-          itemMaster?.specification?.trim() ||
-          itemSpecificationFromName(row.itemName || resolvedItemName) ||
-          "-";
         map.set(key, {
           itemCode: row.itemCode || "-",
-          itemName: resolvedItemName,
-          specification: resolvedSpecification,
-          category: itemMaster?.category || "미지정",
+          itemName: row.itemName || "미지정",
+          category: itemCategoryFromName(row.itemName),
           current: emptyItemMetric(),
           prevMonth: emptyItemMetric(),
-          currentSalePricePoints: [],
-          prevMonthSalePricePoints: [],
           storeCodes: new Set<string>(),
-          isNewItem:
-            itemMasterByCode.get(row.itemCode)?.source === "sales" &&
-            itemMasterByCode.get(row.itemCode)?.firstSeenMonth === month,
         });
       }
       return map.get(key)!;
@@ -10752,8 +7375,6 @@ function ItemShipmentAnalysis({
       const haystack = [
         row.itemCode,
         row.itemName,
-        itemMasterByCode.get(row.itemCode)?.specification,
-        itemSpecificationFromName(row.itemName),
         row.storeCode,
         row.storeName,
         store?.name,
@@ -10767,22 +7388,10 @@ function ItemShipmentAnalysis({
       const item = ensure(row);
       if (inRange(row.saleDate, currentStart, currentEnd)) {
         addItemMetric(item.current, row);
-        if (Number(row.saleUnitPrice || 0) > 0) {
-          item.currentSalePricePoints.push({
-            saleDate: row.saleDate,
-            saleUnitPrice: Number(row.saleUnitPrice || 0),
-          });
-        }
         item.storeCodes.add(row.storeCode);
       }
       if (inRange(row.saleDate, prevStart, prevEnd)) {
         addItemMetric(item.prevMonth, row);
-        if (Number(row.saleUnitPrice || 0) > 0) {
-          item.prevMonthSalePricePoints.push({
-            saleDate: row.saleDate,
-            saleUnitPrice: Number(row.saleUnitPrice || 0),
-          });
-        }
         item.storeCodes.add(row.storeCode);
       }
     });
@@ -10806,25 +7415,16 @@ function ItemShipmentAnalysis({
           : 0;
         const prevMonthProfitRate = itemMarginRate(r.prevMonth);
         const currentProfitRate = itemMarginRate(r.current);
-        const prevMonthSaleUnitPrice = itemSalePriceTimeline(
-          r.prevMonthSalePricePoints,
-        );
-        const currentSaleUnitPrice = itemSalePriceTimeline(
-          r.currentSalePricePoints,
-        );
         return {
           ...r,
           prevMonthUnitCost,
           currentUnitCost,
           prevMonthProfitRate,
           currentProfitRate,
-          prevMonthSaleUnitPrice,
-          currentSaleUnitPrice,
           profitRateChange: currentProfitRate - prevMonthProfitRate,
         };
       })
       .filter((r) => categoryFilter === "전체" || r.category === categoryFilter)
-      .filter((r) => newItemFilter === "전체" || r.isNewItem)
       .filter((r) => {
         if (profitRateFilter === "전체") return true;
         if (profitRateFilter === "30% 미만") return r.currentProfitRate < 30;
@@ -10846,29 +7446,13 @@ function ItemShipmentAnalysis({
     prevEnd,
     categoryFilter,
     profitRateFilter,
-    newItemFilter,
-    itemMasterByCode,
-    firstSaleMonthByItem,
-    month,
   ]);
 
   const categoryOptions = useMemo(() => {
     const categories = new Set<string>();
-    itemMasters.forEach((item) => {
-      if (item.category) categories.add(item.category);
-    });
-    sales.forEach((row) =>
-      categories.add(
-        itemMasterByCode.get(row.itemCode)?.category || "미지정",
-      ),
-    );
-    return [
-      "전체",
-      ...Array.from(categories).sort((a, b) =>
-        a.localeCompare(b, "ko-KR"),
-      ),
-    ];
-  }, [sales, itemMasters, itemMasterByCode]);
+    sales.forEach((row) => categories.add(itemCategoryFromName(row.itemName)));
+    return ["전체", ...Array.from(categories).sort((a, b) => a.localeCompare(b, "ko-KR"))];
+  }, [sales]);
 
   const subtotal = useMemo(() => {
     const prevMonth = itemRows.reduce(
@@ -10877,9 +7461,6 @@ function ItemShipmentAnalysis({
         sales: acc.sales + row.prevMonth.sales,
         cost: acc.cost + row.prevMonth.cost,
         profit: acc.profit + row.prevMonth.profit,
-        profitRateWeighted:
-          acc.profitRateWeighted + row.prevMonth.profitRateWeighted,
-        profitRateSales: acc.profitRateSales + row.prevMonth.profitRateSales,
       }),
       emptyItemMetric(),
     );
@@ -10889,9 +7470,6 @@ function ItemShipmentAnalysis({
         sales: acc.sales + row.current.sales,
         cost: acc.cost + row.current.cost,
         profit: acc.profit + row.current.profit,
-        profitRateWeighted:
-          acc.profitRateWeighted + row.current.profitRateWeighted,
-        profitRateSales: acc.profitRateSales + row.current.profitRateSales,
       }),
       emptyItemMetric(),
     );
@@ -10909,18 +7487,6 @@ function ItemShipmentAnalysis({
     };
   }, [itemRows]);
 
-  const newItemSummary = useMemo(() => {
-    const newRows = itemRows.filter((row) => row.isNewItem);
-    const salesAmount = newRows.reduce((total, row) => total + row.current.sales, 0);
-    const profitAmount = newRows.reduce((total, row) => total + row.current.profit, 0);
-    return {
-      count: newRows.length,
-      salesAmount,
-      profitAmount,
-      profitRate: salesAmount ? (profitAmount / salesAmount) * 100 : 0,
-    };
-  }, [itemRows]);
-
   const selectedItem = itemRows.find((r) => r.itemCode === selectedItemCode);
 
   const storeRows = useMemo(() => {
@@ -10932,9 +7498,6 @@ function ItemShipmentAnalysis({
         storeName: string;
         manager: string;
         channel: string;
-        currentSalePricePoints: ItemSalePricePoint[];
-        prevMonthSalePricePoints: ItemSalePricePoint[];
-        currentCostPricePoints: ItemCostPricePoint[];
         current: ItemMetric;
         prevMonth: ItemMetric;
       }
@@ -10948,9 +7511,6 @@ function ItemShipmentAnalysis({
           storeName: store?.name || row.storeName || "미지정",
           manager: store?.manager || row.manager || "미지정",
           channel: store?.channel || row.channel || "미지정",
-          currentSalePricePoints: [],
-          prevMonthSalePricePoints: [],
-          currentCostPricePoints: [],
           current: emptyItemMetric(),
           prevMonth: emptyItemMetric(),
         });
@@ -10962,30 +7522,10 @@ function ItemShipmentAnalysis({
       .filter((row) => (row.itemCode || row.itemName || "미지정") === selectedItemCode)
       .forEach((row) => {
         const storeRow = ensure(row);
-        if (inRange(row.saleDate, currentStart, currentEnd)) {
+        if (inRange(row.saleDate, currentStart, currentEnd))
           addItemMetric(storeRow.current, row);
-          if (Number(row.saleUnitPrice || 0) > 0) {
-            storeRow.currentSalePricePoints.push({
-              saleDate: row.saleDate,
-              saleUnitPrice: Number(row.saleUnitPrice || 0),
-            });
-          }
-          if (Number(row.costUnitPrice || 0) > 0) {
-            storeRow.currentCostPricePoints.push({
-              saleDate: row.saleDate,
-              costUnitPrice: Number(row.costUnitPrice || 0),
-            });
-          }
-        }
-        if (inRange(row.saleDate, prevStart, prevEnd)) {
+        if (inRange(row.saleDate, prevStart, prevEnd))
           addItemMetric(storeRow.prevMonth, row);
-          if (Number(row.saleUnitPrice || 0) > 0) {
-            storeRow.prevMonthSalePricePoints.push({
-              saleDate: row.saleDate,
-              saleUnitPrice: Number(row.saleUnitPrice || 0),
-            });
-          }
-        }
       });
 
     return Array.from(map.values())
@@ -10998,18 +7538,6 @@ function ItemShipmentAnalysis({
           r.prevMonth.cost ||
           r.prevMonth.profit,
       )
-      .map((r) => ({
-        ...r,
-        prevMonthSaleUnitPrice: itemSalePriceTimeline(
-          r.prevMonthSalePricePoints,
-        ),
-        currentSaleUnitPrice: itemSalePriceTimeline(
-          r.currentSalePricePoints,
-        ),
-        currentCostUnitPrice: itemCostPriceTimeline(
-          r.currentCostPricePoints,
-        ),
-      }))
       .sort((a, b) => b.current.sales - a.current.sales);
   }, [sales, selectedItemCode, storeByCode, currentStart, currentEnd, prevStart, prevEnd]);
 
@@ -11019,9 +7547,9 @@ function ItemShipmentAnalysis({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col space-y-3">
-      <div className="bg-white py-1">
-        <div className="flex flex-wrap items-end justify-end gap-3">
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-base font-bold text-black">품목분석</div>
             <div className="mt-1 text-xs text-black">
@@ -11075,180 +7603,120 @@ function ItemShipmentAnalysis({
         <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-300 px-4 py-3">
             <div className="text-sm font-bold text-black">품목별 손익 요약</div>
-            <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-black">
-              <span>필터 결과 {itemRows.length.toLocaleString("ko-KR")}개 품목</span>
-              <span className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-amber-900">
-                당월 신규 {newItemSummary.count.toLocaleString("ko-KR")}개 · 매출 {won(newItemSummary.salesAmount)} · 이익 {won(newItemSummary.profitAmount)} · 이익률 {pct(newItemSummary.profitRate)}
-              </span>
+            <div className="text-xs font-semibold text-black">
+              필터 결과 {itemRows.length.toLocaleString("ko-KR")}개 품목
             </div>
           </div>
-          <div className="overflow-x-hidden isolate">
-            <div className="item-profit-scroll">
-              <table className="item-profit-table text-center text-black whitespace-nowrap">
-                <colgroup>
-                  <col style={{ width: "5%" }} />
-                  <col style={{ width: "16.5%" }} />
-                  <col style={{ width: "6%" }} />
-                  <col style={{ width: "4%" }} />
-                  <col style={{ width: "6.5%" }} />
-                  <col style={{ width: "6%" }} />
-                  <col style={{ width: "6.5%" }} />
-                  <col style={{ width: "4.5%" }} />
-                  <col style={{ width: "7%" }} />
-                  <col style={{ width: "6.5%" }} />
-                  <col style={{ width: "6%" }} />
-                  <col style={{ width: "6.5%" }} />
-                  <col style={{ width: "5%" }} />
-                  <col style={{ width: "4.5%" }} />
-                  <col style={{ width: "5%" }} />
-                  <col style={{ width: "7.5%" }} />
-                </colgroup>
-                <thead>
-                  <tr className="bg-slate-100">
-                    <th rowSpan={2} className="bg-white px-2 py-2 font-bold text-black">품목코드</th>
-                    <th rowSpan={2} className="bg-white px-3 py-2 font-bold text-black">품목명</th>
-                    <th rowSpan={2} className="bg-white px-2 py-2 font-bold text-black">규격</th>
-                    <th rowSpan={2} className="bg-white px-1 py-2 text-[11px] font-bold text-black">
-                      <div className="flex w-full flex-col items-center gap-1">
-                        <span>카테고리</span>
-                        <select
-                          value={categoryFilter}
-                          onChange={(e) => {
-                            setCategoryFilter(e.target.value);
-                            setSelectedItemCode("");
-                          }}
-                          className="w-full rounded border border-slate-300 bg-white px-1 text-[11px] font-semibold text-black"
-                        >
-                          {categoryOptions.map((category) => (
-                            <option key={category} value={category}>{category}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </th>
-                    <th rowSpan={2} className="bg-amber-50 px-1 py-2 font-bold text-amber-900">
-                      <div className="flex w-full flex-col items-center gap-1">
-                        <span>신규여부</span>
-                        <select
-                          value={newItemFilter}
-                          onChange={(e) => {
-                            setNewItemFilter(e.target.value as "전체" | "당월 신규");
-                            setSelectedItemCode("");
-                          }}
-                          className="w-full rounded border border-amber-300 bg-white px-1 font-semibold text-black"
-                        >
-                          <option value="전체">전체</option>
-                          <option value="당월 신규">당월 신규</option>
-                        </select>
-                      </div>
-                    </th>
-                    <th colSpan={4} className="bg-[#F3FAFD] px-3 py-1 text-[15px] font-extrabold text-black">전월</th>
-                    <th colSpan={4} className="bg-[#FFF7FA] px-3 py-1 text-[15px] font-extrabold text-black">당월</th>
-                    <th rowSpan={2} className="bg-[#FFF9F3] px-1 py-2 font-bold text-black">이익률변동</th>
-                    <th rowSpan={2} className="bg-white px-1 py-2 font-bold text-black">사용 거래처 수</th>
-                    <th rowSpan={2} className="bg-white px-2 py-2 font-bold text-black">상세</th>
+          <div className="max-h-[68vh] overflow-auto isolate">
+            <table className="w-full min-w-[1650px] border-separate border-spacing-0 text-center text-[11px] text-black whitespace-nowrap">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-3 py-2 font-bold">품목코드</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-3 py-2 font-bold">품목명</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-2 py-2 font-bold">
+                    <div className="flex min-w-[130px] flex-col items-center gap-1">
+                      <span>카테고리</span>
+                      <select
+                        value={categoryFilter}
+                        onChange={(e) => {
+                          setCategoryFilter(e.target.value);
+                          setSelectedItemCode("");
+                        }}
+                        className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-black"
+                      >
+                        {categoryOptions.map((category) => (
+                          <option key={category} value={category}>{category}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </th>
+                  <th colSpan={4} className="sticky top-0 z-30 border border-blue-200 bg-blue-100 px-3 py-2 text-sm font-extrabold text-black">전월</th>
+                  <th colSpan={4} className="sticky top-0 z-30 border border-orange-200 bg-orange-100 px-3 py-2 text-sm font-extrabold text-black">당월</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-yellow-50 px-3 py-2 font-bold">이익률변동</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-emerald-50 px-3 py-2 font-bold">사용 거래처 수</th>
+                  <th rowSpan={2} className="sticky top-0 z-30 border border-slate-300 bg-slate-100 px-3 py-2 font-bold">상세</th>
+                </tr>
+                <tr>
+                  <th className="sticky top-[37px] z-20 border border-blue-200 bg-blue-50 px-3 py-2 font-bold">매출</th>
+                  <th className="sticky top-[37px] z-20 border border-blue-200 bg-blue-50 px-3 py-2 font-bold">매입단가</th>
+                  <th className="sticky top-[37px] z-20 border border-blue-200 bg-blue-50 px-3 py-2 font-bold">이익금액</th>
+                  <th className="sticky top-[37px] z-20 border border-blue-200 bg-blue-50 px-3 py-2 font-bold">이익률</th>
+                  <th className="sticky top-[37px] z-20 border border-orange-200 bg-orange-50 px-3 py-2 font-bold">매출</th>
+                  <th className="sticky top-[37px] z-20 border border-orange-200 bg-orange-50 px-3 py-2 font-bold">매입단가</th>
+                  <th className="sticky top-[37px] z-20 border border-orange-200 bg-orange-50 px-3 py-2 font-bold">이익금액</th>
+                  <th className="sticky top-[37px] z-20 border border-orange-200 bg-orange-50 px-2 py-1 font-bold">
+                    <div className="flex min-w-[110px] flex-col items-center gap-1">
+                      <span>이익률</span>
+                      <select
+                        value={profitRateFilter}
+                        onChange={(e) => {
+                          setProfitRateFilter(e.target.value);
+                          setSelectedItemCode("");
+                        }}
+                        className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-black"
+                      >
+                        {["전체", "30% 미만", "30~40%", "40% 이상", "상승", "하락"].map((value) => (
+                          <option key={value} value={value}>{value}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="sticky top-[74px] z-20 bg-yellow-50 font-extrabold text-black shadow-sm">
+                  <td colSpan={3} className="border border-slate-400 p-2 text-center">SUBTOTAL</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonth.sales)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonthUnitCost)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.prevMonth.profit)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{pct(subtotal.prevRate)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.current.sales)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.currentUnitCost)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{won(subtotal.current.profit)}</td>
+                  <td className="border border-slate-400 p-2 text-right">{pct(subtotal.currentRate)}</td>
+                  <td className={`border border-slate-400 p-2 text-right ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
+                    {itemSignedPct(subtotal.rateChange)}
+                  </td>
+                  <td className="border border-slate-400 p-2 text-center">{subtotal.storeCount.toLocaleString("ko-KR")}</td>
+                  <td className="border border-slate-400 p-2" />
+                </tr>
+                {itemRows.map((r) => (
+                  <tr key={`${r.itemCode}-${r.itemName}`} className="hover:bg-blue-50">
+                    <td className="border border-slate-300 p-2">{r.itemCode}</td>
+                    <td className="border border-slate-300 p-2 text-left font-semibold">{r.itemName}</td>
+                    <td className="border border-slate-300 p-2 font-semibold">{r.category}</td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.sales)}</td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonthUnitCost)}</td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.profit)}</td>
+                    <td className="border border-slate-300 p-2 text-right font-bold">{pct(r.prevMonthProfitRate)}</td>
+                    <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.sales)}</td>
+                    <td className="border border-slate-300 p-2 text-right">{won(r.currentUnitCost)}</td>
+                    <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.profit)}</td>
+                    <td className="border border-slate-300 p-2 text-right font-extrabold">{pct(r.currentProfitRate)}</td>
+                    <td className={`border border-slate-300 p-2 text-right font-extrabold ${r.profitRateChange > 0 ? "text-emerald-700" : r.profitRateChange < 0 ? "text-red-600" : "text-black"}`}>
+                      {itemSignedPct(r.profitRateChange)}
+                    </td>
+                    <td className="border border-slate-300 p-2 text-center font-extrabold">{r.storeCodes.size.toLocaleString("ko-KR")}</td>
+                    <td className="border border-slate-300 p-2">
+                      <button
+                        onClick={() => setSelectedItemCode(r.itemCode)}
+                        className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white"
+                      >
+                        거래처 보기
+                      </button>
+                    </td>
                   </tr>
+                ))}
+                {!itemRows.length && (
                   <tr>
-                    <th className="bg-[#F3FAFD] px-2 py-2 font-bold text-black">매출</th>
-                    <th className="bg-[#F3FAFD] px-2 py-2 font-bold text-black">매입단가</th>
-                    <th className="bg-[#F3FAFD] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
-                    <th className="bg-[#F3FAFD] px-1 py-2 font-bold text-black">이익률</th>
-                    <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-black">매출</th>
-                    <th className="bg-[#FFF7FA] px-2 py-2 font-bold text-black">매입단가</th>
-                    <th className="bg-[#FFF7FA] px-2 py-2 text-[14px] font-bold text-black">이익금액</th>
-                    <th className="bg-[#FFF7FA] px-1 py-1 font-bold text-black">
-                      <div className="flex w-full flex-col items-center gap-1">
-                        <span>이익률</span>
-                        <select
-                          value={profitRateFilter}
-                          onChange={(e) => {
-                            setProfitRateFilter(e.target.value);
-                            setSelectedItemCode("");
-                          }}
-                          className="w-full rounded border border-slate-300 bg-white px-1 font-semibold text-black"
-                        >
-                          {["전체", "30% 미만", "30~40%", "40% 이상", "상승", "하락"].map((value) => (
-                            <option key={value} value={value}>{value}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </th>
+                    <td colSpan={14} className="border border-slate-300 p-8 text-center text-black">
+                      표시할 품목이 없습니다.
+                    </td>
                   </tr>
-                  <tr className="item-profit-subtotal font-extrabold text-black">
-                    <th colSpan={5} className="subtotal-label font-extrabold">SUBTOTAL</th>
-                    <th className="subtotal-number sales-value-cell font-extrabold">{won(subtotal.prevMonth.sales)}</th>
-                    <th className="subtotal-number">{won(subtotal.prevMonthUnitCost)}</th>
-                    <th className="subtotal-number">{won(subtotal.prevMonth.profit)}</th>
-                    <th className="subtotal-number">{pct(subtotal.prevRate)}</th>
-                    <th className="subtotal-number sales-value-cell font-extrabold">{won(subtotal.current.sales)}</th>
-                    <th className="subtotal-number">{won(subtotal.currentUnitCost)}</th>
-                    <th className="subtotal-number">{won(subtotal.current.profit)}</th>
-                    <th className="subtotal-number">{pct(subtotal.currentRate)}</th>
-                    <th className={`subtotal-number ${subtotal.rateChange > 0 ? "text-emerald-700" : subtotal.rateChange < 0 ? "text-red-600" : "text-black"}`}>
-                      {itemSignedPct(subtotal.rateChange)}
-                    </th>
-                    <th className="text-center">{subtotal.storeCount.toLocaleString("ko-KR")}</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {itemRows.map((r) => (
-                    <tr key={`${r.itemCode}-${r.itemName}`} className={r.isNewItem ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-blue-50"}>
-                      <td className="p-2">{r.itemCode}</td>
-                      <td
-                        className="item-name-cell px-1.5 py-2 text-left text-[10px] font-semibold leading-tight tracking-[-0.03em]"
-                        title={r.itemName}
-                      >
-                        {r.itemName}
-                      </td>
-                      <td
-                        className="px-1.5 py-2 text-center text-[10px] font-semibold"
-                        title={r.specification}
-                      >
-                        {r.specification}
-                      </td>
-                      <td className="item-profit-category-cell font-semibold">{r.category}</td>
-                      <td className="p-2 text-center">
-                        {r.isNewItem ? (
-                          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-amber-100 px-1 text-[10px] font-extrabold text-amber-800 ring-1 ring-amber-300">Y</span>
-                        ) : "-"}
-                      </td>
-                      <td className="item-profit-number-cell sales-value-cell p-2 font-bold">{won(r.prevMonth.sales)}</td>
-                      <td className="item-profit-number-cell p-2">{won(r.prevMonthUnitCost)}</td>
-                      <td className="item-profit-number-cell p-2">{won(r.prevMonth.profit)}</td>
-                      <td className="item-profit-number-cell p-2 font-bold">{pct(r.prevMonthProfitRate)}</td>
-                      <td className="item-profit-number-cell sales-value-cell p-2 font-extrabold">{won(r.current.sales)}</td>
-                      <td className="item-profit-number-cell p-2">{won(r.currentUnitCost)}</td>
-                      <td className="item-profit-number-cell p-2 font-bold">{won(r.current.profit)}</td>
-                      <td className="item-profit-number-cell p-2 font-extrabold">{pct(r.currentProfitRate)}</td>
-                      <td className={`item-profit-number-cell p-2 font-extrabold ${r.profitRateChange > 0 ? "text-emerald-700" : r.profitRateChange < 0 ? "text-red-600" : "text-black"}`}>
-                        {itemSignedPct(r.profitRateChange)}
-                      </td>
-                      <td className="p-2 text-center font-extrabold">{r.storeCodes.size.toLocaleString("ko-KR")}</td>
-                      <td className="p-2">
-                        <button
-                          onClick={() => setSelectedItemCode(r.itemCode)}
-                          className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-black hover:border-blue-300 hover:bg-blue-50"
-                        >
-                          거래처 보기
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {!itemRows.length && (
-                    <tr>
-                      <td colSpan={14} className="p-8 text-center text-black">
-                        표시할 품목이 없습니다.
-                      </td>
-                    </tr>
-                  )}
-                  {!!itemRows.length && (
-                    <tr aria-hidden="true">
-                      <td colSpan={14} className="h-20 border-0 bg-white p-0" />
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                )}
+              </tbody>
+
+            </table>
           </div>
         </div>
       )}
@@ -11272,20 +7740,17 @@ function ItemShipmentAnalysis({
             </button>
           </div>
           <div className="max-h-[68vh] overflow-auto isolate">
-            <table className="w-full min-w-[1780px] border-separate border-spacing-0 text-center text-[12px] text-black whitespace-nowrap">
+            <table className="w-full min-w-[1450px] border-separate border-spacing-0 text-center text-[11px] text-black whitespace-nowrap">
               <thead>
                 <tr>
                   <PopupTh>거래처코드</PopupTh>
                   <PopupTh>거래처명</PopupTh>
                   <PopupTh>담당자</PopupTh>
                   <PopupTh>채널</PopupTh>
-                  <PopupTh right>전월 판매단가</PopupTh>
                   <PopupTh right>전월매출</PopupTh>
                   <PopupTh right>전월이익금액</PopupTh>
                   <PopupTh right>전월이익률</PopupTh>
-                  <PopupTh right>당월 판매단가</PopupTh>
                   <PopupTh right>당월매출</PopupTh>
-                  <PopupTh right>당월 매입가</PopupTh>
                   <PopupTh right>당월이익금액</PopupTh>
                   <PopupTh right>당월이익률</PopupTh>
                   <PopupTh right>이익률변동</PopupTh>
@@ -11302,28 +7767,10 @@ function ItemShipmentAnalysis({
                       <td className="border border-slate-300 p-2 text-left font-semibold">{r.storeName}</td>
                       <td className="border border-slate-300 p-2">{r.manager}</td>
                       <td className="border border-slate-300 p-2">{r.channel}</td>
-                      <td
-                        className="border border-slate-300 p-2 text-right font-semibold text-blue-700"
-                        title={r.prevMonthSaleUnitPrice.title}
-                      >
-                        {r.prevMonthSaleUnitPrice.label}
-                      </td>
-                      <td className="border border-slate-300 p-2 text-right text-[14px] font-bold">{won(r.prevMonth.sales)}</td>
+                      <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.sales)}</td>
                       <td className="border border-slate-300 p-2 text-right">{won(r.prevMonth.profit)}</td>
                       <td className="border border-slate-300 p-2 text-right">{pct(prevRate)}</td>
-                      <td
-                        className="border border-slate-300 p-2 text-right font-semibold text-blue-700"
-                        title={r.currentSaleUnitPrice.title}
-                      >
-                        {r.currentSaleUnitPrice.label}
-                      </td>
-                      <td className="border border-slate-300 p-2 text-right text-[14px] font-extrabold">{won(r.current.sales)}</td>
-                      <td
-                        className="border border-slate-300 p-2 text-right font-semibold text-amber-700"
-                        title={r.currentCostUnitPrice.title}
-                      >
-                        {r.currentCostUnitPrice.label}
-                      </td>
+                      <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.sales)}</td>
                       <td className="border border-slate-300 p-2 text-right font-bold">{won(r.current.profit)}</td>
                       <td className="border border-slate-300 p-2 text-right font-extrabold">{pct(currentRate)}</td>
                       <td className={`border border-slate-300 p-2 text-right font-extrabold ${change > 0 ? "text-emerald-700" : change < 0 ? "text-red-600" : "text-black"}`}>
@@ -11334,7 +7781,7 @@ function ItemShipmentAnalysis({
                 })}
                 {!storeRows.length && (
                   <tr>
-                    <td colSpan={14} className="border border-slate-300 p-8 text-center text-black">
+                    <td colSpan={11} className="border border-slate-300 p-8 text-center text-black">
                       표시할 거래처가 없습니다.
                     </td>
                   </tr>
@@ -11460,14 +7907,6 @@ function SalesStatus({
     title: string;
     rows: SalesRecord[];
   } | null>(null);
-  const [brandProgressPopup, setBrandProgressPopup] = useState<{
-    title: string;
-    brand: string;
-    rate: number;
-    sales: number;
-    est: number;
-    stores: { name: string; sales: number; est: number }[];
-  } | null>(null);
   const [sortConfig, setSortConfig] = useState<{
     key: SalesStatusSortKey;
     direction: SortDirection;
@@ -11477,29 +7916,7 @@ function SalesStatus({
     "all" | "check7" | "no30"
   >("all");
   const [hideEndedStores, setHideEndedStores] = useState(false);
-  const [channelTypeFilter, setChannelTypeFilter] = useState<"all" | "store" | "nonStore">("all");
-  const [newStoreFilter, setNewStoreFilter] = useState<"all" | "new">("all");
-  const [managerColumnFilter, setManagerColumnFilter] = useState("all");
-  const [priorYearStoreHistory, setPriorYearStoreHistory] = useState<PriorYearStoreHistoryRow[] | null>(null);
-  const [priorYearHistoryError, setPriorYearHistoryError] = useState(false);
   const [selectedManagers, setSelectedManagers] = useState<string[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setPriorYearStoreHistory(null);
-    setPriorYearHistoryError(false);
-    loadPriorYearStoreHistory(month)
-      .then((rows) => {
-        if (!cancelled) setPriorYearStoreHistory(rows);
-      })
-      .catch((error) => {
-        console.warn("금년 과거 매출 이력 조회 실패", error);
-        if (!cancelled) setPriorYearHistoryError(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [month]);
 
   const normalizedSearch = search.trim().toLowerCase();
   const stMap = storeMap(stores);
@@ -11567,9 +7984,8 @@ function SalesStatus({
   const uploadedStoreInfo = (r: SalesRecord) => {
     const mappedStore = stMap.get(r.storeCode);
     return {
-      code: mappedStore?.code || r.storeCode || "미지정",
-      // 매출현황에 표시하는 거래처명은 업로드 매출 원장의 값만 사용합니다.
-      name: norm(r.storeName),
+      code: mappedStore?.code || r.storeCode || r.storeName || "미지정",
+      name: mappedStore?.name || r.storeName || r.storeCode || "미지정",
       channel: mappedStore?.channel || r.channel || "미지정",
       manager: mappedStore?.manager || r.manager || "미지정",
       storeType: mappedStore?.storeType || r.storeType || "비매장",
@@ -11616,7 +8032,7 @@ function SalesStatus({
       return uploadedStoreInfo(r);
     }
 
-    const resolved = resolveStoreInfo(
+    return resolveStoreInfo(
       r.storeCode,
       r.storeName,
       {
@@ -11627,7 +8043,6 @@ function SalesStatus({
       },
       stores,
     );
-    return { ...resolved, name: norm(r.storeName) };
   };
 
   const filterByStoreSearch = (s: SalesRecord) => {
@@ -11670,7 +8085,6 @@ function SalesStatus({
   const current = sales.filter(
     (s) =>
       s.period === "current" &&
-      (view !== "거래처별" || Boolean(norm(s.storeName))) &&
       inRange(s.saleDate, monthStart(month), date) &&
       filterByStoreSearch(s) &&
       shouldIncludeRecord(s),
@@ -11678,7 +8092,6 @@ function SalesStatus({
   const currentFullMonthRows = sales.filter(
     (s) =>
       s.period === "current" &&
-      (view !== "거래처별" || Boolean(norm(s.storeName))) &&
       inRange(s.saleDate, monthStart(month), monthEnd(month)) &&
       filterByStoreSearch(s) &&
       shouldIncludeRecord(s),
@@ -11686,7 +8099,6 @@ function SalesStatus({
   const prevMonthRows = sales.filter(
     (s) =>
       s.period === "prevMonth" &&
-      (view !== "거래처별" || Boolean(norm(s.storeName))) &&
       s.refMonth === month &&
       filterByStoreSearch(s) &&
       shouldIncludeRecord(s),
@@ -11694,14 +8106,12 @@ function SalesStatus({
   const prevYearRows = sales.filter(
     (s) =>
       s.period === "prevYear" &&
-      (view !== "거래처별" || Boolean(norm(s.storeName))) &&
       s.refMonth === month &&
       filterByStoreSearch(s) &&
       shouldIncludeRecord(s),
   );
 
   const isStoreListView = view === "거래처별" || view === "담당자별";
-  const showChannelColumn = view === "거래처별" || view === "브랜드별";
 
   const rowKey = (r: SalesRecord) => {
     const resolved = resolveRecord(r);
@@ -11712,9 +8122,6 @@ function SalesStatus({
 
   const rowLabel = (key: string, records: SalesRecord[]) => {
     if (!isStoreListView) return key || "미지정";
-    const uploadedName = records.find((record) => norm(record.storeName))?.storeName;
-    if (uploadedName) return norm(uploadedName);
-    if (view === "거래처별") return "";
     const first = records[0];
     if (first) return resolveRecord(first).name;
     const mapped = stMap.get(key);
@@ -11794,9 +8201,9 @@ function SalesStatus({
     ...currentFullMonthMap.keys(),
     ...prevMonthMap.keys(),
     ...prevYearMap.keys(),
-    ...(view === "거래처별" ? [] : estMap.keys()),
+    ...estMap.keys(),
   ]);
-  if (isStoreListView && view !== "거래처별" && !normalizedSearch) {
+  if (isStoreListView && !normalizedSearch) {
     const selectedManagerSet = new Set(selectedManagers);
     stores
       .filter((store) => !hideEndedStores || store.status === "거래중")
@@ -11827,39 +8234,6 @@ function SalesStatus({
     return map;
   }, [sales, date, view, stores, codeMappings]);
 
-  const priorYearStoreKeys = useMemo(() => {
-    if (!priorYearStoreHistory) return null;
-    const keys = new Set<string>();
-    priorYearStoreHistory.forEach((row) => {
-      const manual = findManualMapping(row.store_code, row.store_name);
-      const mappedCode = manual?.currentCode || row.store_code;
-      const mappedName = manual?.currentName || row.store_name;
-      const resolved = resolveStoreInfo(mappedCode, mappedName, {}, stores);
-      const codeKey = norm(resolved.code || mappedCode);
-      const nameKey = normalizeStoreNameKey(resolved.name || mappedName);
-      if (codeKey) keys.add(`code:${codeKey}`);
-      if (nameKey) keys.add(`name:${nameKey}`);
-    });
-    return keys;
-  }, [priorYearStoreHistory, stores, codeMappings]);
-
-  const isFirstSaleInSelectedMonth = (record: SalesRecord) => {
-    if (!priorYearStoreKeys) return false;
-    if (
-      record.period !== "current" ||
-      !record.saleDate ||
-      record.saleDate > date ||
-      record.saleDate.slice(0, 7) !== month
-    ) return false;
-    const resolved = resolveRecord(record);
-    const codeKey = norm(resolved.code || record.storeCode);
-    const nameKey = normalizeStoreNameKey(resolved.name || record.storeName);
-    return !(
-      (codeKey && priorYearStoreKeys.has(`code:${codeKey}`)) ||
-      (nameKey && priorYearStoreKeys.has(`name:${nameKey}`))
-    );
-  };
-
   const getDrillRows = (key: string, period: DrillPeriod) => {
     if (period === "prevYear") return prevYearMap.get(key) || [];
     if (period === "prevMonth") return prevMonthMap.get(key) || [];
@@ -11873,46 +8247,6 @@ function SalesStatus({
     if (period === "current") return current;
     return currentFullMonthRows;
   };
-
-  const fullBrandProgressMap = new Map<string, {
-    sales: number;
-    est: number;
-    stores: Map<string, { name: string; sales: number; est: number }>;
-  }>();
-  const ensureFullBrand = (brand: string) => {
-    const existing = fullBrandProgressMap.get(brand);
-    if (existing) return existing;
-    const created = { sales: 0, est: 0, stores: new Map<string, { name: string; sales: number; est: number }>() };
-    fullBrandProgressMap.set(brand, created);
-    return created;
-  };
-  sales
-    .filter((record) => record.period === "current" && inRange(record.saleDate, monthStart(month), date))
-    .forEach((record) => {
-      const resolved = resolveRecord(record);
-      const brand = displayBrand(resolved.brand) || "미지정";
-      const group = ensureFullBrand(brand);
-      const storeId = resolved.code || record.storeCode || resolved.name || record.storeName || "미지정";
-      const store = group.stores.get(storeId) || { name: resolved.name || record.storeName || storeId, sales: 0, est: 0 };
-      const amount = Number(record.salesAmount || 0);
-      group.sales += amount;
-      store.sales += amount;
-      group.stores.set(storeId, store);
-    });
-  ests
-    .filter((record) => record.month === month)
-    .forEach((record) => {
-      const mapped = stMap.get(record.storeCode);
-      const resolved = resolveStoreInfo(record.storeCode, record.storeName, mapped || {}, stores);
-      const brand = displayBrand(resolved.brand) || "미지정";
-      const group = ensureFullBrand(brand);
-      const storeId = resolved.code || record.storeCode || resolved.name || record.storeName || "미지정";
-      const store = group.stores.get(storeId) || { name: resolved.name || record.storeName || storeId, sales: 0, est: 0 };
-      const amount = Number(record.amount || 0);
-      group.est += amount;
-      store.est += amount;
-      group.stores.set(storeId, store);
-    });
 
   const rows = keys
     .map((key) => {
@@ -11942,118 +8276,14 @@ function SalesStatus({
       const prevMonthTimeGoneGap = prevMonthRate - timeGone.timeGoneRate;
       const est = estMap.get(key) || 0;
       const estRate = est ? (currentSales / est) * 100 : 0;
-      const brandProgressMap = new Map<string, {
-        sales: number;
-        est: number;
-        stores: Map<string, { name: string; sales: number; est: number }>;
-      }>();
-      const ensureBrandProgress = (brand: string) => {
-        const existing = brandProgressMap.get(brand);
-        if (existing) return existing;
-        const created = { sales: 0, est: 0, stores: new Map<string, { name: string; sales: number; est: number }>() };
-        brandProgressMap.set(brand, created);
-        return created;
-      };
-      const addBrandStore = (
-        brand: string,
-        storeCode: string,
-        storeName: string,
-        salesAmount: number,
-        estAmount: number,
-      ) => {
-        const progress = ensureBrandProgress(brand);
-        const storeKey = storeCode || storeName || "미지정";
-        const existing = progress.stores.get(storeKey) || {
-          name: storeName || storeCode || "미지정",
-          sales: 0,
-          est: 0,
-        };
-        existing.sales += salesAmount;
-        existing.est += estAmount;
-        progress.stores.set(storeKey, existing);
-      };
-      currentRecords.forEach((record) => {
-        const resolved = resolveRecord(record);
-        const brand = displayBrand(resolved.brand) || "미지정";
-        const value = ensureBrandProgress(brand);
-        value.sales += Number(record.salesAmount || 0);
-        addBrandStore(
-          brand,
-          resolved.code || record.storeCode,
-          resolved.name || record.storeName,
-          Number(record.salesAmount || 0),
-          0,
-        );
-      });
-      ests
-        .filter((record) => record.month === month)
-        .forEach((record) => {
-          const mapped = stMap.get(record.storeCode);
-          const resolved = resolveStoreInfo(record.storeCode, record.storeName, mapped || {}, stores);
-          const recordKey = isStoreListView
-            ? resolved.code || resolved.name || "미지정"
-            : view === "브랜드별"
-              ? displayBrand(resolved.brand)
-              : resolved.channel || "미지정";
-          if (recordKey !== key) return;
-          const brand = displayBrand(resolved.brand) || "미지정";
-          const value = ensureBrandProgress(brand);
-          value.est += Number(record.amount || 0);
-          addBrandStore(
-            brand,
-            resolved.code || record.storeCode,
-            resolved.name || record.storeName,
-            0,
-            Number(record.amount || 0),
-          );
-        });
-      let brandProgress = Array.from(brandProgressMap.entries())
-        .map(([brand, value]) => ({
-          brand,
-          sales: value.sales,
-          est: value.est,
-          stores: Array.from(value.stores.values())
-            .filter((store) => store.sales || store.est)
-            .sort((a, b) => b.est - a.est || b.sales - a.sales || a.name.localeCompare(b.name, "ko-KR")),
-          rate: value.est ? (value.sales / value.est) * 100 : 0,
-        }))
-        .filter((item) => item.sales || item.est)
-        .sort((a, b) => b.est - a.est || b.sales - a.sales || a.brand.localeCompare(b.brand, "ko-KR"));
-      if (isStoreListView) {
-        const rowStore = stMap.get(key) || allRecords.map(resolveRecord).find((store) => (store.code || store.name) === key);
-        const rowBrand = displayBrand(rowStore?.brand) || "미지정";
-        const fullBrand = fullBrandProgressMap.get(rowBrand);
-        brandProgress = fullBrand && (fullBrand.sales || fullBrand.est)
-          ? [{
-              brand: rowBrand,
-              sales: fullBrand.sales,
-              est: fullBrand.est,
-              stores: Array.from(fullBrand.stores.values())
-                .filter((store) => store.sales || store.est)
-                .sort((a, b) => b.est - a.est || b.sales - a.sales || a.name.localeCompare(b.name, "ko-KR")),
-              rate: fullBrand.est ? (fullBrand.sales / fullBrand.est) * 100 : 0,
-            }]
-          : [];
-      }
-      const brandProgressSales = brandProgress.reduce((total, item) => total + item.sales, 0);
-      const brandProgressEst = brandProgress.reduce((total, item) => total + item.est, 0);
-      const brandProgressRate = brandProgressEst ? (brandProgressSales / brandProgressEst) * 100 : 0;
       const firstRecord = allRecords[0];
       const storeStatus = firstRecord
         ? resolveRecord(firstRecord).status
         : stMap.get(key)?.status;
       const isEndedStore = isStoreListView && storeStatus === "거래종료";
-      const resolvedStores = allRecords.map(resolveRecord);
-      const uniqueStoreCount = new Set(resolvedStores.map((store) => store.code || store.name).filter(Boolean)).size;
-      const channelValues = Array.from(new Set(resolvedStores.map((store) => store.storeType === "매장" ? "매장" : "비매장")));
-      const channel = channelValues.length === 1 ? channelValues[0] : channelValues.length > 1 ? "혼합" : (firstRecord ? (resolveRecord(firstRecord).storeType === "매장" ? "매장" : "비매장") : "-");
-      const baseLabel = rowLabel(key, allRecords);
-      const isNewStore = allRecords.some(isFirstSaleInSelectedMonth);
       return {
         key,
-        label: view === "브랜드별" ? `${baseLabel} (${uniqueStoreCount})` : baseLabel,
-        channel,
-        isNewStore,
+        label: rowLabel(key, allRecords),
         prevYearSales,
         prevMonthSales,
         currentSales,
@@ -12066,8 +8296,6 @@ function SalesStatus({
         timeGoneGap: estRate - timeGone.timeGoneRate,
         est,
         estRate,
-        brandProgress,
-        brandProgressRate,
         profitAmount,
         profitRate,
         isEndedStore,
@@ -12082,7 +8310,6 @@ function SalesStatus({
           : 0,
       };
     })
-    .filter((row) => view !== "거래처별" || Boolean(norm(row.label)))
     .filter((row) => {
       if (!isStoreListView) return true;
       if (orderDateFilter === "check7") return row.daysSinceLastOrder >= 7;
@@ -12094,14 +8321,6 @@ function SalesStatus({
     let nextRows = rows;
     if (hideEndedStores && isStoreListView)
       nextRows = nextRows.filter((row) => !row.isEndedStore);
-    if (channelTypeFilter === "store")
-      nextRows = nextRows.filter((row) => row.channel === "매장");
-    if (channelTypeFilter === "nonStore")
-      nextRows = nextRows.filter((row) => row.channel === "비매장");
-    if (newStoreFilter === "new")
-      nextRows = nextRows.filter((row) => row.isNewStore);
-    if (view === "거래처별" && managerColumnFilter !== "all")
-      nextRows = nextRows.filter((row) => (row.manager || "미지정") === managerColumnFilter);
     if (view === "담당자별" && selectedManagers.length > 0) {
       const selected = new Set(selectedManagers);
       nextRows = nextRows.filter((row) =>
@@ -12109,12 +8328,7 @@ function SalesStatus({
       );
     }
     return nextRows;
-  }, [rows, hideEndedStores, channelTypeFilter, newStoreFilter, managerColumnFilter, view, selectedManagers]);
-
-  const managerColumnOptions = useMemo(
-    () => Array.from(new Set(rows.map((row) => row.manager || "미지정"))).sort((a, b) => a.localeCompare(b, "ko-KR")),
-    [rows],
-  );
+  }, [rows, hideEndedStores, view, selectedManagers]);
 
   const managerFilterOptions = useMemo(() => {
     if (view !== "담당자별") return [];
@@ -12249,14 +8463,7 @@ function SalesStatus({
       const aValue = a[sortConfig.key];
       const bValue = b[sortConfig.key];
       let result = 0;
-      if (sortConfig.key === "lastOrderDate") {
-        const aDate = String(aValue || "-");
-        const bDate = String(bValue || "-");
-        if (aDate === "-" && bDate === "-") result = 0;
-        else if (aDate === "-") return 1;
-        else if (bDate === "-") return -1;
-        else result = aDate.localeCompare(bDate);
-      } else if (typeof aValue === "string" || typeof bValue === "string") {
+      if (typeof aValue === "string" || typeof bValue === "string") {
         result = String(aValue).localeCompare(String(bValue), "ko-KR");
       } else {
         result = Number(aValue || 0) - Number(bValue || 0);
@@ -12305,19 +8512,6 @@ function SalesStatus({
     (a, b) => a + b.profitAmount,
     0,
   );
-  const filteredEst = displayRows.reduce((a, b) => a + b.est, 0);
-  const filteredPrevYearRate = filteredPrevYearSales
-    ? ((filteredCurrentSales - filteredPrevYearSales) / filteredPrevYearSales) * 100
-    : 0;
-  const filteredPrevMonthRate = filteredPrevMonthSales
-    ? ((filteredCurrentSales - filteredPrevMonthSales) / filteredPrevMonthSales) * 100
-    : 0;
-  const filteredPrevYearTimeGoneGap = filteredPrevYearRate - timeGone.timeGoneRate;
-  const filteredPrevMonthTimeGoneGap = filteredPrevMonthRate - timeGone.timeGoneRate;
-  const filteredEstRate = filteredEst ? (filteredCurrentSales / filteredEst) * 100 : 0;
-  const filteredProfitRate = filteredCurrentSales
-    ? (filteredProfitAmount / filteredCurrentSales) * 100
-    : 0;
 
   const buildManagerLastOrderRows = (managers: string[]) => {
     const selected = new Set(managers);
@@ -12408,9 +8602,6 @@ function SalesStatus({
 
   const salesStatusExcelRows = sortedRows.map((r) => ({
     구분: r.label,
-    담당자: r.manager || "미지정",
-    채널: r.channel,
-    신규: r.isNewStore ? "Y" : "",
     전년동월: r.prevYearSales,
     "전년 Time gone": pct(r.prevYearTimeGoneGap),
     전년대비: pct(r.prevYearRate),
@@ -12422,26 +8613,21 @@ function SalesStatus({
     "TIME GONE 대비": pct(r.timeGoneGap),
     EST: r.est,
     "EST 달성률": pct(r.estRate),
-    "브랜드별 진척률": r.brandProgress
-      .map((item) => `${item.brand} ${item.est ? pct(item.rate) : "-"}`)
-      .join(" / "),
     이익금액: r.profitAmount,
     이익률: pct(r.profitRate),
   }));
 
-  const salesStatusColSpan = 1 + (view === "거래처별" ? 1 : 0) + (showChannelColumn ? 2 : 0) + (!compact && isStoreListView ? 1 : 0) + 11;
+  const salesStatusColSpan = compact ? 12 : isStoreListView ? 13 : 12;
   return (
     <>
       <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
         <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-900">매출현황</h2>
-            {priorYearStoreHistory === null && !priorYearHistoryError && (
-              <div className="mt-1 text-[11px] font-medium text-slate-500">금년 과거 매출 이력 확인 중...</div>
-            )}
-            {priorYearHistoryError && (
-              <div className="mt-1 text-[11px] font-bold text-red-600">금년 과거 매출 이력을 불러오지 못해 신규 표시를 중지했습니다.</div>
-            )}
+            <p className="mt-1 text-xs text-slate-500">
+              상단 헤더를 클릭하면 내림차순/오름차순으로 정렬됩니다. 금액을
+              클릭하면 해당 주문내역을 볼 수 있습니다.
+            </p>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {compact && (
@@ -12516,13 +8702,13 @@ function SalesStatus({
               </span>
               {view === "담당자별" && (
                 <div className="flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
-                  <span className="mr-1 text-[12px] font-bold text-slate-600">
+                  <span className="mr-1 text-[11px] font-bold text-slate-600">
                     담당자 선택
                   </span>
                   {managerFilterOptions.map((manager) => (
                     <label
                       key={manager}
-                      className="flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[12px] font-semibold text-slate-700 ring-1 ring-slate-200"
+                      className="flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200"
                     >
                       <input
                         type="checkbox"
@@ -12537,7 +8723,7 @@ function SalesStatus({
                     <button
                       type="button"
                       onClick={() => setSelectedManagers([])}
-                      className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[12px] font-semibold text-slate-600 hover:bg-slate-50"
+                      className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
                     >
                       전체보기
                     </button>
@@ -12597,116 +8783,58 @@ function SalesStatus({
               <FilterAmountCard
                 title="당일까지의 매출"
                 value={filteredCurrentSales}
-                tone="pink"
+                tone="yellow"
                 onClick={() => openTotalDrill("current")}
               />
               <FilterAmountCard
                 title="당월 발주 총 금액"
                 value={filteredFullMonthSales}
-                tone="pink"
+                tone="yellow"
                 onClick={() => openTotalDrill("currentFullMonth")}
               />
               <FilterAmountCard
                 title="이익 금액"
                 value={filteredProfitAmount}
-                tone="orange"
+                tone="green"
               />
             </div>
           </>
         )}
 
-        <div className="sales-status-scroll">
+        <div className="relative max-h-[62vh] overflow-auto bg-white">
           <table
-            className={`sales-status-table w-full ${compact ? "min-w-[1580px]" : "min-w-[1400px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[12px] leading-tight`}
+            className={`w-full ${compact ? "min-w-[1360px]" : "min-w-[1180px]"} table-fixed border-separate border-spacing-0 border border-gray-300 text-[11px] leading-tight`}
           >
             <thead>
-              <tr className="bg-white">
+              <tr className="bg-slate-100">
                 <ThCompactSortable
                   rowSpan={2}
-                  w={isStoreListView ? (compact ? "w-[23%]" : "w-[15%]") : "w-[11%]"}
+                  w={isStoreListView ? (compact ? "w-[26%]" : "w-[19%]") : "w-[11%]"}
                   sortKey="label"
                   sortConfig={sortConfig}
                   onSort={requestSort}
                 >
                   {isStoreListView ? "거래처" : view.replace("별", "")}
                 </ThCompactSortable>
-                {view === "거래처별" && (
-                  <ThCompact rowSpan={2} tone="gray" w="w-[7%]">
-                    <div className="flex flex-col items-center gap-1">
-                      <span>담당자</span>
-                      <select value={managerColumnFilter} onChange={(event) => setManagerColumnFilter(event.target.value)} onClick={(event) => event.stopPropagation()} className="h-7 w-full min-w-[68px] rounded-md border border-slate-300 bg-white px-1 text-[11px] font-bold text-slate-700 outline-none" aria-label="매출현황 담당자 필터">
-                        <option value="all">전체</option>
-                        {managerColumnOptions.map((manager) => <option key={manager} value={manager}>{manager}</option>)}
-                      </select>
-                    </div>
-                  </ThCompact>
-                )}
-                {showChannelColumn && (
-                  <ThCompact rowSpan={2} tone="gray" w="w-[5%]">
-                    <div className="flex flex-col items-center gap-1">
-                      <span>채널</span>
-                      <select
-                        value={channelTypeFilter}
-                        onChange={(event) => setChannelTypeFilter(event.target.value as "all" | "store" | "nonStore")}
-                        onClick={(event) => event.stopPropagation()}
-                        className="h-7 w-full min-w-[62px] rounded-md border border-slate-300 bg-white px-1 text-[11px] font-bold text-slate-700 outline-none"
-                        aria-label="매출현황 매장 비매장 필터"
-                      >
-                        <option value="all">전체</option>
-                        <option value="store">매장</option>
-                        <option value="nonStore">비매장</option>
-                      </select>
-                    </div>
-                  </ThCompact>
-                )}
-                {showChannelColumn && (
-                  <ThCompact rowSpan={2} tone="gray" w="w-[5%]">
-                    <div className="flex flex-col items-center gap-1">
-                      <span>신규</span>
-                      <select
-                        value={newStoreFilter}
-                        onChange={(event) => setNewStoreFilter(event.target.value as "all" | "new")}
-                        onClick={(event) => event.stopPropagation()}
-                        disabled={priorYearStoreHistory === null}
-                        className="h-7 w-full min-w-[62px] rounded-md border border-slate-300 bg-white px-1 text-[11px] font-bold text-slate-700 outline-none"
-                        aria-label="매출현황 신규 거래처 필터"
-                      >
-                        <option value="all">전체</option>
-                        <option value="new">신규(Y)</option>
-                      </select>
-                    </div>
-                  </ThCompact>
-                )}
                 {!compact && isStoreListView && (
-                  <ThCompactSortable
-                    rowSpan={2}
-                    tone="gray"
-                    w="w-[7%]"
-                    sortKey="lastOrderDate"
-                    sortConfig={sortConfig}
-                    onSort={requestSort}
-                  >
-                    마지막발주일
-                  </ThCompactSortable>
+                  <ThCompact rowSpan={2} tone="gray" w="w-[7%]">마지막발주일</ThCompact>
                 )}
-                <ThCompact colSpan={2} tone="mint" className="period-group-start">전년동월</ThCompact>
-                <ThCompact colSpan={2} tone="blue" className="period-group-start">전월</ThCompact>
-                <ThCompact colSpan={2} tone="pink" className="period-group-start">당월</ThCompact>
-                <ThCompact colSpan={3} tone="yellow" className="period-group-start">EST</ThCompact>
-                <ThCompact colSpan={2} tone="orange" className="period-group-start">이익</ThCompact>
+                <ThCompact colSpan={2} tone="mint">전년동월</ThCompact>
+                <ThCompact colSpan={2} tone="blue">전월</ThCompact>
+                <ThCompact colSpan={7} tone="yellow">당월</ThCompact>
               </tr>
               <tr>
-                <ThCompactSortable right tone="mint" top="top-[31px]" className="period-group-start" w={compact ? "w-[6%]" : ""} sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>매출</ThCompactSortable>
+                <ThCompactSortable right tone="mint" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="prevYearSales" sortConfig={sortConfig} onSort={requestSort}>매출</ThCompactSortable>
                 <ThCompactSortable right tone="mint" top="top-[31px]" sortKey="prevYearTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>Time gone</ThCompactSortable>
-                <ThCompactSortable right tone="blue" top="top-[31px]" className="period-group-start" w={compact ? "w-[6%]" : ""} sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>매출</ThCompactSortable>
+                <ThCompactSortable right tone="blue" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="prevMonthSales" sortConfig={sortConfig} onSort={requestSort}>매출</ThCompactSortable>
                 <ThCompactSortable right tone="blue" top="top-[31px]" sortKey="prevMonthTimeGoneGap" sortConfig={sortConfig} onSort={requestSort}>Time gone</ThCompactSortable>
-                <ThCompactSortable right tone="pink" top="top-[31px]" className="period-group-start" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
-                <ThCompactSortable right tone="pink" top="top-[31px]" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>전체 매출</ThCompactSortable>
-                <ThCompactSortable right tone="yellow" top="top-[31px]" className="period-group-start" w={compact ? "w-[5%]" : ""} sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="currentSales" sortConfig={sortConfig} onSort={requestSort}>당일까지 매출</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="fullMonthSales" sortConfig={sortConfig} onSort={requestSort}>전체 매출</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="timeGoneGap" sortConfig={sortConfig} onSort={requestSort}>Time gone</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" w={compact ? "w-[5%]" : ""} sortKey="est" sortConfig={sortConfig} onSort={requestSort}>EST</ThCompactSortable>
                 <ThCompactSortable right tone="yellow" top="top-[31px]" w={compact ? "w-[6%]" : ""} sortKey="estRate" sortConfig={sortConfig} onSort={requestSort}>EST 달성률</ThCompactSortable>
-                <ThCompactSortable right tone="yellow" top="top-[31px]" w="w-[16%]" sortKey="brandProgressRate" sortConfig={sortConfig} onSort={requestSort}>브랜드별 진척률</ThCompactSortable>
-                <ThCompactSortable right tone="orange" top="top-[31px]" className="period-group-start" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
-                <ThCompactSortable right tone="orange" top="top-[31px]" w="w-[5%]" sortKey="profitRate" sortConfig={sortConfig} onSort={requestSort}>이익률</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" sortKey="profitAmount" sortConfig={sortConfig} onSort={requestSort}>이익금액</ThCompactSortable>
+                <ThCompactSortable right tone="yellow" top="top-[31px]" w="w-[5%]" sortKey="profitRate" sortConfig={sortConfig} onSort={requestSort}>이익률</ThCompactSortable>
               </tr>
             </thead>
             <tbody>
@@ -12729,9 +8857,6 @@ function SalesStatus({
                     <Fragment key={r.key}>
                       <tr>
                         <TdCompact bold>{r.label}</TdCompact>
-                        {view === "거래처별" && <TdCompact bold>{r.manager || "미지정"}</TdCompact>}
-                        {showChannelColumn && <TdCompact bold>{r.channel}</TdCompact>}
-                        {showChannelColumn && <TdCompact bold>{r.isNewStore ? "Y" : ""}</TdCompact>}
                         {!compact && isStoreListView && (
                           <TdCompact>
                             <div className="text-center font-semibold text-slate-900 whitespace-nowrap">
@@ -12769,38 +8894,14 @@ function SalesStatus({
                           onClick={() => openDrill(r, "currentFullMonth")}
                         />
                         <TdCompact right amount>
+                          {pct(r.timeGoneGap)}
+                        </TdCompact>
+                        <TdCompact right amount>
                           {won(r.est)}
                         </TdCompact>
                         <TdCompact right amount>
                           {pct(r.estRate)}
                         </TdCompact>
-                        <td className="border border-gray-300 bg-amber-50/40 px-2 py-1.5 text-left align-middle">
-                          <div className="max-h-20 min-w-[80px] space-y-0.5 overflow-y-auto pr-1">
-                            {r.brandProgress.map((item) => (
-                              <div
-                                key={`${r.key}-${item.brand}`}
-                                className="text-center"
-                                title="클릭하여 거래처 상세 보기"
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => setBrandProgressPopup({
-                                    title: view === "거래처별" ? `${r.label}의 소속 브랜드` : `${item.brand} 소속 거래처`,
-                                    brand: item.brand,
-                                    rate: item.rate,
-                                    sales: item.sales,
-                                    est: item.est,
-                                    stores: item.stores,
-                                  })}
-                                  className="rounded px-1 text-[11px] font-extrabold text-slate-800 underline decoration-dotted underline-offset-2 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400"
-                                >
-                                  {item.est ? pct(item.rate) : "-"}
-                                </button>
-                              </div>
-                            ))}
-                            {!r.brandProgress.length && <div className="text-center text-slate-400">-</div>}
-                          </div>
-                        </td>
                         <TdCompact right amount>
                           {won(r.profitAmount)}
                         </TdCompact>
@@ -12817,7 +8918,7 @@ function SalesStatus({
                               className="border border-gray-300 bg-slate-50 px-3 py-2"
                             >
                               <div className="overflow-auto rounded-lg border border-gray-200 bg-white">
-                                <table className="w-full min-w-[700px] border-separate border-spacing-0 text-[12px]">
+                                <table className="w-full min-w-[700px] border-separate border-spacing-0 text-[11px]">
                                   <thead>
                                     <tr className="bg-slate-100">
                                       <th className="border border-gray-200 px-2 py-1.5 text-center font-bold whitespace-nowrap">
@@ -12885,31 +8986,6 @@ function SalesStatus({
             </tbody>
           </table>
         </div>
-        {brandProgressPopup && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/25 p-4" onClick={() => setBrandProgressPopup(null)}>
-            <div className="w-full max-w-md overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="브랜드별 진척률 상세">
-              <div className="flex items-start justify-between border-b border-slate-200 bg-amber-50 px-4 py-3">
-                <div>
-                  <div className="text-xs font-bold text-slate-500">{brandProgressPopup.title}</div>
-                  <div className="mt-0.5 text-base font-extrabold text-slate-900">{brandProgressPopup.brand} · {brandProgressPopup.est ? pct(brandProgressPopup.rate) : "-"}</div>
-                </div>
-                <button type="button" onClick={() => setBrandProgressPopup(null)} className="rounded-md px-2 py-1 text-lg font-bold text-slate-500 hover:bg-white hover:text-slate-900" aria-label="닫기">×</button>
-              </div>
-              <div className="grid grid-cols-2 gap-2 border-b border-slate-200 p-3 text-xs">
-                <div className="rounded-lg bg-slate-50 p-2"><span className="text-slate-500">당월 매출</span><div className="mt-0.5 font-extrabold text-slate-900">{won(brandProgressPopup.sales)}</div></div>
-                <div className="rounded-lg bg-slate-50 p-2"><span className="text-slate-500">EST</span><div className="mt-0.5 font-extrabold text-slate-900">{won(brandProgressPopup.est)}</div></div>
-              </div>
-              <div className="max-h-64 overflow-y-auto p-3">
-                {brandProgressPopup.stores.length ? brandProgressPopup.stores.map((store) => (
-                  <div key={`${brandProgressPopup.brand}-${store.name}`} className="flex items-center justify-between gap-3 border-b border-slate-100 px-1 py-2 text-xs last:border-b-0">
-                    <span className="min-w-0 flex-1 truncate font-bold text-slate-800">{store.name}</span>
-                    <span className="shrink-0 text-right text-[11px] text-slate-600">매출 {won(store.sales)}<br />EST {won(store.est)}</span>
-                  </div>
-                )) : <div className="py-6 text-center text-xs text-slate-500">해당 거래처가 없습니다.</div>}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {drill && (
@@ -12942,7 +9018,6 @@ function ThCompactSortable({
   tone = "default",
   rowSpan,
   top = "top-0",
-  className = "",
 }: {
   children: React.ReactNode;
   sortKey: SalesStatusSortKey;
@@ -12950,20 +9025,19 @@ function ThCompactSortable({
   onSort: (key: SalesStatusSortKey) => void;
   right?: boolean;
   w?: string;
-  tone?: "default" | "mint" | "blue" | "pink" | "yellow" | "gray" | "purple" | "green" | "orange";
+  tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green";
   rowSpan?: number;
   top?: string;
-  className?: string;
 }) {
   return (
-    <ThCompact right={right} w={w} tone={tone} rowSpan={rowSpan} top={top} className={className}>
+    <ThCompact right={right} w={w} tone={tone} rowSpan={rowSpan} top={top}>
       <button
         type="button"
         onClick={() => onSort(sortKey)}
         className="flex w-full items-center justify-center gap-1 text-center"
       >
         <span>{children}</span>
-        <span className="text-[11px] text-black">
+        <span className="text-[10px] text-slate-500">
           {sortArrow(sortConfig.key === sortKey, sortConfig.direction)}
         </span>
       </button>
@@ -13283,6 +9357,10 @@ function DormantAccountPage({
       <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-base font-bold text-slate-900">휴면거래처관리</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            3개월 미주문 거래처와 품목을 확인하고 엑셀 다운로드 또는 메일 전송용
+            파일을 만들 수 있습니다. 기준 기간: {startDate} ~ {endDate}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -13466,61 +9544,6 @@ function compactList(values: string[]) {
   return `${unique.slice(0, 3).join(", ")} 외 ${unique.length - 3}개`;
 }
 
-function hangulInitials(value: unknown) {
-  const initials = [
-    "ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ",
-    "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ",
-  ];
-  return Array.from(norm(value).toLowerCase())
-    .map((char) => {
-      const code = char.charCodeAt(0);
-      if (code < 0xac00 || code > 0xd7a3) return char;
-      return initials[Math.floor((code - 0xac00) / 588)] || char;
-    })
-    .join("");
-}
-
-function drillTextMatches(value: unknown, query: string) {
-  const q = norm(query).toLowerCase().replace(/\s+/g, "");
-  if (!q) return true;
-  const text = norm(value).toLowerCase();
-  const compact = text.replace(/\s+/g, "");
-  return compact.includes(q) || hangulInitials(text).replace(/\s+/g, "").includes(q);
-}
-
-type OrderDrillColumnKey =
-  | "saleDate"
-  | "storeCode"
-  | "storeName"
-  | "itemCode"
-  | "itemName"
-  | "quantity"
-  | "saleUnitPrice"
-  | "salesAmount"
-  | "costUnitPrice"
-  | "costAmount"
-  | "profitAmount"
-  | "profitRate"
-  | "remark";
-
-function dailyProfitRowsForExcel(rows: SalesRecord[]) {
-  return rows.map((r) => ({
-    "일자 No.": r.saleDate,
-    "거래처 코드": r.storeCode,
-    거래처명: r.storeName,
-    "품목 코드": r.itemCode,
-    "품목명[규격]": r.itemName,
-    "판매 수량": r.quantity,
-    "판매 단가": r.saleUnitPrice,
-    "판매 금액": r.salesAmount,
-    "원가 단가": r.costUnitPrice,
-    "원가 금액": r.costAmount,
-    "이익 금액": r.profitAmount,
-    이익률: pct(r.profitRate),
-    적요: norm(r.remark),
-  }));
-}
-
 function OrderDrillModal({
   title,
   rows,
@@ -13537,275 +9560,137 @@ function OrderDrillModal({
     itemName: string;
     rows: SalesRecord[];
   } | null>(null);
-  const [globalSearch, setGlobalSearch] = useState("");
-  const [columnFilters, setColumnFilters] = useState<Record<OrderDrillColumnKey, string>>({
-    saleDate: "",
-    storeCode: "",
-    storeName: "",
-    itemCode: "",
-    itemName: "",
-    quantity: "",
-    saleUnitPrice: "",
-    salesAmount: "",
-    costUnitPrice: "",
-    costAmount: "",
-    profitAmount: "",
-    profitRate: "",
-    remark: "",
-  });
-  const [sortState, setSortState] = useState<{
-    key: OrderDrillColumnKey;
-    direction: SortDirection;
-  }>({ key: "saleDate", direction: "asc" });
-
-  const filteredRows = useMemo(() => {
-    const globallyFiltered = rows.filter((r) => {
-      if (!globalSearch.trim()) return true;
-      return [r.storeName, r.storeCode, r.itemName, r.itemCode, r.remark]
-        .some((value) => drillTextMatches(value, globalSearch));
-    });
-
-    const columnFiltered = globallyFiltered.filter((r) => {
-      const values: Record<OrderDrillColumnKey, unknown> = {
-        saleDate: r.saleDate,
-        storeCode: r.storeCode,
-        storeName: r.storeName,
-        itemCode: r.itemCode,
-        itemName: r.itemName,
-        quantity: r.quantity,
-        saleUnitPrice: r.saleUnitPrice,
-        salesAmount: r.salesAmount,
-        costUnitPrice: r.costUnitPrice,
-        costAmount: r.costAmount,
-        profitAmount: r.profitAmount,
-        profitRate: r.profitRate,
-        remark: r.remark || "",
-      };
-      return (Object.keys(columnFilters) as OrderDrillColumnKey[]).every((key) => {
-        const filter = columnFilters[key];
-        if (!filter.trim()) return true;
-        if (["storeName", "itemName", "remark"].includes(key)) {
-          return drillTextMatches(values[key], filter);
-        }
-        const formatted = key === "profitRate" ? pct(Number(values[key] || 0)) : String(values[key] ?? "");
-        return formatted.toLowerCase().replace(/,/g, "").includes(filter.toLowerCase().replace(/,/g, "").trim());
-      });
-    });
-
-    return [...columnFiltered].sort((a, b) => {
-      const av = sortState.key === "remark" ? (a.remark || "") : a[sortState.key as keyof SalesRecord];
-      const bv = sortState.key === "remark" ? (b.remark || "") : b[sortState.key as keyof SalesRecord];
-      let result = 0;
-      if (typeof av === "number" || typeof bv === "number") {
-        result = Number(av || 0) - Number(bv || 0);
-      } else {
-        result = String(av ?? "").localeCompare(String(bv ?? ""), "ko-KR");
-      }
-      return sortState.direction === "asc" ? result : -result;
-    });
-  }, [rows, globalSearch, columnFilters, sortState]);
-
-  const totalSales = sum(filteredRows, "salesAmount");
-  const totalQuantity = sum(filteredRows, "quantity");
-  const totalProfit = sum(filteredRows, "profitAmount");
-  const totalProfitRate = weightedProfitRate(filteredRows);
-  const excelRows = dailyProfitRowsForExcel(filteredRows);
-
-  const clearFilters = () => {
-    setGlobalSearch("");
-    setColumnFilters({
-      saleDate: "",
-      storeCode: "",
-      storeName: "",
-      itemCode: "",
-      itemName: "",
-      quantity: "",
-      saleUnitPrice: "",
-      salesAmount: "",
-      costUnitPrice: "",
-      costAmount: "",
-      profitAmount: "",
-      profitRate: "",
-      remark: "",
-    });
-  };
-
-  const requestColumnSort = (key: OrderDrillColumnKey) => {
-    setSortState((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
-    }));
-  };
+  const totalSales = sum(rows, "salesAmount");
+  const totalQuantity = sum(rows, "quantity");
+  const totalProfit = sum(rows, "profitAmount");
+  const excelRows = orderRowsForExcel(rows);
+  const summaryBrand = compactList(rows.map((r) => r.brand));
+  const summaryManager = compactList(rows.map((r) => r.manager || "미지정"));
+  const summaryChannel = compactList(rows.map((r) => r.channel));
 
   const openItemDrill = (itemCode: string, itemName: string) => {
-    const filtered = allSales
+    const filteredRows = allSales
       .filter((r) => r.itemCode === itemCode)
       .sort(
         (a, b) =>
           b.saleDate.localeCompare(a.saleDate) ||
           a.storeName.localeCompare(b.storeName, "ko-KR"),
       );
-    setItemDrill({ itemCode, itemName, rows: filtered });
+    setItemDrill({ itemCode, itemName, rows: filteredRows });
   };
 
-  const columns: Array<{
-    key: OrderDrillColumnKey;
-    label: string;
-    align?: "left" | "right";
-    width: string;
-    placeholder?: string;
-  }> = [
-    { key: "saleDate", label: "일자 No.", width: "w-[112px]" },
-    { key: "storeCode", label: "거래처 코드", width: "w-[120px]" },
-    { key: "storeName", label: "거래처명", width: "w-[220px]", placeholder: "검색" },
-    { key: "itemCode", label: "품목 코드", width: "w-[110px]" },
-    { key: "itemName", label: "품목명[규격]", width: "w-[320px]", placeholder: "검색" },
-    { key: "quantity", label: "판매 수량", align: "right", width: "w-[92px]" },
-    { key: "saleUnitPrice", label: "판매 단가", align: "right", width: "w-[105px]" },
-    { key: "salesAmount", label: "판매 금액", align: "right", width: "w-[120px]" },
-    { key: "costUnitPrice", label: "원가 단가", align: "right", width: "w-[105px]" },
-    { key: "costAmount", label: "원가 금액", align: "right", width: "w-[120px]" },
-    { key: "profitAmount", label: "이익 금액", align: "right", width: "w-[115px]" },
-    { key: "profitRate", label: "이익률", align: "right", width: "w-[90px]" },
-    { key: "remark", label: "적요", width: "w-[160px]", placeholder: "검색" },
-  ];
-
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/55 p-2">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3">
       <style jsx global>{`
-        .daily-profit-modal-table,
-        .daily-profit-modal-table th,
-        .daily-profit-modal-table td {
+        .order-popup-table,
+        .order-popup-table th,
+        .order-popup-table td {
           border-color: #d1d5db !important;
         }
-        .daily-profit-modal-table thead th::before,
-        .daily-profit-modal-table thead th::after {
-          display: none !important;
-          content: none !important;
-        }
-        /* 일별이익현황 상세창: 컬럼 헤더 + 합계 행을 항상 함께 고정 */
-        .daily-profit-modal-table thead {
-          position: static !important;
-        }
-        .daily-profit-modal-table thead tr:first-child > th {
-          position: sticky !important;
-          top: 0 !important;
-          z-index: 94 !important;
-          height: 34px;
-          min-height: 34px;
-          background: #f8fafc !important;
-          box-shadow: inset 0 -1px 0 #d1d5db !important;
-        }
-        .daily-profit-modal-table thead tr:nth-child(2) > th {
-          position: sticky !important;
-          top: 34px !important;
-          z-index: 93 !important;
-          height: 34px;
-          min-height: 34px;
-          background: #fffbeb !important;
-          box-shadow: inset 0 -1px 0 #fcd34d, 0 2px 0 rgba(245, 158, 11, 0.28) !important;
-        }
       `}</style>
-      <div className="flex h-[96vh] max-h-[96vh] w-full max-w-[98vw] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200">
-        <div className="shrink-0 border-b border-gray-300 bg-white px-5 py-4 shadow-sm">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-            <div className="min-w-0 flex-1">
-              <h3 className="text-xl font-extrabold text-slate-900">
-                일별이익현황 · {title}
+      <div className="flex max-h-[94vh] w-full max-w-[96vw] flex-col rounded-2xl bg-white shadow-2xl">
+        <div className="sticky top-0 z-20 flex flex-col gap-3 border-b border-gray-300 bg-white p-5 shadow-sm xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-xl font-bold text-slate-900">
+                {title} 주문내역
               </h3>
-              <p className="mt-1 text-sm text-slate-500">
-                전체 {rows.length.toLocaleString("ko-KR")}건 · 현재 표시 {filteredRows.length.toLocaleString("ko-KR")}건 · 수량 {won(totalQuantity)} · 판매금액 {won(totalSales)}원 · 이익금액 {won(totalProfit)}원 · 이익률 {pct(totalProfitRate)}
-              </p>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                브랜드: {summaryBrand}
+              </span>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                담당자: {summaryManager}
+              </span>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                채널: {summaryChannel}
+              </span>
             </div>
-
-            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-              <div className="relative w-[380px] max-w-[38vw] min-w-[260px]">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">⌕</span>
-                <input
-                  value={globalSearch}
-                  onChange={(event) => setGlobalSearch(event.target.value)}
-                  placeholder="거래처명 / 품목명 / 품목코드 검색 (초성 가능)"
-                  className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
-              >
-                검색 초기화
-              </button>
-              <button
-                type="button"
-                onClick={() => exportExcel(excelRows, `${title.replaceAll(" ", "_").replaceAll("·", "_")}_일별이익현황`)}
-                className="h-10 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
-              >
-                엑셀 다운로드
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="h-10 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                닫기
-              </button>
-            </div>
+            <p className="mt-2 text-sm text-slate-500">
+              총 {rows.length.toLocaleString("ko-KR")}건 · 수량{" "}
+              {won(totalQuantity)} · 매출 {won(totalSales)}원 · 이익{" "}
+              {won(totalProfit)}원
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              상품코드를 클릭하면 해당 품목이 나간 전체 거래처 주문내역을 볼 수
+              있습니다.
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                exportExcel(
+                  excelRows,
+                  `${title.replaceAll(" ", "_").replaceAll("·", "_")}_주문내역`,
+                )
+              }
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+            >
+              주문내역 엑셀 다운로드
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              닫기
+            </button>
           </div>
         </div>
 
-        <div className="relative min-h-0 flex-1 overflow-auto bg-white">
-          <table className="daily-profit-modal-table w-full min-w-[1880px] table-fixed border-separate border-spacing-0 bg-white text-xs">
-            <thead className="bg-white">
-              <tr className="bg-slate-50">
-                {columns.map((column) => (
-                  <th
-                    key={column.key}
-                    className={`${column.width} border border-gray-300 bg-slate-50 px-2 py-2 ${column.align === "right" ? "text-right" : "text-left"}`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => requestColumnSort(column.key)}
-                      className={`flex w-full items-center gap-1 font-extrabold text-slate-800 ${column.align === "right" ? "justify-end" : "justify-start"}`}
-                      title={`${column.label} 정렬`}
-                    >
-                      <span>{column.label}</span>
-                      <span className="text-[10px] text-slate-400">
-                        {sortState.key === column.key ? (sortState.direction === "asc" ? "↑" : "↓") : "↕"}
-                      </span>
-                    </button>
-                  </th>
-                ))}
+        <div className="relative isolate min-h-0 flex-1 overflow-auto bg-white px-5 pb-5 pt-0">
+          <table className="order-popup-table w-full min-w-[1100px] border-separate border-spacing-0 border border-gray-300 bg-white text-sm">
+            <thead className="sticky top-0 z-[80] bg-white shadow-[0_2px_0_0_#e2e8f0]">
+              <tr className="bg-white">
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  주문일
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  거래처
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  상품코드
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-left font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  상품명
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  수량
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  매출금액
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  원가금액
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  이익금액
+                </th>
+                <th className="sticky top-0 z-[80] border border-gray-300 bg-white px-3 py-2 text-right font-bold shadow-[0_2px_0_0_#e2e8f0]">
+                  이익률
+                </th>
               </tr>
-              {filteredRows.length > 0 && (
-                <tr className="bg-amber-50 font-extrabold text-slate-900 shadow-[0_2px_0_0_#fde68a]">
-                  <th colSpan={5} className="border border-amber-300 bg-amber-50 px-3 py-2 text-left">
-                    합계 (검색 결과 {filteredRows.length.toLocaleString("ko-KR")}건)
-                  </th>
-                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(totalQuantity)}</th>
-                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">-</th>
-                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(totalSales)}</th>
-                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">-</th>
-                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(sum(filteredRows, "costAmount"))}</th>
-                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{won(totalProfit)}</th>
-                  <th className="border border-amber-300 bg-amber-50 px-2 py-2 text-right">{pct(totalProfitRate)}</th>
-                  <th className="border border-amber-300 bg-amber-50 px-2 py-2" />
-                </tr>
-              )}
             </thead>
             <tbody>
-              {filteredRows.length === 0 ? (
+              {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="border border-gray-300 p-12 text-center text-sm text-slate-500">
-                    검색/필터 조건에 맞는 일별이익현황 데이터가 없습니다.
+                  <td
+                    colSpan={9}
+                    className="border border-gray-300 p-10 text-center text-slate-500"
+                  >
+                    표시할 주문내역이 없습니다.
                   </td>
                 </tr>
               ) : (
-                filteredRows.map((r) => (
-                  <tr key={r.id} className="hover:bg-orange-50/40">
-                    <td className="border border-gray-300 px-2 py-2 whitespace-nowrap">{r.saleDate}</td>
-                    <td className="border border-gray-300 px-2 py-2 whitespace-nowrap">{r.storeCode}</td>
-                    <td className="border border-gray-300 px-2 py-2 font-semibold" title={r.storeName}>{r.storeName}</td>
-                    <td className="border border-gray-300 px-2 py-2 whitespace-nowrap">
+                rows.map((r) => (
+                  <tr key={r.id} className="hover:bg-slate-50">
+                    <td className="border border-gray-300 px-3 py-2">
+                      {r.saleDate}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2 font-semibold">
+                      {r.storeName}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
                       <button
                         type="button"
                         onClick={() => openItemDrill(r.itemCode, r.itemName)}
@@ -13815,20 +9700,28 @@ function OrderDrillModal({
                         {r.itemCode}
                       </button>
                     </td>
-                    <td className="border border-gray-300 px-2 py-2" title={r.itemName}>{r.itemName}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right">{won(r.quantity)}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right">{won(r.saleUnitPrice)}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right font-bold">{won(r.salesAmount)}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right">{won(r.costUnitPrice)}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right">{won(r.costAmount)}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right font-semibold">{won(r.profitAmount)}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right">{pct(r.profitRate)}</td>
-                    <td className="border border-gray-300 px-2 py-2" title={r.remark || ""}>{r.remark || ""}</td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      {r.itemName}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2 text-right">
+                      {won(r.quantity)}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2 text-right text-base font-bold text-slate-900">
+                      {won(r.salesAmount)}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2 text-right font-semibold text-slate-900">
+                      {won(r.costAmount)}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2 text-right font-semibold text-slate-900">
+                      {won(r.profitAmount)}
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2 text-right text-slate-900">
+                      {pct(r.profitRate)}
+                    </td>
                   </tr>
                 ))
               )}
             </tbody>
-
           </table>
         </div>
       </div>
@@ -13997,21 +9890,17 @@ function FilterAmountCard({
 }: {
   title: string;
   value: number | string;
-  tone: "mint" | "blue" | "pink" | "yellow" | "green" | "orange";
+  tone: "mint" | "blue" | "yellow" | "green";
   onClick?: () => void;
 }) {
   const toneClass =
     tone === "mint"
-      ? "border-lime-300 bg-lime-100"
+      ? "border-emerald-200 bg-emerald-50"
       : tone === "blue"
-        ? "border-sky-300 bg-sky-100"
-        : tone === "pink"
-          ? "border-pink-300 bg-pink-100"
-          : tone === "yellow"
-            ? "border-yellow-300 bg-yellow-100"
-            : tone === "orange"
-              ? "border-orange-300 bg-orange-100"
-              : "border-white bg-white";
+        ? "border-blue-200 bg-blue-50"
+        : tone === "yellow"
+          ? "border-amber-200 bg-amber-50"
+          : "border-green-200 bg-green-50";
 
   return (
     <button
@@ -14020,8 +9909,8 @@ function FilterAmountCard({
       disabled={!onClick}
       className={`rounded-xl border px-3 py-2 text-left shadow-sm ${toneClass} ${onClick ? "cursor-pointer hover:shadow-md" : "cursor-default"}`}
     >
-      <p className="text-[13px] font-bold text-black">{title}</p>
-      <p className="mt-1 break-all text-right text-[18px] font-bold text-black">
+      <p className="text-[11px] font-semibold text-slate-500">{title}</p>
+      <p className="mt-1 break-all text-right text-base font-bold text-slate-900">
         {typeof value === "number" ? won(value) : value}
       </p>
     </button>
@@ -14036,35 +9925,35 @@ function ThCompact({
   rowSpan,
   colSpan,
   top = "top-0",
-  className = "",
 }: {
   children: React.ReactNode;
   right?: boolean;
   w?: string;
-  tone?: "default" | "mint" | "blue" | "pink" | "yellow" | "gray" | "purple" | "green" | "orange";
+  tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green";
   rowSpan?: number;
   colSpan?: number;
   top?: string;
-  className?: string;
 }) {
   const toneClass =
     tone === "mint"
-      ? "border-[#E5E7EB] bg-[#F7FCEB] text-black"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
       : tone === "blue"
-        ? "border-[#E5E7EB] bg-[#F3FAFD] text-black"
-        : tone === "pink"
-          ? "border-[#E5E7EB] bg-[#FFF7FA] text-black"
-          : tone === "yellow"
-            ? "border-[#E5E7EB] bg-[#FFFDF2] text-black"
-            : tone === "orange"
-              ? "border-[#E5E7EB] bg-[#FFF9F3] text-black"
-              : "border-[#E5E7EB] bg-white text-black";
+        ? "border-blue-200 bg-blue-50 text-blue-800"
+        : tone === "yellow"
+          ? "border-amber-200 bg-amber-50 text-amber-800"
+          : tone === "gray"
+            ? "border-slate-300 bg-slate-100 text-slate-800"
+            : tone === "purple"
+              ? "border-violet-200 bg-violet-50 text-violet-800"
+              : tone === "green"
+                ? "border-green-200 bg-green-50 text-green-800"
+                : "border-slate-200 bg-slate-100 text-slate-800";
 
   return (
     <th
       rowSpan={rowSpan}
       colSpan={colSpan}
-      className={`sticky ${top} z-50 border px-0.5 py-1.5 align-middle text-center text-[14px] font-bold leading-tight whitespace-nowrap break-keep bg-clip-padding ${toneClass} ${w} ${className}`}
+      className={`sticky ${top} z-50 border px-0.5 py-1.5 align-middle text-center text-[12px] font-bold leading-tight whitespace-nowrap break-keep shadow-sm bg-clip-padding ${toneClass} ${w}`}
     >
       {children}
     </th>
@@ -14172,6 +10061,9 @@ function SalesCompare({
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-lg font-bold text-slate-900">매출비교</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            거래처별 전년동월 / 전월 / 당월 매출을 비교합니다.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -14230,98 +10122,6 @@ function SalesCompare({
   );
 }
 
-function PendingNewStoreEstManagement({
-  month,
-  stores,
-  setStores,
-  ests,
-  setEsts,
-  rows,
-  setRows,
-}: {
-  month: string;
-  stores: Store[];
-  setStores: (v: Store[]) => void;
-  ests: EstRecord[];
-  setEsts: (v: EstRecord[]) => void;
-  rows: PendingNewStoreEst[];
-  setRows: React.Dispatch<React.SetStateAction<PendingNewStoreEst[]>>;
-}) {
-  const [codeDrafts, setCodeDrafts] = useState<Record<string, string>>({});
-  const visibleRows = rows
-    .filter((row) => row.month === month)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-
-  const confirmRow = (row: PendingNewStoreEst) => {
-    const code = norm(codeDrafts[row.id]);
-    if (!code) return alert("거래처 코드를 입력해주세요.");
-    if (stores.some((store) => norm(store.code) === norm(code))) return alert("이미 등록된 거래처 코드입니다. 기존 거래처와 연결하려면 중복 여부를 먼저 확인해주세요.");
-    if (stores.some((store) => normalizeStoreNameKey(store.name) === normalizeStoreNameKey(row.storeName))) return alert("같은 거래처명의 기존 거래처가 있습니다. 중복 여부를 확인해주세요.");
-    if (!window.confirm(`${row.storeName}을(를) 거래처 코드 ${code}로 확정할까요?\nEST ${won(row.amount)}도 ${row.month}에 연결됩니다.`)) return;
-    const store: Store = {
-      code,
-      name: row.storeName,
-      channel: row.storeType,
-      manager: row.manager,
-      storeType: row.storeType,
-      brand: "당월 신규 거래처",
-      status: "거래중",
-    };
-    setStores([...stores, store]);
-    const withoutDuplicate = ests.filter((item) => !(item.month === row.month && norm(item.storeCode) === norm(code)));
-    setEsts([...withoutDuplicate, { storeCode: code, storeName: row.storeName, month: row.month, amount: row.amount }]);
-    setRows((previous) => previous.filter((item) => item.id !== row.id));
-    setCodeDrafts((previous) => {
-      const next = { ...previous };
-      delete next[row.id];
-      return next;
-    });
-    alert("거래처 코드와 EST 연결을 완료했습니다.");
-  };
-
-  const deleteRow = (row: PendingNewStoreEst) => {
-    if (!window.confirm(`${row.storeName} 신규 EST 신청을 삭제할까요?`)) return;
-    setRows((previous) => previous.filter((item) => item.id !== row.id));
-  };
-
-  return (
-    <div className="rounded-2xl border border-emerald-200 bg-white shadow-sm">
-      <div className="border-b border-emerald-200 bg-emerald-50 px-5 py-4">
-        <h2 className="text-base font-black text-slate-900">신규 거래처 EST 관리</h2>
-        <p className="mt-1 text-xs font-semibold text-slate-500">담당자가 입력한 내용을 확인하고 실제 거래처 코드를 넣어 확정하세요. · {month}</p>
-      </div>
-      <div className="overflow-auto">
-        <table className="w-full min-w-[980px] border-separate border-spacing-0 text-center text-xs">
-          <thead><tr>
-            <th className="sticky top-0 border border-slate-300 bg-slate-100 px-3 py-2">담당자</th>
-            <th className="sticky top-0 border border-slate-300 bg-slate-100 px-3 py-2">매장/비매장</th>
-            <th className="sticky top-0 border border-slate-300 bg-slate-100 px-3 py-2">거래처명</th>
-            <th className="sticky top-0 border border-slate-300 bg-slate-100 px-3 py-2">EST 금액</th>
-            <th className="sticky top-0 border border-slate-300 bg-slate-100 px-3 py-2">입력일시</th>
-            <th className="sticky top-0 border border-emerald-300 bg-emerald-50 px-3 py-2">거래처 코드</th>
-            <th className="sticky top-0 border border-slate-300 bg-slate-100 px-3 py-2">처리</th>
-          </tr></thead>
-          <tbody>
-            {visibleRows.map((row) => (
-              <tr key={row.id} className="hover:bg-emerald-50/40">
-                <td className="border border-slate-300 px-3 py-2 font-black">{row.manager}</td>
-                <td className="border border-slate-300 px-3 py-2 font-bold">{row.storeType}</td>
-                <td className="border border-slate-300 px-3 py-2 text-left font-bold">{row.storeName}</td>
-                <td className="border border-slate-300 px-3 py-2 text-right font-black">{won(row.amount)}</td>
-                <td className="border border-slate-300 px-3 py-2">{row.createdAt ? new Date(row.createdAt).toLocaleString("ko-KR") : "-"}</td>
-                <td className="border border-emerald-300 bg-emerald-50/40 px-3 py-2"><input value={codeDrafts[row.id] || ""} onChange={(e) => setCodeDrafts((previous) => ({ ...previous, [row.id]: e.target.value }))} placeholder="거래처 코드 입력" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 font-bold outline-none focus:border-emerald-500" /></td>
-                <td className="border border-slate-300 px-3 py-2"><div className="flex justify-center gap-2"><button type="button" onClick={() => confirmRow(row)} className="rounded-lg bg-emerald-600 px-3 py-2 font-extrabold text-white hover:bg-emerald-700">확정</button><button type="button" onClick={() => deleteRow(row)} className="rounded-lg border border-rose-300 bg-white px-3 py-2 font-extrabold text-rose-700 hover:bg-rose-50">삭제</button></div></td>
-              </tr>
-            ))}
-            {!visibleRows.length && <tr><td colSpan={7} className="border border-slate-300 p-10 text-slate-500">{month}에 등록된 신규 거래처 EST가 없습니다.</td></tr>}
-          </tbody>
-          {visibleRows.length > 0 && <tfoot><tr className="bg-slate-100 font-black"><td colSpan={3} className="border border-slate-300 px-3 py-2 text-left">미확정 {visibleRows.length.toLocaleString("ko-KR")}건</td><td className="border border-slate-300 px-3 py-2 text-right text-emerald-700">{won(visibleRows.reduce((total, row) => total + row.amount, 0))}</td><td colSpan={3} className="border border-slate-300 px-3 py-2" /></tr></tfoot>}
-        </table>
-      </div>
-    </div>
-  );
-}
-
 function MonthStartManagement({
   stores,
   setStores,
@@ -14338,14 +10138,6 @@ function MonthStartManagement({
   setTimeConfigs,
   codeMappings,
   setCodeMappings,
-  itemMasters,
-  setItemMasters,
-  managerConfigs,
-  setManagerConfigs,
-  pendingNewStoreEsts,
-  setPendingNewStoreEsts,
-  notificationBusy,
-  onSendUpdateNotification,
 }: {
   stores: Store[];
   setStores: (v: Store[]) => void;
@@ -14362,30 +10154,18 @@ function MonthStartManagement({
   setTimeConfigs: (v: TimeConfig[]) => void;
   codeMappings: StoreCodeMapping[];
   setCodeMappings: (v: StoreCodeMapping[]) => void;
-  itemMasters: ItemMasterRecord[];
-  setItemMasters: React.Dispatch<React.SetStateAction<ItemMasterRecord[]>>;
-  managerConfigs: ManagerConfig[];
-  setManagerConfigs: React.Dispatch<React.SetStateAction<ManagerConfig[]>>;
-  pendingNewStoreEsts: PendingNewStoreEst[];
-  setPendingNewStoreEsts: React.Dispatch<React.SetStateAction<PendingNewStoreEst[]>>;
-  notificationBusy: boolean;
-  onSendUpdateNotification: () => Promise<void>;
 }) {
-  const [tab, setTab] = useState<MonthStartTab>("거래처 리스트");
+  const [tab, setTab] = useState<MonthStartTab>("거래처/휴면 관리");
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col space-y-3 overflow-hidden pb-12">
-      <div className="shrink-0 border-b border-slate-300 bg-white px-2">
-        <div className="flex min-w-max gap-1 overflow-x-auto">
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+        <div className="flex flex-wrap gap-2">
           {MONTH_TABS.map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`border-b-2 px-4 py-2.5 text-sm font-bold transition ${
-                tab === t
-                  ? "border-blue-600 text-blue-700"
-                  : "border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900"
-              }`}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === t ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
             >
               {t}
             </button>
@@ -14393,1367 +10173,31 @@ function MonthStartManagement({
         </div>
       </div>
 
-      {tab === "신규 거래처 EST" && (
-        <div className="min-h-0 flex-1 overflow-auto pb-24 pr-2">
-          <PendingNewStoreEstManagement
-            month={month}
-            stores={stores}
-            setStores={setStores}
-            ests={ests}
-            setEsts={setEsts}
-            rows={pendingNewStoreEsts}
-            setRows={setPendingNewStoreEsts}
-          />
-        </div>
-      )}
-
-      {tab === "거래처 리스트" && (
-        <div className="min-h-0 flex-1 overflow-auto pb-24 pr-2">
-          <StoreListManagement
-            section="list"
+      {tab === "거래처/휴면 관리" && (
+        <div className="space-y-4">
+          <MappingPage
             stores={stores}
             setStores={setStores}
             sales={sales}
             month={month}
             codeMappings={codeMappings}
-            managerConfigs={managerConfigs}
-            setManagerConfigs={setManagerConfigs}
-          />
-        </div>
-      )}
-      {tab === "기준정보" && (
-        <div className="min-h-0 flex-1 overflow-auto pb-24 pr-2">
-          <StoreListManagement
-            section="reference"
-            stores={stores}
-            setStores={setStores}
-            sales={sales}
-            month={month}
-            codeMappings={codeMappings}
-            managerConfigs={managerConfigs}
-            setManagerConfigs={setManagerConfigs}
-            itemMasters={itemMasters}
-            setItemMasters={setItemMasters}
+            setCodeMappings={setCodeMappings}
           />
         </div>
       )}
       {tab === "업로드 관리" && (
-        <div className="min-h-0 flex-1 overflow-auto pb-24 pr-2">
-          <div className="mb-3 flex items-center justify-between gap-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
-            <div>
-              <div className="text-sm font-extrabold text-slate-900">오늘 매출 업데이트 완료</div>
-              <div className="mt-1 text-xs font-semibold text-slate-500">모든 업로드가 끝난 뒤 한 번만 눌러 PC·모바일 구독자에게 알림을 보냅니다.</div>
-            </div>
-            <button
-              type="button"
-              disabled={notificationBusy}
-              onClick={onSendUpdateNotification}
-              className="shrink-0 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-extrabold text-white shadow-sm hover:bg-orange-600 disabled:opacity-50"
-            >
-              업데이트 완료 알림 보내기
-            </button>
-          </div>
-          <UploadPage
-            stores={stores}
-            setStores={setStores}
-            sales={sales}
-            setSales={setSales}
-            salesActions={salesActions}
-            month={month}
-            date={date}
-            timeConfigs={timeConfigs}
-            setTimeConfigs={setTimeConfigs}
-            itemMasters={itemMasters}
-            setItemMasters={setItemMasters}
-            ests={ests}
-            setEsts={setEsts}
-            codeMappings={codeMappings}
-          />
-        </div>
-      )}
-      {tab === "이익금액 검증표" && (
-        <div className="min-h-0 flex-1 overflow-auto pb-24 pr-2">
-          <ProfitValidationPanel sales={sales} month={month} date={date} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-function ItemMasterManagement({
-  sales,
-  itemMasters,
-  setItemMasters,
-  month,
-}: {
-  sales: SalesRecord[];
-  itemMasters: ItemMasterRecord[];
-  setItemMasters?: React.Dispatch<React.SetStateAction<ItemMasterRecord[]>>;
-  month: string;
-}) {
-  const [search, setSearch] = useState("");
-  const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
-  const [bulkCategory, setBulkCategory] = useState("");
-  const [bulkSupplier, setBulkSupplier] = useState("");
-  const [drafts, setDrafts] = useState<Record<string, { category: string; supplier: string }>>({});
-  const normalizedSearch = search.trim().toLowerCase();
-
-  const rows = useMemo(() => {
-    const byCode = new Map<string, ItemMasterRecord>();
-    itemMasters.forEach((item) => {
-      const code = norm(item.itemCode);
-      if (!code) return;
-      byCode.set(code, { ...item, itemCode: code });
-    });
-    sales.forEach((row) => {
-      const code = norm(row.itemCode) || norm(row.itemName);
-      if (!code) return;
-      const existing = byCode.get(code);
-      if (existing) {
-        if ((!existing.itemName || existing.itemName === "미지정") && row.itemName) {
-          byCode.set(code, { ...existing, itemName: row.itemName });
-        }
-        return;
-      }
-      byCode.set(code, {
-        itemCode: code,
-        itemName: row.itemName || code,
-        category: "",
-        supplier: "",
-        source: "sales",
-        firstSeenMonth: row.saleDate?.slice(0, 7) || row.refMonth || month,
-        active: true,
-      });
-    });
-    return Array.from(byCode.values())
-      .filter((item) => {
-        if (!normalizedSearch) return true;
-        return [item.itemCode, item.itemName, item.category, item.supplier]
-          .some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
-      })
-      .sort((a, b) =>
-        a.itemCode.localeCompare(b.itemCode, "ko-KR", { numeric: true }) ||
-        a.itemName.localeCompare(b.itemName, "ko-KR", { numeric: true }),
-      );
-  }, [sales, itemMasters, normalizedSearch, month]);
-
-  useEffect(() => {
-    setDrafts((previous) => {
-      const next = { ...previous };
-      let changed = false;
-      rows.forEach((row) => {
-        if (!next[row.itemCode]) {
-          next[row.itemCode] = {
-            category: row.category || "",
-            supplier: row.supplier || "",
-          };
-          changed = true;
-        }
-      });
-      return changed ? next : previous;
-    });
-  }, [rows]);
-
-  const allVisibleSelected = rows.length > 0 && rows.every((row) => selectedCodes.has(row.itemCode));
-
-  function toggleSelected(itemCode: string) {
-    setSelectedCodes((previous) => {
-      const next = new Set(previous);
-      if (next.has(itemCode)) next.delete(itemCode);
-      else next.add(itemCode);
-      return next;
-    });
-  }
-
-  function toggleVisibleSelection() {
-    setSelectedCodes((previous) => {
-      const next = new Set(previous);
-      if (allVisibleSelected) rows.forEach((row) => next.delete(row.itemCode));
-      else rows.forEach((row) => next.add(row.itemCode));
-      return next;
-    });
-  }
-
-  function updateDraft(itemCode: string, field: "category" | "supplier", value: string) {
-    setDrafts((previous) => ({
-      ...previous,
-      [itemCode]: {
-        category: previous[itemCode]?.category || "",
-        supplier: previous[itemCode]?.supplier || "",
-        [field]: value,
-      },
-    }));
-  }
-
-  function applyBulkInput() {
-    if (!selectedCodes.size) return alert("일괄 입력할 품목을 먼저 선택해주세요.");
-    if (!bulkCategory.trim() && !bulkSupplier.trim()) return alert("카테고리 또는 매입처를 입력해주세요.");
-    setDrafts((previous) => {
-      const next = { ...previous };
-      selectedCodes.forEach((code) => {
-        const current = next[code] || { category: "", supplier: "" };
-        next[code] = {
-          category: bulkCategory.trim() || current.category,
-          supplier: bulkSupplier.trim() || current.supplier,
-        };
-      });
-      return next;
-    });
-  }
-
-  function saveSelected() {
-    if (!setItemMasters) return alert("품목 저장 기능을 사용할 수 없습니다.");
-    if (!selectedCodes.size) return alert("저장할 품목을 먼저 선택해주세요.");
-    const visibleMap = new Map(rows.map((row) => [row.itemCode, row]));
-    setItemMasters((previous) => {
-      const map = new Map(previous.map((item) => [item.itemCode, item]));
-      selectedCodes.forEach((code) => {
-        const row = visibleMap.get(code) || map.get(code);
-        if (!row) return;
-        const draft = drafts[code] || { category: row.category || "", supplier: row.supplier || "" };
-        map.set(code, {
-          ...row,
-          itemCode: code,
-          itemName: row.itemName || code,
-          category: draft.category.trim(),
-          supplier: draft.supplier.trim(),
-          active: row.active ?? true,
-        });
-      });
-      return Array.from(map.values());
-    });
-    alert(`선택한 ${selectedCodes.size.toLocaleString("ko-KR")}개 품목을 저장했습니다.`);
-  }
-
-  return (
-    <main className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden">
-      <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-extrabold text-slate-900">품목 기준정보</h2>
-          </div>
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="품목코드/품목명/카테고리/매입처 검색"
-            className="h-8 w-[310px] rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-blue-500"
-          />
-        </div>
-        <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-2">
-          <span className="mr-1 text-[11px] font-semibold text-slate-600">선택 {selectedCodes.size.toLocaleString("ko-KR")}건 / 검색결과 {rows.length.toLocaleString("ko-KR")}건</span>
-          <button type="button" onClick={toggleVisibleSelection} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100">{allVisibleSelected ? "검색결과 선택 해제" : "검색결과 전체 선택"}</button>
-          <button type="button" onClick={() => setSelectedCodes(new Set())} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100">선택 초기화</button>
-          <span className="mx-1 h-5 w-px bg-slate-300" />
-          <label className="text-[11px] font-bold text-slate-600">카테고리<input value={bulkCategory} onChange={(event) => setBulkCategory(event.target.value)} placeholder="일괄 입력" className="ml-2 h-8 w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold" /></label>
-          <label className="text-[11px] font-bold text-slate-600">매입처<input value={bulkSupplier} onChange={(event) => setBulkSupplier(event.target.value)} placeholder="일괄 입력" className="ml-2 h-8 w-[170px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold" /></label>
-          <button type="button" onClick={applyBulkInput} className="h-8 rounded-lg border border-blue-300 bg-blue-50 px-3 text-xs font-bold text-blue-700 hover:bg-blue-100">선택 항목에 적용</button>
-          <button type="button" onClick={saveSelected} className="h-8 rounded-lg bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700">선택 항목 일괄 저장</button>
-        </div>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-slate-300 bg-white shadow-sm">
-        <table className="w-full min-w-[980px] border-collapse text-center text-xs">
-          <thead>
-            <tr className="bg-slate-100 text-slate-700">
-              <th className="sticky top-0 z-20 w-[54px] border border-slate-300 bg-slate-100 px-2 py-2"><input type="checkbox" checked={allVisibleSelected} onChange={toggleVisibleSelection} aria-label="검색 결과 전체 선택" /></th>
-              <th className="sticky top-0 z-20 w-[170px] border border-slate-300 bg-slate-100 px-3 py-2">품목코드</th>
-              <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">품목명</th>
-              <th className="sticky top-0 z-20 w-[220px] border border-slate-300 bg-slate-100 px-3 py-2">품목 카테고리</th>
-              <th className="sticky top-0 z-20 w-[240px] border border-slate-300 bg-slate-100 px-3 py-2">매입처</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const draft = drafts[row.itemCode] || { category: row.category || "", supplier: row.supplier || "" };
-              return (
-                <tr key={row.itemCode} className="hover:bg-blue-50/40">
-                  <td className="border border-slate-300 px-2 py-2"><input type="checkbox" checked={selectedCodes.has(row.itemCode)} onChange={() => toggleSelected(row.itemCode)} aria-label={`${row.itemName} 선택`} /></td>
-                  <td className="border border-slate-300 px-3 py-2 text-left font-bold text-slate-900">{row.itemCode}</td>
-                  <td className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">{row.itemName}</td>
-                  <td className="border border-slate-300 px-2 py-1.5"><input value={draft.category} onChange={(event) => updateDraft(row.itemCode, "category", event.target.value)} placeholder="카테고리 직접 입력" className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold outline-none focus:border-blue-500" /></td>
-                  <td className="border border-slate-300 px-2 py-1.5"><input value={draft.supplier} onChange={(event) => updateDraft(row.itemCode, "supplier", event.target.value)} placeholder="매입처 직접 입력" className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold outline-none focus:border-blue-500" /></td>
-                </tr>
-              );
-            })}
-            {!rows.length && (
-              <tr><td colSpan={5} className="border border-slate-300 p-10 text-center text-slate-500">검색 조건에 해당하는 품목이 없습니다.</td></tr>
-            )}
-          </tbody>
-        </table>
-        <div className="flex h-28 items-start justify-center pt-5 text-xs font-semibold text-slate-400">마지막 품목입니다.</div>
-      </div>
-    </main>
-  );
-}
-
-function StoreListManagement({
-  section,
-  stores,
-  setStores,
-  sales,
-  month,
-  codeMappings,
-  managerConfigs,
-  setManagerConfigs,
-  itemMasters,
-  setItemMasters,
-}: {
-  section: "list" | "reference";
-  stores: Store[];
-  setStores: (v: Store[]) => void;
-  sales: SalesRecord[];
-  month: string;
-  codeMappings: StoreCodeMapping[];
-  managerConfigs: ManagerConfig[];
-  setManagerConfigs: React.Dispatch<React.SetStateAction<ManagerConfig[]>>;
-  itemMasters?: ItemMasterRecord[];
-  setItemMasters?: React.Dispatch<React.SetStateAction<ItemMasterRecord[]>>;
-}) {
-  type ListTab = "기존거래처 리스트" | "전년동월 리스트" | "총 거래처 리스트" | "기타 관리";
-  const [listTab, setListTab] = useState<ListTab>("기존거래처 리스트");
-  const [search, setSearch] = useState("");
-  const [searchDraft, setSearchDraft] = useState("");
-  const [otherTab, setOtherTab] = useState<"담당자 관리" | "브랜드 관리" | "채널 관리" | "거래상태 관리" | "품목 관리">("담당자 관리");
-  const [managerSubTab, setManagerSubTab] = useState<"EST 담당자 관리" | "거래처 담당자 관리">("EST 담당자 관리");
-  const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
-  const [bulkManager, setBulkManager] = useState("");
-  const [bulkBrand, setBulkBrand] = useState("");
-  const [bulkChannel1, setBulkChannel1] = useState("");
-  const [bulkStatus, setBulkStatus] = useState<"" | Store["status"]>("");
-  const [newManager, setNewManager] = useState("");
-  const [newChannel1, setNewChannel1] = useState("");
-  const [brandDrafts, setBrandDrafts] = useState<Record<string, string>>({});
-  type BrandUploadPreviewRow = {
-    rowNumber: number;
-    inputCode: string;
-    inputName: string;
-    inputBrand: string;
-    storeCode: string;
-    storeName: string;
-    beforeBrand: string;
-    afterBrand: string;
-    status: "정상" | "미매칭" | "충돌" | "중복" | "건너뜀";
-    reason: string;
-  };
-  const [brandUploadFileName, setBrandUploadFileName] = useState("");
-  const [brandUploadPreview, setBrandUploadPreview] = useState<BrandUploadPreviewRow[]>([]);
-  const brandUploadInputRef = useRef<HTMLInputElement>(null);
-  const [showNewOnly, setShowNewOnly] = useState(false);
-  const [savedChannel1Options, setSavedChannel1Options] = useLocal<string[]>(
-    "month-start-channel1-options-v1",
-    ["매장", "비매장"],
-  );
-  const normalizedSearch = search.trim().toLowerCase();
-  const normalizeManager = (value: string) => value.trim().toUpperCase();
-
-  useEffect(() => {
-    setListTab(section === "list" ? "기존거래처 리스트" : "기타 관리");
-    setSearch("");
-    setSearchDraft("");
-    setSelectedCodes(new Set());
-    setShowNewOnly(false);
-    setManagerSubTab("EST 담당자 관리");
-    setBrandDrafts({});
-    setBrandUploadFileName("");
-    setBrandUploadPreview([]);
-  }, [section]);
-
-  useEffect(() => {
-    const hasLegacyChannel = stores.some(
-      (store) => store.channel !== "매장" && store.channel !== "비매장",
-    );
-    if (!hasLegacyChannel) return;
-    setStores(
-      stores.map((store) => ({
-        ...store,
-        channel: store.storeType === "매장" ? "매장" : "비매장",
-      })),
-    );
-  }, [stores, setStores]);
-
-  type SalesStoreSummary = {
-    code: string;
-    name: string;
-    channel: string;
-    manager: string;
-    storeType: string;
-    brand: string;
-    amount: number;
-  };
-
-  const summarize = (rows: SalesRecord[]) => {
-    const map = new Map<string, SalesStoreSummary>();
-    rows.forEach((row) => {
-      const key = `${norm(row.storeCode)}|${normalizeStoreNameKey(row.storeName)}`;
-      const saved = stores.find((store) => store.code === row.storeCode);
-      const previous = map.get(key) || {
-        code: row.storeCode || "-",
-        name: row.storeName || row.storeCode || "미지정",
-        channel: saved?.channel || row.channel || "미지정",
-        manager: saved?.manager || row.manager || "",
-        storeType: saved?.storeType || row.storeType || "비매장",
-        brand: displayBrand(saved?.brand || row.brand),
-        amount: 0,
-      };
-      previous.amount += Number(row.salesAmount || 0);
-      map.set(key, previous);
-    });
-    return Array.from(map.values());
-  };
-
-  const currentRows = useMemo(
-    () =>
-      summarize(
-        sales.filter(
-          (row) =>
-            row.period === "current" &&
-            inRange(row.saleDate, monthStart(month), monthEnd(month)),
-        ),
-      ),
-    [sales, stores, month],
-  );
-
-  const prevMonthRows = useMemo(
-    () =>
-      summarize(
-        sales.filter(
-          (row) => row.period === "prevMonth" && row.refMonth === month,
-        ),
-      ),
-    [sales, stores, month],
-  );
-
-  const prevYearRows = useMemo(
-    () =>
-      summarize(
-        sales.filter(
-          (row) => row.period === "prevYear" && row.refMonth === month,
-        ),
-      ),
-    [sales, stores, month],
-  );
-
-  const existingRows = useMemo(() => {
-    const currentByCode = new Map(currentRows.map((row) => [norm(row.code), row]));
-    const currentByName = new Map(
-      currentRows.map((row) => [normalizeStoreNameKey(row.name), row]),
-    );
-    const prevByCode = new Map(prevMonthRows.map((row) => [norm(row.code), row]));
-    const prevByName = new Map(
-      prevMonthRows.map((row) => [normalizeStoreNameKey(row.name), row]),
-    );
-    const keys = new Set<string>();
-    currentRows.forEach((row) => keys.add(`C|${row.code}|${row.name}`));
-    prevMonthRows.forEach((row) => keys.add(`P|${row.code}|${row.name}`));
-
-    const result = new Map<string, SalesStoreSummary & {
-      currentAmount: number;
-      prevAmount: number;
-      statusLabel: string;
-      note: string;
-    }>();
-
-    [...currentRows, ...prevMonthRows].forEach((source) => {
-      const currentBySameCode = currentByCode.get(norm(source.code));
-      const currentBySameName = currentByName.get(normalizeStoreNameKey(source.name));
-      const prevBySameCode = prevByCode.get(norm(source.code));
-      const prevBySameName = prevByName.get(normalizeStoreNameKey(source.name));
-      const current = currentBySameCode || currentBySameName;
-      const prev = prevBySameCode || prevBySameName;
-      const canonical = current || prev || source;
-      const key = current?.code || prev?.code || source.code || source.name;
-
-      let statusLabel = "동일";
-      let note = "당월과 전월의 사업자번호와 거래처명이 같습니다.";
-      if (current && !prev) {
-        statusLabel = "당월 신규";
-        note = "당월에만 존재하는 거래처입니다.";
-      } else if (!current && prev) {
-        statusLabel = "당월 미거래";
-        note = "전월에는 있었지만 당월 매출에는 없습니다.";
-      } else if (current && prev) {
-        if (norm(current.code) !== norm(prev.code)) {
-          statusLabel = "사업자번호 변경";
-          note = `전월 ${prev.code} → 당월 ${current.code}`;
-        } else if (
-          normalizeStoreNameKey(current.name) !== normalizeStoreNameKey(prev.name)
-        ) {
-          statusLabel = "거래처명 변경";
-          note = `전월 ${prev.name} → 당월 ${current.name}`;
-        }
-      }
-
-      result.set(key, {
-        ...canonical,
-        currentAmount: current?.amount || 0,
-        prevAmount: prev?.amount || 0,
-        statusLabel,
-        note,
-      });
-    });
-
-    return Array.from(result.values()).sort((a, b) =>
-      a.name.localeCompare(b.name, "ko-KR", { numeric: true }),
-    );
-  }, [currentRows, prevMonthRows]);
-
-  const prevYearCompareRows = useMemo(() => {
-    const existingByCode = new Map(existingRows.map((row) => [norm(row.code), row]));
-    const existingByName = new Map(
-      existingRows.map((row) => [normalizeStoreNameKey(row.name), row]),
-    );
-
-    return prevYearRows
-      .map((row) => {
-        const byCode = existingByCode.get(norm(row.code));
-        const byName = existingByName.get(normalizeStoreNameKey(row.name));
-        const manual = codeMappings.find(
-          (mapping) =>
-            norm(mapping.oldCode) === norm(row.code) &&
-            (!mapping.oldName ||
-              normalizeStoreNameKey(mapping.oldName) ===
-                normalizeStoreNameKey(row.name)),
-        );
-        let statusLabel = "기존 리스트에 없음";
-        let note = "기존거래처 리스트에 없는 전년동월 거래처입니다.";
-        let matchedCode = "";
-        let matchedName = "";
-
-        if (manual) {
-          statusLabel = "수동 매핑";
-          note = "저장된 거래처 코드 매핑이 적용됩니다.";
-          matchedCode = manual.currentCode;
-          matchedName = manual.currentName;
-        } else if (byCode && byName) {
-          statusLabel = "일치";
-          note = "사업자번호와 거래처명이 모두 같습니다.";
-          matchedCode = byCode.code;
-          matchedName = byCode.name;
-        } else if (byName && !byCode) {
-          statusLabel = "사업자번호 다름";
-          note = `동일 거래처명 기준: ${row.code} ↔ ${byName.code}`;
-          matchedCode = byName.code;
-          matchedName = byName.name;
-        } else if (byCode && !byName) {
-          statusLabel = "거래처명 다름";
-          note = `동일 사업자번호 기준: ${row.name} ↔ ${byCode.name}`;
-          matchedCode = byCode.code;
-          matchedName = byCode.name;
-        }
-
-        return { ...row, statusLabel, note, matchedCode, matchedName };
-      })
-      .sort((a, b) =>
-        a.statusLabel.localeCompare(b.statusLabel, "ko-KR") ||
-        a.name.localeCompare(b.name, "ko-KR", { numeric: true }),
-      );
-  }, [prevYearRows, existingRows, codeMappings]);
-
-  const totalRows = useMemo(() => {
-    const map = new Map<string, Store>();
-    existingRows.forEach((row) => {
-      const saved = stores.find((store) => store.code === row.code);
-      map.set(row.code, {
-        code: row.code,
-        name: row.name,
-        channel: saved?.channel || row.channel || "미지정",
-        manager: saved?.manager || row.manager || "",
-        storeType: saved?.storeType || row.storeType || "비매장",
-        brand: displayBrand(saved?.brand || row.brand),
-        status: "거래중",
-      });
-    });
-
-    prevYearCompareRows.forEach((row) => {
-      const targetCode = row.matchedCode || row.code;
-      const targetName = row.matchedName || row.name;
-      if (map.has(targetCode)) return;
-      const saved = stores.find((store) => store.code === targetCode);
-      map.set(targetCode, {
-        code: targetCode,
-        name: targetName,
-        channel: saved?.channel || row.channel || "미지정",
-        manager: saved?.manager || row.manager || "",
-        storeType: saved?.storeType || row.storeType || "비매장",
-        brand: displayBrand(saved?.brand || row.brand),
-        status: "거래종료",
-      });
-    });
-
-    return Array.from(map.values()).sort((a, b) =>
-      a.name.localeCompare(b.name, "ko-KR", { numeric: true }),
-    );
-  }, [existingRows, prevYearCompareRows, stores]);
-
-  const visibleExistingRows = existingRows.filter((row) =>
-    `${row.code} ${row.name} ${row.statusLabel} ${row.note}`
-      .toLowerCase()
-      .includes(normalizedSearch),
-  );
-  const visiblePrevYearRows = prevYearCompareRows.filter((row) =>
-    `${row.code} ${row.name} ${row.statusLabel} ${row.note}`
-      .toLowerCase()
-      .includes(normalizedSearch),
-  );
-  const newStoreCodes = new Set(
-    existingRows
-      .filter((row) => row.statusLabel === "당월 신규")
-      .map((row) => row.code),
-  );
-  const visibleTotalRows = totalRows.filter((row) => {
-    if (!normalizedSearch) return true;
-    if (section !== "reference") {
-      return `${row.code} ${row.name} ${row.channel} ${row.manager} ${row.brand} ${row.status}`
-        .toLowerCase()
-        .includes(normalizedSearch);
-    }
-
-    if (otherTab === "담당자 관리") {
-      const manager = normalizeManager(row.manager);
-      return normalizedSearch === "미지정"
-        ? !manager
-        : manager === normalizedSearch.toUpperCase();
-    }
-    if (otherTab === "브랜드 관리") {
-      const brand = displayBrand(row.brand).trim().toLowerCase();
-      const isNewStoreSearch = ["신규", "신규거래처", "신규 거래처", "당월 신규 거래처"]
-        .includes(normalizedSearch.replace(/\s+/g, " "));
-      if (isNewStoreSearch) {
-        return newStoreCodes.has(row.code) || brand === "당월 신규 거래처";
-      }
-      return brand.includes(normalizedSearch);
-    }
-    if (otherTab === "채널 관리") {
-      return row.channel.trim().toLowerCase() === normalizedSearch;
-    }
-    if (otherTab === "거래상태 관리") {
-      const statusAlias = normalizedSearch === "거래중지" ? "거래중단" : normalizedSearch;
-      return row.status.trim().toLowerCase() === statusAlias;
-    }
-    return true;
-  });
-  const needsReferenceSetup = (row: Store) => {
-    if (otherTab === "브랜드 관리") {
-      const brand = displayBrand(row.brand).trim();
-      return newStoreCodes.has(row.code) || !brand || brand === "당월 신규 거래처" || brand === "미지정";
-    }
-    if (otherTab === "채널 관리") {
-      const channel = row.channel.trim();
-      return newStoreCodes.has(row.code) || !channel || channel === "미지정";
-    }
-    return newStoreCodes.has(row.code) || !row.manager.trim();
-  };
-  const visibleOtherRows = showNewOnly && (otherTab !== "담당자 관리" || managerSubTab === "거래처 담당자 관리")
-    ? visibleTotalRows.filter(needsReferenceSetup)
-    : visibleTotalRows;
-  const normalizedManagerConfigs = managerConfigs
-    .map((config) => ({ ...config, name: normalizeManager(config.name) }))
-    .filter((config, index, list) => Boolean(config.name) && list.findIndex((item) => item.name === config.name) === index)
-    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, "ko-KR"));
-  const managerOptions = normalizedManagerConfigs.map((config) => config.name);
-  const channel1Options: Channel[] = ["매장", "비매장"];
-  const brandOptions = Array.from(
-    new Set(totalRows.map((row) => displayBrand(row.brand)).filter(Boolean)),
-  ).sort((a, b) => a.localeCompare(b, "ko-KR", { numeric: true }));
-  const allVisibleSelected =
-    visibleOtherRows.length > 0 &&
-    visibleOtherRows.every((row) => selectedCodes.has(row.code));
-
-  function toggleSelected(code: string) {
-    setSelectedCodes((previous) => {
-      const next = new Set(previous);
-      if (next.has(code)) next.delete(code);
-      else next.add(code);
-      return next;
-    });
-  }
-
-  function toggleVisibleSelection() {
-    setSelectedCodes((previous) => {
-      const next = new Set(previous);
-      if (allVisibleSelected) {
-        visibleOtherRows.forEach((row) => next.delete(row.code));
-      } else {
-        visibleOtherRows.forEach((row) => next.add(row.code));
-      }
-      return next;
-    });
-  }
-
-  function applyBulkChange(field: "manager" | "brand" | "channel" | "status") {
-    const rawValue = field === "manager"
-      ? bulkManager
-      : field === "brand"
-        ? bulkBrand
-        : field === "channel"
-          ? bulkChannel1
-          : bulkStatus;
-    const value = field === "manager" ? normalizeManager(rawValue) : rawValue.trim();
-    if (!selectedCodes.size) return alert("수정할 거래처를 먼저 선택해주세요.");
-    if (!value) return alert("변경할 값을 선택하거나 입력해주세요.");
-    const label = field === "manager" ? "담당자" : field === "brand" ? "브랜드" : field === "channel" ? "채널 1" : "거래상태";
-    if (!window.confirm(`선택한 ${selectedCodes.size.toLocaleString("ko-KR")}개 거래처의 ${label}를 '${value}'(으)로 일괄 변경할까요?`)) return;
-    const nextStores = totalRows.map((row) => selectedCodes.has(row.code) ? { ...row, [field]: value } : row);
-    setStores(nextStores);
-    if (field === "manager" && !managerConfigs.some((item) => normalizeManager(item.name) === value)) {
-      setManagerConfigs((prev) => [
-        ...prev,
-        { name: value, active: true, order: prev.length + 1, canTarget: false },
-      ]);
-    }
-    if (field === "channel" && !savedChannel1Options.some((item) => item.toLowerCase() === value.toLowerCase())) {
-      setSavedChannel1Options([...savedChannel1Options, value]);
-    }
-    setSelectedCodes(new Set());
-    alert(`${label}를 ${value}(으)로 일괄 변경했습니다.`);
-  }
-
-  function addManager() {
-    const value = normalizeManager(newManager);
-    if (!value) return alert("추가할 담당자명을 입력해주세요.");
-    if (managerOptions.includes(value)) {
-      setBulkManager(value);
-      setNewManager("");
-      return alert("같은 철자의 담당자가 이미 있어 기존 담당자로 선택했습니다.");
-    }
-    setManagerConfigs((prev) => [
-      ...prev,
-      { name: value, active: true, order: prev.length + 1, canTarget: false },
-    ]);
-    setBulkManager(value);
-    setNewManager("");
-  }
-
-  function updateManagerConfig(name: string, patch: Partial<ManagerConfig>) {
-    const normalizedName = normalizeManager(name);
-    setManagerConfigs((prev) =>
-      prev.map((config) =>
-        normalizeManager(config.name) === normalizedName
-          ? { ...config, ...patch, name: normalizedName }
-          : config,
-      ),
-    );
-  }
-
-  function deleteManager() {
-    const value = normalizeManager(bulkManager);
-    if (!value) return alert("삭제할 담당자를 먼저 선택해주세요.");
-    const assignedCount = totalRows.filter((row) => normalizeManager(row.manager) === value).length;
-    const assignedMessage = assignedCount
-      ? `\n현재 ${assignedCount.toLocaleString("ko-KR")}개 거래처에 지정되어 있습니다. 삭제하면 해당 거래처의 담당자는 미지정으로 변경됩니다.`
-      : "";
-    if (!window.confirm(`담당자 '${value}'를 삭제할까요?${assignedMessage}`)) return;
-    setManagerConfigs((prev) =>
-      prev.filter((config) => normalizeManager(config.name) !== value),
-    );
-    if (assignedCount) {
-      setStores(
-        totalRows.map((row) =>
-          normalizeManager(row.manager) === value ? { ...row, manager: "" } : row,
-        ),
-      );
-    }
-    setBulkManager("");
-    setSelectedCodes(new Set());
-  }
-
-
-  function applyBrandDrafts() {
-    const changes = Object.entries(brandDrafts)
-      .map(([code, value]) => [code, value.trim()] as const)
-      .filter(([, value]) => Boolean(value));
-    if (!changes.length) return alert("수정할 브랜드 값을 먼저 입력해주세요.");
-    if (!window.confirm(`입력한 ${changes.length.toLocaleString("ko-KR")}개 거래처의 브랜드를 한꺼번에 반영할까요?`)) return;
-    const changeMap = new Map(changes);
-    setStores(totalRows.map((row) => changeMap.has(row.code) ? { ...row, brand: changeMap.get(row.code) || row.brand } : row));
-    setBrandDrafts({});
-    alert(`브랜드 ${changes.length.toLocaleString("ko-KR")}건을 한꺼번에 반영했습니다.`);
-  }
-
-  function downloadBrandUploadTemplate() {
-    const rows = totalRows.map((row) => ({
-      사업자번호: row.code,
-      거래처명: row.name,
-      "현재 브랜드": displayBrand(row.brand),
-      "변경할 브랜드": "",
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 사업자번호: "", 거래처명: "", "현재 브랜드": "", "변경할 브랜드": "" }]);
-    ws["!cols"] = [{ wch: 18 }, { wch: 32 }, { wch: 22 }, { wch: 24 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "브랜드 일괄수정");
-    XLSX.writeFile(wb, `브랜드_일괄수정_양식_${month}.xlsx`);
-  }
-
-  async function previewBrandUpload(file: File) {
-    try {
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: false });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      if (!sheet) throw new Error("첫 번째 시트를 찾을 수 없습니다.");
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
-      const headerValue = (row: Record<string, unknown>, names: string[]) => {
-        const found = Object.keys(row).find((key) => names.includes(norm(key).replace(/\s/g, "")));
-        return found ? norm(row[found]) : "";
-      };
-      const codeKey = (value: unknown) => {
-        const text = norm(value).replace(/\.0$/, "");
-        const digits = text.replace(/\D/g, "");
-        return digits || text.toLowerCase().replace(/\s/g, "");
-      };
-      const storesByCode = new Map<string, Store[]>();
-      const storesByName = new Map<string, Store[]>();
-      totalRows.forEach((store) => {
-        const cKey = codeKey(store.code);
-        const nKey = normalizeStoreNameKey(store.name);
-        storesByCode.set(cKey, [...(storesByCode.get(cKey) || []), store]);
-        storesByName.set(nKey, [...(storesByName.get(nKey) || []), store]);
-      });
-
-      const preview = rows.map((row, index): BrandUploadPreviewRow => {
-        const inputCode = headerValue(row, ["사업자번호", "거래처코드", "사업자등록번호"]);
-        const inputName = headerValue(row, ["거래처명", "사업자명", "상호", "거래처"]);
-        const inputBrand = headerValue(row, ["변경할브랜드", "변경브랜드", "신규브랜드", "브랜드"]);
-        const base = { rowNumber: index + 2, inputCode, inputName, inputBrand, storeCode: "", storeName: "", beforeBrand: "", afterBrand: "", status: "미매칭" as const, reason: "" };
-        if (!inputBrand) return { ...base, status: "건너뜀", reason: "변경할 브랜드가 비어 있어 변경하지 않습니다." };
-        const codeMatches = inputCode ? (storesByCode.get(codeKey(inputCode)) || []) : [];
-        const nameMatches = inputName ? (storesByName.get(normalizeStoreNameKey(inputName)) || []) : [];
-        if (codeMatches.length > 1 || nameMatches.length > 1) return { ...base, status: "충돌", reason: "같은 사업자번호 또는 거래처명을 가진 거래처가 여러 개입니다." };
-        const byCode = codeMatches[0];
-        const byName = nameMatches[0];
-        if (byCode && byName && byCode.code !== byName.code) return { ...base, status: "충돌", reason: `사업자번호는 '${byCode.name}', 거래처명은 '${byName.name}'을(를) 가리킵니다.` };
-        const matched = byCode || (!inputCode ? byName : undefined) || (!byCode ? byName : undefined);
-        if (!matched) return { ...base, status: "미매칭", reason: "일치하는 거래처를 찾지 못했습니다." };
-        if (inputCode && !byCode && byName) return { ...base, storeCode: matched.code, storeName: matched.name, beforeBrand: displayBrand(matched.brand), status: "충돌", reason: "사업자번호가 일치하지 않아 거래처명만으로 자동 반영하지 않습니다." };
-        const afterBrand = ["삭제", "미지정"].includes(inputBrand.replace(/\s/g, "")) ? "미지정" : inputBrand.trim();
-        return { ...base, storeCode: matched.code, storeName: matched.name, beforeBrand: displayBrand(matched.brand), afterBrand, status: "정상", reason: afterBrand === displayBrand(matched.brand) ? "현재 브랜드와 동일합니다." : "변경 가능" };
-      });
-
-      const normalByCode = new Map<string, number[]>();
-      preview.forEach((row, index) => {
-        if (row.status === "정상") normalByCode.set(row.storeCode, [...(normalByCode.get(row.storeCode) || []), index]);
-      });
-      normalByCode.forEach((indices) => {
-        if (indices.length < 2) return;
-        indices.forEach((index) => {
-          preview[index] = { ...preview[index], status: "중복", reason: "파일 안에 같은 거래처가 두 번 이상 있습니다." };
-        });
-      });
-      setBrandUploadFileName(file.name);
-      setBrandUploadPreview(preview);
-    } catch (error) {
-      setBrandUploadFileName("");
-      setBrandUploadPreview([]);
-      alert(`브랜드 업로드 파일을 읽지 못했습니다.\n${error instanceof Error ? error.message : "파일 형식을 확인해주세요."}`);
-    } finally {
-      if (brandUploadInputRef.current) brandUploadInputRef.current.value = "";
-    }
-  }
-
-  function applyBrandUpload() {
-    const validRows = brandUploadPreview.filter((row) => row.status === "정상" && row.afterBrand !== row.beforeBrand);
-    if (!validRows.length) return alert("실제로 변경할 수 있는 정상 행이 없습니다.");
-    if (!window.confirm(`정상 확인된 ${validRows.length.toLocaleString("ko-KR")}개 거래처의 브랜드를 적용할까요?\n미매칭·충돌·중복 행은 반영되지 않습니다.`)) return;
-    const changes = new Map(validRows.map((row) => [row.storeCode, row.afterBrand]));
-    setStores(totalRows.map((store) => changes.has(store.code) ? { ...store, brand: changes.get(store.code) || store.brand } : store));
-    setBrandUploadPreview([]);
-    setBrandUploadFileName("");
-    alert(`브랜드 ${validRows.length.toLocaleString("ko-KR")}건을 적용했습니다. 기존 EST 금액은 복사하지 않고 변경된 브랜드 기준으로 즉시 재분류됩니다.`);
-  }
-
-  function addChannel1Option() {
-    const value = newChannel1.trim();
-    if (!value) return alert("추가할 업종명을 입력해주세요.");
-    const existing = channel1Options.find((item) => item.toLowerCase() === value.toLowerCase());
-    if (existing) {
-      setBulkChannel1(existing);
-      setNewChannel1("");
-      return alert("같은 업종이 이미 있어 기존 업종으로 선택했습니다.");
-    }
-    setSavedChannel1Options([...savedChannel1Options, value]);
-    setBulkChannel1(value);
-    setNewChannel1("");
-  }
-
-  function saveTotalList() {
-    if (!window.confirm(
-      `총 거래처 리스트 ${totalRows.length.toLocaleString("ko-KR")}건을 최종 거래처 기준으로 저장할까요?\n저장 후 매출현황과 거래처별 상세가 이 리스트를 기준으로 표시됩니다.`,
-    )) return;
-    setStores(totalRows);
-    alert(`총 거래처 리스트 ${totalRows.length.toLocaleString("ko-KR")}건을 저장했습니다.`);
-  }
-
-  if (section === "reference" && otherTab === "품목 관리") {
-    return (
-      <div className="grid min-h-0 flex-1 gap-3 overflow-hidden pb-5 lg:grid-cols-[150px_minmax(0,1fr)]">
-        <aside className="h-fit rounded-xl border border-slate-300 bg-white p-2 shadow-sm">
-          <div className="px-2 pb-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">기준정보</div>
-          <div className="space-y-1">
-            {(["담당자 관리", "브랜드 관리", "채널 관리", "거래상태 관리", "품목 관리"] as const).map((menu) => (
-              <Fragment key={menu}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setListTab("기타 관리");
-                    setOtherTab(menu);
-                    setSelectedCodes(new Set());
-                    setShowNewOnly(false);
-                    setBrandDrafts({});
-                  }}
-                  className={`w-full rounded-lg border-l-4 px-3 py-2 text-left text-xs font-bold transition ${otherTab === menu ? "border-blue-600 bg-blue-50 text-blue-800" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
-                >
-                  {menu.replace(" 관리", "")}
-                </button>
-              </Fragment>
-            ))}
-          </div>
-        </aside>
-        <ItemMasterManagement
+        <UploadPage
+          stores={stores}
+          setStores={setStores}
           sales={sales}
-          itemMasters={itemMasters || []}
-          setItemMasters={setItemMasters}
+          setSales={setSales}
+          salesActions={salesActions}
           month={month}
+          date={date}
+          timeConfigs={timeConfigs}
+          setTimeConfigs={setTimeConfigs}
         />
-      </div>
-    );
-  }
-
-  const badgeClass = (label: string) => {
-    if (["동일", "일치", "수동 매핑"].includes(label))
-      return "bg-emerald-100 text-emerald-800";
-    if (["당월 신규", "기존 리스트에 없음"].includes(label))
-      return "bg-blue-100 text-blue-800";
-    if (["당월 미거래"].includes(label))
-      return "bg-slate-200 text-slate-700";
-    return "bg-amber-100 text-amber-900";
-  };
-
-  return (
-    <div className="grid min-h-0 flex-1 gap-3 overflow-hidden pb-5 lg:grid-cols-[150px_minmax(0,1fr)]">
-      <aside className="h-fit rounded-xl border border-slate-300 bg-white p-2 shadow-sm">
-        <div className="px-2 pb-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-400">
-          {section === "list" ? "거래처 리스트" : "기준정보"}
-        </div>
-        <div className="space-y-1">
-          {(section === "list"
-            ? (["기존거래처 리스트", "전년동월 리스트", "총 거래처 리스트"] as const)
-            : (["담당자 관리", "브랜드 관리", "채널 관리", "거래상태 관리", "품목 관리"] as const)
-          ).map((menu) => {
-            const active = section === "list" ? listTab === menu : otherTab === menu;
-            return (
-              <Fragment key={menu}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (section === "list") setListTab(menu as ListTab);
-                    else {
-                      setListTab("기타 관리");
-                      setOtherTab(menu as typeof otherTab);
-                      setSearch("");
-                      setSearchDraft("");
-                      setSelectedCodes(new Set());
-                      setShowNewOnly(false);
-                      setBrandDrafts({});
-                    }
-                  }}
-                  className={`w-full rounded-lg border-l-4 px-3 py-2 text-left text-xs font-bold transition ${active ? "border-blue-600 bg-blue-50 text-blue-800" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
-                >
-                  {menu.replace(" 리스트", "").replace(" 관리", "")}
-                </button>
-                {section === "reference" && menu === "담당자 관리" && otherTab === "담당자 관리" && (
-                  <div className="ml-3 space-y-1 border-l border-slate-200 pl-2">
-                    {(["EST 담당자 관리", "거래처 담당자 관리"] as const).map((subMenu) => (
-                      <button
-                        key={subMenu}
-                        type="button"
-                        onClick={() => {
-                          setManagerSubTab(subMenu);
-                          setSearch("");
-                          setSearchDraft("");
-                          setSelectedCodes(new Set());
-                          setShowNewOnly(false);
-                        }}
-                        className={`w-full rounded-md px-2 py-1.5 text-left text-[11px] font-bold transition ${managerSubTab === subMenu ? "bg-orange-50 text-orange-800" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}
-                      >
-                        {subMenu}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </Fragment>
-            );
-          })}
-        </div>
-      </aside>
-
-      <main className="flex min-h-0 min-w-0 flex-col space-y-3 overflow-hidden">
-        <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-extrabold text-slate-900">{section === "list" ? listTab : otherTab === "담당자 관리" ? managerSubTab : otherTab}</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                value={searchDraft}
-                onChange={(event) => setSearchDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter") return;
-                  event.preventDefault();
-                  setSearch(searchDraft.trim());
-                  setSelectedCodes(new Set());
-                }}
-                placeholder={section !== "reference"
-                  ? "검색어 입력 후 Enter"
-                  : otherTab === "담당자 관리"
-                    ? "담당자 이니셜 또는 미지정 입력 후 Enter"
-                    : otherTab === "브랜드 관리"
-                      ? "브랜드명 또는 신규 거래처 입력 후 Enter"
-                      : otherTab === "채널 관리"
-                        ? "매장 또는 비매장 입력 후 Enter"
-                        : otherTab === "거래상태 관리"
-                          ? "거래중지·거래종료·거래중 입력 후 Enter"
-                          : "검색어 입력 후 Enter"}
-                className="h-8 w-[300px] rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-blue-500"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch("");
-                    setSearchDraft("");
-                    setSelectedCodes(new Set());
-                  }}
-                  className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100"
-                >
-                  검색 초기화
-                </button>
-              )}
-              {section === "list" && listTab === "총 거래처 리스트" && (
-                <button type="button" onClick={saveTotalList} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700">총 리스트 저장</button>
-              )}
-            </div>
-          </div>
-
-          {section === "reference" && (
-            <>
-              {(otherTab !== "담당자 관리" || managerSubTab === "거래처 담당자 관리") && (
-              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 p-2">
-                <span className="mr-1 text-[11px] font-semibold text-slate-600">선택 {selectedCodes.size.toLocaleString("ko-KR")}건 / 검색결과 {visibleOtherRows.length.toLocaleString("ko-KR")}건</span>
-                <button type="button" onClick={toggleVisibleSelection} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100">{allVisibleSelected ? "검색결과 선택 해제" : "검색결과 전체 선택"}</button>
-                <button type="button" onClick={() => setSelectedCodes(new Set())} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100">선택 초기화</button>
-                {otherTab !== "담당자 관리" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowNewOnly((previous) => !previous);
-                      setSelectedCodes(new Set());
-                    }}
-                    className={`h-8 rounded-lg border px-3 text-xs font-bold ${showNewOnly ? "border-orange-400 bg-orange-50 text-orange-800" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}
-                  >
-                    {showNewOnly ? "전체 거래처 보기" : "신규·미설정 거래처 보기"}
-                  </button>
-                )}
-                {otherTab === "담당자 관리" && managerSubTab === "거래처 담당자 관리" && (
-                  <>
-                    <select value={bulkManager} onChange={(event) => setBulkManager(event.target.value)} className="h-8 min-w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold"><option value="">변경 담당자 선택</option>{managerOptions.map((manager) => <option key={manager} value={manager}>{manager}</option>)}</select>
-                    <button type="button" onClick={() => applyBulkChange("manager")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">담당자 일괄 수정</button>
-                    <button type="button" onClick={deleteManager} className="h-8 rounded-lg border border-red-300 bg-red-50 px-3 text-xs font-bold text-red-700 hover:bg-red-100">담당자 삭제</button>
-                    <span className="mx-1 h-5 w-px bg-slate-300" />
-                    <input value={newManager} onChange={(event) => setNewManager(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addManager(); }} placeholder="신규 담당자" className="h-8 w-[130px] rounded-lg border border-slate-300 bg-white px-2 text-xs" />
-                    <button type="button" onClick={addManager} className="h-8 rounded-lg border border-blue-300 bg-blue-50 px-3 text-xs font-bold text-blue-700">담당자 추가</button>
-                  </>
-                )}
-                {otherTab === "브랜드 관리" && (
-                  <>
-                    <input list="store-brand-options" value={bulkBrand} onChange={(event) => setBulkBrand(event.target.value)} placeholder="변경 브랜드 입력 또는 선택" className="h-8 min-w-[220px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold" />
-                    <datalist id="store-brand-options">{brandOptions.map((brand) => <option key={brand} value={brand} />)}</datalist>
-                    <button type="button" onClick={() => applyBulkChange("brand")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">선택 브랜드 일괄 수정</button>
-                    <span className="mx-1 h-5 w-px bg-slate-300" />
-                    <button type="button" onClick={applyBrandDrafts} className="h-8 rounded-lg bg-orange-500 px-3 text-xs font-bold text-white hover:bg-orange-600">입력값 전체 반영</button>
-                    <button type="button" onClick={() => setBrandDrafts({})} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">입력값 초기화</button>
-                    <span className="mx-1 h-5 w-px bg-slate-300" />
-                    <button type="button" onClick={downloadBrandUploadTemplate} className="h-8 rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 hover:bg-emerald-100">브랜드 업로드 양식 다운로드</button>
-                    <input
-                      ref={brandUploadInputRef}
-                      type="file"
-                      accept=".xlsx,.xls,.csv"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) void previewBrandUpload(file);
-                      }}
-                      className="hidden"
-                    />
-                    <button type="button" onClick={() => brandUploadInputRef.current?.click()} className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700">브랜드 파일 업로드</button>
-                  </>
-                )}
-                {otherTab === "채널 관리" && (
-                  <>
-                    <select value={bulkChannel1} onChange={(event) => setBulkChannel1(event.target.value)} className="h-8 min-w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold"><option value="">채널 1 선택</option>{channel1Options.map((channel) => <option key={channel} value={channel}>{channel}</option>)}</select>
-                    <button type="button" onClick={() => applyBulkChange("channel")} className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">채널 1 일괄 수정</button>
-                  </>
-                )}
-                {otherTab === "거래상태 관리" && (
-                  <>
-                    <select value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value as "" | Store["status"])} className="h-8 min-w-[150px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold">
-                      <option value="">거래상태 선택</option>
-                      <option value="거래중">거래중</option>
-                      <option value="거래중단">거래중단</option>
-                      <option value="거래종료">거래종료</option>
-                    </select>
-                    <button type="button" onClick={() => applyBulkChange("status")} className="h-8 rounded-lg bg-violet-600 px-3 text-xs font-bold text-white">거래상태 일괄 수정</button>
-                  </>
-                )}
-              </div>
-              )}
-              {otherTab === "담당자 관리" && managerSubTab === "EST 담당자 관리" && (
-                <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                  <table className="w-full min-w-[720px] border-collapse text-center text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-700">
-                        <th className="border border-slate-200 px-3 py-2">담당자명</th>
-                        <th className="border border-slate-200 px-3 py-2">EST 메뉴 사용</th>
-                        <th className="border border-slate-200 px-3 py-2">표시 순서</th>
-                        <th className="border border-slate-200 px-3 py-2">Target 입력 권한</th>
-                        <th className="border border-slate-200 px-3 py-2">담당 거래처</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {normalizedManagerConfigs.map((config) => {
-                        const assignedCount = totalRows.filter((row) => normalizeManager(row.manager) === config.name).length;
-                        return (
-                          <tr key={config.name} className="hover:bg-blue-50/40">
-                            <td className="border border-slate-200 px-3 py-2 font-extrabold text-slate-900">{config.name}</td>
-                            <td className="border border-slate-200 px-3 py-2">
-                              <input type="checkbox" checked={config.active} onChange={(event) => updateManagerConfig(config.name, { active: event.target.checked })} className="h-4 w-4 accent-orange-500" />
-                            </td>
-                            <td className="border border-slate-200 px-3 py-2">
-                              <input type="number" min={1} value={config.order} onChange={(event) => updateManagerConfig(config.name, { order: Math.max(1, Number(event.target.value) || 1) })} className="h-8 w-20 rounded-lg border border-slate-300 px-2 text-center font-bold" />
-                            </td>
-                            <td className="border border-slate-200 px-3 py-2">
-                              <input type="checkbox" checked={config.canTarget} onChange={(event) => updateManagerConfig(config.name, { canTarget: event.target.checked })} className="h-4 w-4 accent-violet-600" />
-                            </td>
-                            <td className="border border-slate-200 px-3 py-2 font-bold text-slate-700">{assignedCount.toLocaleString("ko-KR")}개</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  <div className="border-t border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
-                    사용 체크된 담당자만 EST 입력 왼쪽 메뉴에 표시되며, 표시 순서와 Target 입력 권한도 즉시 연동됩니다.
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-      {section === "reference" && otherTab === "브랜드 관리" && brandUploadPreview.length > 0 && (
-        <div className="rounded-xl border border-emerald-300 bg-white p-3 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <div className="text-sm font-extrabold text-slate-900">브랜드 업로드 미리보기</div>
-              <div className="mt-1 text-[11px] font-semibold text-slate-500">{brandUploadFileName} · 정상 {brandUploadPreview.filter((row) => row.status === "정상").length.toLocaleString("ko-KR")}건 · 미매칭 {brandUploadPreview.filter((row) => row.status === "미매칭").length.toLocaleString("ko-KR")}건 · 충돌 {brandUploadPreview.filter((row) => row.status === "충돌").length.toLocaleString("ko-KR")}건 · 중복 {brandUploadPreview.filter((row) => row.status === "중복").length.toLocaleString("ko-KR")}건 · 건너뜀 {brandUploadPreview.filter((row) => row.status === "건너뜀").length.toLocaleString("ko-KR")}건</div>
-            </div>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => { setBrandUploadPreview([]); setBrandUploadFileName(""); }} className="h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">취소</button>
-              <button type="button" onClick={applyBrandUpload} className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700">정상 건 최종 적용</button>
-            </div>
-          </div>
-          <div className="mt-3 max-h-64 overflow-auto rounded-lg border border-slate-200">
-            <table className="w-full min-w-[1050px] border-collapse text-center text-[11px] whitespace-nowrap">
-              <thead><tr className="bg-emerald-50 text-slate-700"><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">행</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">입력 사업자번호</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">입력 거래처명</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">매칭 거래처</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">변경 전</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">변경 후</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">결과</th><th className="sticky top-0 border border-slate-200 bg-emerald-50 px-2 py-2">확인 내용</th></tr></thead>
-              <tbody>{brandUploadPreview.map((row) => <tr key={`${row.rowNumber}-${row.inputCode}-${row.inputName}`} className={row.status === "정상" ? "bg-emerald-50/30" : row.status === "건너뜀" ? "bg-slate-50" : "bg-red-50/40"}><td className="border border-slate-200 px-2 py-1.5">{row.rowNumber}</td><td className="border border-slate-200 px-2 py-1.5">{row.inputCode || "-"}</td><td className="border border-slate-200 px-2 py-1.5 text-left">{row.inputName || "-"}</td><td className="border border-slate-200 px-2 py-1.5 text-left">{row.storeName ? `${row.storeCode} / ${row.storeName}` : "-"}</td><td className="border border-slate-200 px-2 py-1.5">{row.beforeBrand || "-"}</td><td className="border border-slate-200 px-2 py-1.5 font-bold text-emerald-800">{row.afterBrand || row.inputBrand || "-"}</td><td className="border border-slate-200 px-2 py-1.5"><span className={`rounded-full px-2 py-0.5 font-bold ${row.status === "정상" ? "bg-emerald-100 text-emerald-800" : row.status === "건너뜀" ? "bg-slate-200 text-slate-700" : "bg-red-100 text-red-700"}`}>{row.status}</span></td><td className="border border-slate-200 px-2 py-1.5 text-left text-slate-600">{row.reason}</td></tr>)}</tbody>
-            </table>
-          </div>
-        </div>
       )}
-
-      <div className="min-h-0 overflow-hidden rounded-2xl border-2 border-slate-400 bg-white shadow-sm">
-        <div className="min-h-0 flex-1 overflow-auto pb-8 pr-2" style={{ height: "clamp(420px, calc(100vh - 285px), 760px)" }}>
-          {listTab === "기존거래처 리스트" && (
-            <table className="w-full min-w-[1250px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
-              <thead>
-                <tr className="bg-slate-100">
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">사업자번호</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">거래처명</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2">전월 매출</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2">당월 매출</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">비교 결과</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">확인 내용</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleExistingRows.map((row) => (
-                  <tr key={`${row.code}|${row.name}`} className="hover:bg-orange-50/50">
-                    <td className="border border-slate-300 px-3 py-2">{row.code}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-left font-semibold">{row.name}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.prevAmount)}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.currentAmount)}</td>
-                    <td className="border border-slate-300 px-3 py-2"><span className={`rounded-full px-3 py-1 font-bold ${badgeClass(row.statusLabel)}`}>{row.statusLabel}</span></td>
-                    <td className="border border-slate-300 px-3 py-2 text-left text-slate-600">{row.note}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {listTab === "전년동월 리스트" && (
-            <table className="w-full min-w-[1350px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
-              <thead>
-                <tr className="bg-slate-100">
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">전년 사업자번호</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">전년 거래처명</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-emerald-50 px-3 py-2">전년동월 매출</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">비교 결과</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">기존 리스트 연결</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">확인 내용</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visiblePrevYearRows.map((row) => (
-                  <tr key={`${row.code}|${row.name}`} className="hover:bg-orange-50/50">
-                    <td className="border border-slate-300 px-3 py-2">{row.code}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-left font-semibold">{row.name}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-right font-semibold">{won(row.amount)}</td>
-                    <td className="border border-slate-300 px-3 py-2"><span className={`rounded-full px-3 py-1 font-bold ${badgeClass(row.statusLabel)}`}>{row.statusLabel}</span></td>
-                    <td className="border border-slate-300 px-3 py-2 text-left">{row.matchedCode ? `${row.matchedCode} / ${row.matchedName}` : "-"}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-left text-slate-600">{row.note}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {listTab === "총 거래처 리스트" && (
-            <table className="w-full min-w-[1400px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
-              <thead>
-                <tr className="bg-slate-100">
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">사업자번호</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">거래처명</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">담당자</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">채널</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">브랜드</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">상태</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleTotalRows.map((row) => (
-                  <tr key={row.code} className="hover:bg-orange-50/50">
-                    <td className="border border-slate-300 px-3 py-2">{row.code}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-left font-semibold">{row.name}</td>
-                    <td className="border border-slate-300 px-3 py-2 font-bold">{row.manager ? normalizeManager(row.manager) : "미지정"}</td>
-                    <td className="border border-slate-300 px-3 py-2">{row.channel}</td>
-                    <td className="border border-slate-300 px-3 py-2">{row.storeType}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-left">{row.brand}</td>
-                    <td className="border border-slate-300 px-3 py-2"><span className={`rounded-full px-3 py-1 font-bold ${row.status === "거래중" ? "bg-emerald-100 text-emerald-800" : row.status === "거래중단" ? "bg-amber-100 text-amber-900" : "bg-slate-200 text-slate-700"}`}>{row.status}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {section === "reference" && listTab === "기타 관리" && !(otherTab === "담당자 관리" && managerSubTab === "EST 담당자 관리") && (
-            <table className="w-full min-w-[1150px] border-separate border-spacing-0 text-center text-xs whitespace-nowrap">
-              <thead>
-                <tr className="bg-slate-100">
-                  <th className="sticky top-0 z-20 w-12 border border-slate-300 bg-slate-100 px-2 py-2">
-                    <input
-                      type="checkbox"
-                      checked={allVisibleSelected}
-                      onChange={toggleVisibleSelection}
-                      aria-label="검색결과 전체 선택"
-                      className="h-4 w-4 accent-blue-600"
-                    />
-                  </th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">사업자번호</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">거래처명</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-blue-50 px-3 py-2">현재 담당자</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-orange-50 px-3 py-2">현재 브랜드</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">채널</th>
-                  <th className="sticky top-0 z-20 border border-slate-300 bg-slate-100 px-3 py-2">상태</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleOtherRows.map((row) => {
-                  const checked = selectedCodes.has(row.code);
-                  return (
-                    <tr
-                      key={row.code}
-                      className={checked ? "bg-blue-50" : "hover:bg-orange-50/50"}
-                      onClick={() => toggleSelected(row.code)}
-                    >
-                      <td className="border border-slate-300 px-2 py-2">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleSelected(row.code)}
-                          onClick={(event) => event.stopPropagation()}
-                          aria-label={`${row.name} 선택`}
-                          className="h-4 w-4 accent-blue-600"
-                        />
-                      </td>
-                      <td className="border border-slate-300 px-3 py-2">{row.code}</td>
-                      <td className="border border-slate-300 px-3 py-2 text-left font-semibold">{row.name}</td>
-                      <td className="border border-slate-300 px-3 py-2 font-bold">{row.manager ? normalizeManager(row.manager) : "미지정"}</td>
-                      <td className="border border-slate-300 px-3 py-2 text-left">
-                        {otherTab === "브랜드 관리" ? (
-                          <input
-                            list="store-brand-options"
-                            value={brandDrafts[row.code] ?? row.brand ?? ""}
-                            onChange={(event) => setBrandDrafts((previous) => ({ ...previous, [row.code]: event.target.value }))}
-                            onClick={(event) => event.stopPropagation()}
-                            placeholder="브랜드 입력"
-                            className="h-8 w-full min-w-[220px] rounded-lg border border-orange-200 bg-orange-50 px-2 text-xs font-semibold text-slate-900 outline-none focus:border-orange-500"
-                          />
-                        ) : (row.brand || "미지정")}
-                      </td>
-                      <td className="border border-slate-300 px-3 py-2">
-                        {otherTab === "채널 관리" ? (
-                          <select
-                            value={row.channel === "매장" ? "매장" : row.channel === "비매장" ? "비매장" : ""}
-                            onChange={(event) => {
-                              event.stopPropagation();
-                              const nextChannel = event.target.value as Channel;
-                              if (!nextChannel) return;
-                              setStores(
-                                totalRows.map((store) =>
-                                  store.code === row.code ? { ...store, channel: nextChannel } : store,
-                                ),
-                              );
-                            }}
-                            onClick={(event) => event.stopPropagation()}
-                            className="h-8 min-w-[92px] rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500"
-                            aria-label={`${row.name} 채널 1 선택`}
-                          >
-                            <option value="">선택</option>
-                            <option value="매장">매장</option>
-                            <option value="비매장">비매장</option>
-                          </select>
-                        ) : (
-                          row.channel
-                        )}
-                      </td>
-                      <td className="border border-slate-300 px-3 py-2">
-                        <span className={`rounded-full px-3 py-1 font-bold ${row.status === "거래중" ? "bg-emerald-100 text-emerald-800" : row.status === "거래중단" ? "bg-amber-100 text-amber-900" : "bg-slate-200 text-slate-700"}`}>
-                          {row.status}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {!visibleOtherRows.length && (
-                  <tr>
-                    <td colSpan={7} className="border border-slate-300 px-4 py-12 text-center text-sm text-slate-500">
-                      검색 조건에 맞는 거래처가 없습니다.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          )}
-          {section === "reference" && listTab === "기타 관리" && !(otherTab === "담당자 관리" && managerSubTab === "EST 담당자 관리") && (
-            <div className="border-t-4 border-slate-500 bg-slate-100 px-4 py-2 text-center text-[11px] font-extrabold text-slate-600">표 끝</div>
-          )}
-        </div>
-      </div>
-      </main>
     </div>
   );
 }
@@ -16022,6 +10466,12 @@ function MappingPage({
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-base font-bold">거래처 매핑관리</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            채널/담당자/브랜드 정보를 거래처코드 기준으로 관리합니다. 전년동월
+            매출은 당월 매출에 같은 거래처코드나 거래처명이 있으면 당월 거래처
+            기준으로 합산하고, 당월 매출이 없으면 전년동월 업로드 거래처
+            기준으로 별도 표시합니다.
+          </p>
         </div>
         <label className="shrink-0 cursor-pointer rounded-md bg-green-600 px-2 py-1 text-[11px] font-semibold text-white">
           매핑 엑셀 업로드
@@ -16191,6 +10641,9 @@ function MappingPage({
                 <h3 className="text-lg font-bold text-slate-900">
                   전년동월 거래처 매핑 검증
                 </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  검증표는 필요할 때만 열어서 수동 매핑을 설정합니다.
+                </p>
               </div>
               <button
                 type="button"
@@ -16200,13 +10653,19 @@ function MappingPage({
                 닫기
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto bg-white px-4 pb-10 pt-0 scroll-pb-10">
+            <div className="min-h-0 flex-1 overflow-auto bg-white px-4 pb-4 pt-0">
               <div className="rounded-xl border border-gray-300 bg-slate-50 p-3">
                 <div className="mb-2 flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">
                       전년동월 거래처 매핑 검증
                     </h3>
+                    <p className="mt-1 text-xs text-slate-500">
+                      전년동월 업로드 거래처를 당월 매출 거래처 기준으로
+                      비교합니다. 코드나 거래처명 중 하나라도 당월 매출과 같으면
+                      당월 거래처 기준으로 자동 합산되고, 당월 매출이 없으면
+                      전년동월 업로드 거래처 기준으로 표시됩니다.
+                    </p>
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
                     <span>자동 {mappingSummary["자동 매핑"] || 0}건</span>
@@ -16519,6 +10978,9 @@ function TargetByTypePage({
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-lg font-bold">Target 관리</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Target은 거래처별이 아니라 매장 / 비매장 기준으로만 관리합니다.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -16548,7 +11010,7 @@ function TargetByTypePage({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
           <p className="text-sm font-semibold text-slate-600">매장 Target</p>
           <input
@@ -16684,6 +11146,9 @@ function TargetOrEstPage({
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-lg font-bold">{title}</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            거래처별 {title.replace(" 관리", "")} 금액을 관리합니다.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <label className="cursor-pointer rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white">
@@ -16834,11 +11299,6 @@ function UploadPage({
   date,
   timeConfigs,
   setTimeConfigs,
-  itemMasters,
-  setItemMasters,
-  ests,
-  setEsts,
-  codeMappings,
 }: {
   stores: Store[];
   setStores: (v: Store[]) => void;
@@ -16849,16 +11309,11 @@ function UploadPage({
   date: string;
   timeConfigs: TimeConfig[];
   setTimeConfigs: (v: TimeConfig[]) => void;
-  itemMasters: ItemMasterRecord[];
-  setItemMasters: (v: ItemMasterRecord[]) => void;
-  ests: EstRecord[];
-  setEsts: (v: EstRecord[]) => void;
-  codeMappings: StoreCodeMapping[];
 }) {
   const [holidayText, setHolidayText] = useState("");
   const [deleteDate, setDeleteDate] = useState(today());
 
-  async function uploadSales(file: File | null) {
+  async function uploadSales(file: File | null, period: PeriodType) {
     if (!file) return;
     const rows = await readFileRows(file);
     const parsed = rows
@@ -16868,7 +11323,8 @@ function UploadPage({
             r["일자"] ??
             r["매출일"] ??
             r["판매일"] ??
-            r["기준일"],
+            r["기준일"] ??
+            deleteDate,
         );
         const storeCode = norm(
           r["거래처 코드"] ?? r["거래처코드"] ?? r["매장코드"],
@@ -16877,12 +11333,6 @@ function UploadPage({
         const itemCode = norm(r["품목 코드"] ?? r["품목코드"] ?? r["상품코드"]);
         const itemName = norm(r["품목명[규격]"] ?? r["품목명"] ?? r["상품명"]);
         const quantity = num(r["판매 수량"] ?? r["수량"]);
-        const saleUnitPrice = num(
-          r["판매 단가"] ?? r["판매단가"] ?? r["판매가"],
-        );
-        const costUnitPrice = num(
-          r["원가 단가"] ?? r["원가단가"] ?? r["매입 단가"] ?? r["매입단가"],
-        );
         const rawSalesAmount =
           r["판매 금액"] ??
           r["판매금액"] ??
@@ -16917,28 +11367,22 @@ function UploadPage({
             r["매출이익률"] ??
             r["마진율"],
         );
-        const remark = norm(r["적요"] ?? r["비고"] ?? r["메모"]);
         const mapping = storeMap(stores).get(storeCode);
 
-        const saleMonth = saleDate.slice(0, 7);
         return makeSale(
-          "current",
-          saleMonth,
+          period,
+          month,
           saleDate,
           storeCode,
           storeName,
           itemCode || `ITEM-${index}`,
           itemName,
           quantity,
-          saleUnitPrice,
           salesAmount,
-          costUnitPrice,
           costAmount,
           profitAmount,
           stores,
           uploadedProfitRate,
-          index + 2,
-          remark,
         );
       })
       .filter(
@@ -16951,14 +11395,10 @@ function UploadPage({
             r.quantity !== 0),
       );
 
-    if (new Set(parsed.map((row) => row.id)).size !== parsed.length) {
-      alert(
-        "엑셀 행별 고유번호를 만들지 못해 업로드를 중단했습니다. 기존 데이터는 변경하지 않았습니다.",
-      );
-      return;
-    }
-
-    const missingStores = parsed
+    const missingStores =
+      period === "prevYear"
+        ? buildAutoClosedStoresFromPrevYear(parsed, stores)
+        : parsed
             .filter((r) => !storeMap(stores).has(r.storeCode))
             .map((r) => ({
               code: r.storeCode,
@@ -16983,257 +11423,33 @@ function UploadPage({
       return;
     }
 
+    const uploadedDates = Array.from(
+      new Set(parsed.map((r) => r.saleDate).filter(Boolean)),
+    );
+
     try {
-      const rowsByMonth = new Map<string, SalesRecord[]>();
-      parsed.forEach((row) => {
-        const saleMonth = row.saleDate.slice(0, 7);
-        rowsByMonth.set(saleMonth, [...(rowsByMonth.get(saleMonth) || []), row]);
-      });
-      for (const [saleMonth, monthRows] of Array.from(rowsByMonth.entries()).sort()) {
-        const uploadedDates = Array.from(new Set(monthRows.map((row) => row.saleDate))).sort();
-        const result = await salesActions.replaceUpload({
-          period: "current",
-          refMonth: saleMonth,
-          fileName: file.name,
-          uploadedDates,
-          rows: monthRows,
-        });
-        if (result.mode === "legacy") {
-          console.warn("Sales V3 SQL이 아직 적용되지 않아 기존 저장 방식을 사용했습니다.");
-        }
-      }
-
-      const itemMasterMap = new Map(itemMasters.map((item) => [item.itemCode, item]));
-      let addedItemCount = 0;
-      parsed.forEach((row) => {
-        if (!row.itemCode || itemMasterMap.has(row.itemCode)) return;
-        itemMasterMap.set(row.itemCode, {
-          itemCode: row.itemCode,
-          itemName: row.itemName || row.itemCode,
-          category: "미지정",
-          supplier: "미지정",
-          source: "sales",
-          firstSeenMonth: row.saleDate.slice(0, 7),
-          active: true,
-          memo: "통합 매출 로우 파일에서 자동 추가",
-        });
-        addedItemCount += 1;
-      });
-      if (addedItemCount > 0) setItemMasters(Array.from(itemMasterMap.values()));
-    } catch (error) {
-      console.error("매출 업로드 저장 실패", error);
-      alert("매출 저장에 실패했습니다. 기존 데이터는 그대로 유지됩니다. Cloudflare D1 연결 상태를 확인해 주세요.");
-      return;
-    }
-
-    const monthSummary = Array.from(
-      parsed.reduce((map, row) => {
-        const saleMonth = row.saleDate.slice(0, 7);
-        map.set(saleMonth, (map.get(saleMonth) || 0) + 1);
-        return map;
-      }, new Map<string, number>()),
-    )
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([saleMonth, count]) => `${saleMonth}: ${count.toLocaleString("ko-KR")}건`)
-      .join("\n");
-    alert(
-      `통합 매출 ${parsed.length.toLocaleString("ko-KR")}건을 날짜 기준으로 반영했습니다.\n${monthSummary}`,
-    );
-  }
-
-  async function uploadInitialEst(file: File | null) {
-    if (!file) return;
-    const fileRows = await readFileRows(file);
-
-    // 월초관리 → 거래처 리스트 → 총 거래처 리스트를 저장하면 stores에 반영됩니다.
-    // EST 업로드는 이 최종 거래처 목록을 기준으로 거래처코드만 매칭합니다.
-    const storeByCode = new Map(
-      stores.map((store) => [norm(store.code).toUpperCase(), store]),
-    );
-
-    const mappingByOldCode = new Map<string, StoreCodeMapping[]>();
-    codeMappings.forEach((mapping) => {
-      const oldCode = norm(mapping.oldCode).toUpperCase();
-      if (!oldCode) return;
-      mappingByOldCode.set(oldCode, [
-        ...(mappingByOldCode.get(oldCode) || []),
-        mapping,
-      ]);
-    });
-
-    const matchedByKey = new Map<string, EstRecord>();
-    const unmatched: string[] = [];
-
-    fileRows.forEach((row, index) => {
-      const rawStoreCode = norm(
-        row["거래처코드"] ??
-          row["거래처 코드"] ??
-          row["매장코드"] ??
-          row["매장 코드"],
-      );
-      const uploadedStoreName = norm(row["거래처명"] ?? row["매장명"]);
-
-      const estHeader = Object.keys(row).find((key) => {
-        const normalizedKey = norm(key).replace(/\s+/g, " ");
-        return (
-          ["당월 EST", "EST", "EST 금액", "금액"].includes(normalizedKey) ||
-          /^\d{1,2}월\s*EST$/i.test(normalizedKey)
-        );
-      });
-
-      const amount = num(estHeader ? row[estHeader] : undefined);
-      const explicitMonth = monthText(
-        row["기준월"] ?? row["월"] ?? row["년월"],
-      );
-      const monthFromHeader = estHeader?.match(/^(\d{1,2})월\s*EST$/i)?.[1];
-      const targetMonth = explicitMonth ||
-        (monthFromHeader
-          ? `${month.slice(0, 4)}-${String(Number(monthFromHeader)).padStart(2, "0")}`
-          : month);
-
-      if (!rawStoreCode && !uploadedStoreName && amount === 0) return;
-      if (!rawStoreCode) {
-        unmatched.push(`${index + 2}행: 거래처코드 없음 / ${uploadedStoreName || "거래처명 없음"}`);
-        return;
-      }
-
-      const normalizedCode = rawStoreCode.toUpperCase();
-      let store = storeByCode.get(normalizedCode);
-      let mappedCode = rawStoreCode;
-
-      if (!store) {
-        const candidates = mappingByOldCode.get(normalizedCode) || [];
-        const nameMatched = candidates.find(
-          (mapping) =>
-            !mapping.oldName ||
-            !uploadedStoreName ||
-            normalizeStoreNameKey(mapping.oldName) ===
-              normalizeStoreNameKey(uploadedStoreName),
-        );
-        const selectedMapping = nameMatched || candidates[0];
-        if (selectedMapping) {
-          mappedCode = norm(selectedMapping.currentCode) || rawStoreCode;
-          store = storeByCode.get(mappedCode.toUpperCase());
-        }
-      }
-
-      if (!store || !targetMonth) {
-        unmatched.push(
-          `${index + 2}행: ${rawStoreCode}${mappedCode !== rawStoreCode ? ` → ${mappedCode}` : ""} / ${uploadedStoreName || "거래처명 없음"}`,
-        );
-        return;
-      }
-
-      const record: EstRecord = {
-        storeCode: store.code,
-        storeName: store.name,
-        month: targetMonth,
-        amount,
-      };
-      matchedByKey.set(`${record.month}__${record.storeCode}`, record);
-    });
-
-    const matched = Array.from(matchedByKey.values());
-    if (!matched.length) {
-      alert(
-        "총 거래처 리스트 또는 거래처코드 매핑과 일치하는 EST 행을 찾지 못했습니다.\n필수 헤더: 거래처코드, 거래처명, 담당자, n월 EST",
-      );
-      return;
-    }
-
-    const keyOf = (row: EstRecord) => `${row.month}__${row.storeCode}`;
-    const uploadKeys = new Set(matched.map(keyOf));
-    const next = [
-      ...ests.filter((row) => !uploadKeys.has(keyOf(row))),
-      ...matched,
-    ];
-    setEsts(next);
-
-    const unmatchedPreview = unmatched.slice(0, 10).join("\n");
-    alert(
-      `초기 EST ${matched.length.toLocaleString("ko-KR")}건을 반영했습니다.\n매핑 기준: 총 거래처 리스트의 거래처코드 + 거래처코드 매핑` +
-        (unmatched.length
-          ? `\n\n미반영 ${unmatched.length.toLocaleString("ko-KR")}건\n${unmatchedPreview}${unmatched.length > 10 ? "\n..." : ""}`
-          : ""),
-    );
-  }
-
-  async function resetSalesPeriod(period: PeriodType) {
-    const periodLabel = period === "current" ? "당월" : period === "prevMonth" ? "전월" : "전년동월";
-    const targetRows = sales.filter((row) => row.period === period && row.refMonth === month);
-    if (!targetRows.length) {
-      alert(`${periodLabel} 매출에 리셋할 데이터가 없습니다.`);
-      return;
-    }
-    if (!window.confirm(`${month} ${periodLabel} 매출 ${targetRows.length.toLocaleString("ko-KR")}건을 모두 리셋할까요?\n이 작업은 되돌릴 수 없습니다.`)) return;
-    try {
-      const uploadedDates = period === "current"
-        ? Array.from(new Set(targetRows.map((row) => row.saleDate).filter(Boolean)))
-        : [];
-      await salesActions.replaceUpload({
+      const result = await salesActions.replaceUpload({
         period,
         refMonth: month,
-        fileName: `${periodLabel} 매출 리셋`,
+        fileName: file.name,
         uploadedDates,
-        rows: [],
+        rows: parsed,
       });
-      alert(`${month} ${periodLabel} 매출 데이터를 모두 리셋했습니다.`);
+      if (result.mode === "legacy") {
+        console.warn("Sales V3 SQL이 아직 적용되지 않아 기존 저장 방식을 사용했습니다.");
+      }
     } catch (error) {
-      console.error(`${periodLabel} 매출 리셋 실패`, error);
-      alert(`${periodLabel} 매출 리셋에 실패했습니다. 기존 데이터는 유지됩니다.`);
-    }
-  }
-
-  async function uploadItems(file: File | null) {
-    if (!file) return;
-    const rows = await readFileRows(file);
-    const parsed = rows
-      .map((row) => ({
-        // 에이비랩 품목리스트.xlsx의 "품목등록" 양식을 기준으로 읽습니다.
-        itemCode: norm(row["품목코드"] ?? row["품목 코드"] ?? row["상품코드"]),
-        itemName: norm(row["품목명"] ?? row["품목명[규격]"] ?? row["상품명"]),
-        specification: norm(row["규격정보"] ?? row["규격"]),
-        packQuantity: norm(row["입수"] ?? row["박스입수"]),
-        category:
-          norm(
-            row["품목그룹명"] ??
-              row["품목그룹1명"] ??
-              row["카테고리"] ??
-              row["품목그룹"] ??
-              row["분류"],
-          ) || "미지정",
-        stockUnit: norm(row["재고단위"] ?? row["단위"]),
-        storageMethod: norm(row["보관방법명"] ?? row["보관방법"]),
-        supplier:
-          norm(row["매입처"] ?? row["매입처명"] ?? row["주매입처"] ?? row["공급처"]) ||
-          "미지정",
-        source: "initial" as const,
-        firstSeenMonth: undefined,
-        active: true,
-        memo: norm(row["적요"] ?? row["메모"] ?? row["비고"]),
-      }))
-      .filter((row) => row.itemCode);
-
-    if (!parsed.length) {
-      alert(
-        "품목코드가 있는 행을 찾지 못했습니다. 파일 헤더를 확인해 주세요.",
-      );
+      console.error("매출 업로드 저장 실패", error);
+      alert("매출 저장에 실패했습니다. 기존 데이터는 그대로 유지됩니다. Supabase 상태와 SQL 적용 여부를 확인해 주세요.");
       return;
     }
 
-    const map = new Map(itemMasters.map((item) => [item.itemCode, item]));
-    parsed.forEach((item) => {
-      const previous = map.get(item.itemCode);
-      map.set(item.itemCode, {
-        ...previous,
-        ...item,
-        itemName: item.itemName || previous?.itemName || item.itemCode,
-      });
-    });
-    setItemMasters(Array.from(map.values()));
+    const closedMessage =
+      period === "prevYear" && missingStores.length
+        ? `\n당월 기준에 없는 전년동월 거래처 ${missingStores.length}건은 거래종료로 자동 생성했습니다.`
+        : "";
     alert(
-      `기초 품목정보 ${parsed.length}건을 반영했습니다.\n` +
-        `적용 양식: 품목코드, 품목명, 규격정보, 입수, 품목그룹명, 재고단위, 보관방법명, 매입처, 적요`,
+      `${period === "current" ? "당월" : period === "prevMonth" ? "전월" : "전년동월"} 매출 ${parsed.length}건을 반영했습니다.\n반영 날짜: ${uploadedDates.join(", ")}${closedMessage}`,
     );
   }
 
@@ -17273,48 +11489,26 @@ function UploadPage({
             {salesActions.storageMode === "v3" ? "안전 저장 V3" : salesActions.storageMode === "checking" ? "저장소 확인 중" : "기존 저장 방식"}
           </span>
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <UploadBox
-            title="통합 매출 업로드"
-            description="파일의 일자를 읽어 월별로 자동 저장합니다. 여러 월이 섞인 파일도 처리하며, 같은 날짜를 다시 올리면 해당 날짜 자료만 교체됩니다."
-            onUpload={uploadSales}
+            title="당월 매출 업로드"
+            description="같은 날짜 파일을 다시 올리면 해당 날짜 기존 당월 매출을 삭제하고 새 파일로 업데이트합니다."
+            onUpload={(file) => uploadSales(file, "current")}
           />
           <UploadBox
-            title="품목 정보 업로드"
-            description="에이비랩 품목리스트 양식(품목코드·품목명·규격정보·입수·품목그룹명·재고단위·보관방법명·매입처·적요)을 기준으로 최초 등록합니다. 이후 당월 매출에서 이 기준 리스트에 없는 품목코드는 최초 매출월에만 신규품목으로 표시됩니다."
-            onUpload={uploadItems}
+            title="전월 매출 업로드"
+            description="매출비교와 매출현황의 전월 매출 기준으로 사용합니다. 같은 기준월 자료는 새 파일로 교체됩니다."
+            onUpload={(file) => uploadSales(file, "prevMonth")}
           />
           <UploadBox
-            title="초기 EST 일괄 업로드"
-            description="공유한 양식(거래처코드·거래처명·담당자·n월 EST)을 사용합니다. 총 거래처 리스트의 거래처코드를 우선 확인하고, 기존 코드인 경우 거래처코드 매핑을 적용해 EST를 업데이트합니다. 담당자는 참고용이며 매핑 기준에는 사용하지 않습니다."
-            onUpload={uploadInitialEst}
+            title="전년동월 매출 업로드"
+            description="매출비교와 매출현황의 전년동월 매출 기준으로 사용합니다. 같은 기준월 자료는 새 파일로 교체됩니다."
+            onUpload={(file) => uploadSales(file, "prevYear")}
           />
-        </div>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <button
-            type="button"
-            onClick={() => resetSalesPeriod("current")}
-            className="h-9 rounded-xl border border-red-300 bg-red-50 px-3 text-xs font-extrabold text-red-700 hover:bg-red-100"
-          >
-            당월 매출 전체 리셋
-          </button>
-          <button
-            type="button"
-            onClick={() => resetSalesPeriod("prevMonth")}
-            className="h-9 rounded-xl border border-red-300 bg-red-50 px-3 text-xs font-extrabold text-red-700 hover:bg-red-100"
-          >
-            전월 매출 전체 리셋
-          </button>
-          <button
-            type="button"
-            onClick={() => resetSalesPeriod("prevYear")}
-            className="h-9 rounded-xl border border-red-300 bg-red-50 px-3 text-xs font-extrabold text-red-700 hover:bg-red-100"
-          >
-            전년동월 매출 전체 리셋
-          </button>
         </div>
       </div>
 
+      <ProfitValidationPanel sales={sales} month={month} date={date} />
 
       <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-5 shadow-sm backdrop-blur">
         <h2 className="mb-3 text-lg font-bold">당월 특정 날짜 삭제</h2>
@@ -17334,6 +11528,10 @@ function UploadPage({
 
       <div className="rounded-2xl border border-gray-300/70 bg-white/80 p-5 shadow-sm backdrop-blur">
         <h2 className="mb-3 text-lg font-bold">TIME GONE 공휴일 설정</h2>
+        <p className="mb-3 text-sm text-slate-500">
+          월~금 일반일 1일, 월~금 공휴일 0.5일, 토요일 0.5일, 일요일 0일
+          기준입니다.
+        </p>
         <textarea
           value={holidayText}
           onChange={(e) => setHolidayText(e.target.value)}
@@ -17511,10 +11709,10 @@ function UploadBox({
   onUpload: (file: File | null) => void;
 }) {
   return (
-    <div className="flex min-h-[116px] flex-col rounded-xl border border-gray-300 bg-slate-50/70 p-3">
-      <h3 className="text-sm font-bold text-slate-900">{title}</h3>
-      <p className="mt-1 line-clamp-2 flex-1 text-xs leading-5 text-slate-500">{description}</p>
-      <label className="mt-2 inline-flex w-full cursor-pointer items-center justify-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
+    <div className="rounded-2xl border border-gray-300 bg-slate-50/70 p-4">
+      <h3 className="font-bold text-slate-900">{title}</h3>
+      <p className="mt-2 min-h-[44px] text-sm text-slate-500">{description}</p>
+      <label className="mt-4 inline-block cursor-pointer rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
         엑셀 업로드
         <input
           type="file"
@@ -17538,24 +11736,26 @@ function Th({
 }: {
   children: React.ReactNode;
   right?: boolean;
-  tone?: "default" | "mint" | "blue" | "pink" | "yellow" | "gray" | "purple" | "green" | "orange";
+  tone?: "default" | "mint" | "blue" | "yellow" | "gray" | "purple" | "green";
 }) {
   const toneClass =
     tone === "mint"
-      ? "border-[#E5E7EB] bg-[#F7FCEB] text-black"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
       : tone === "blue"
-        ? "border-[#E5E7EB] bg-[#F3FAFD] text-black"
-        : tone === "pink"
-          ? "border-[#E5E7EB] bg-[#FFF7FA] text-black"
-          : tone === "yellow"
-            ? "border-[#E5E7EB] bg-[#FFFDF2] text-black"
-            : tone === "orange"
-              ? "border-[#E5E7EB] bg-[#FFF9F3] text-black"
-              : "border-slate-300 bg-white text-black";
+        ? "border-blue-200 bg-blue-50 text-blue-800"
+        : tone === "yellow"
+          ? "border-amber-200 bg-amber-50 text-amber-800"
+          : tone === "gray"
+            ? "border-slate-300 bg-slate-100 text-slate-800"
+            : tone === "purple"
+              ? "border-violet-200 bg-violet-50 text-violet-800"
+              : tone === "green"
+                ? "border-green-200 bg-green-50 text-green-800"
+                : "border-slate-200 bg-slate-100 text-slate-800";
 
   return (
     <th
-      className={`sticky top-0 z-20 border p-2 text-xs font-bold leading-tight whitespace-normal break-keep ${toneClass} text-center`}
+      className={`sticky top-0 z-20 border p-2 text-xs font-bold leading-tight whitespace-normal break-keep ${toneClass} ${right ? "text-right" : "text-left"}`}
     >
       {children}
     </th>
@@ -17575,7 +11775,7 @@ function Td({
 }) {
   return (
     <td
-      className={`border border-gray-300 bg-white p-2 text-center ${bold ? "font-semibold" : ""} ${color}`}
+      className={`border border-gray-300 bg-white p-2 ${right ? "text-right" : "text-left"} ${bold ? "font-semibold" : ""} ${color}`}
     >
       {children}
     </td>
