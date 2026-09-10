@@ -9640,19 +9640,31 @@ function Dashboard({
     });
 
     const grouped = new Map<string, { storeCode: string; storeName: string; manager: string; storeType: string; sales: number }>();
-    fullMonthRows.forEach((row) => {
-      if (!newCodes.has(row.storeCode)) return;
-      const master = storesByCode.get(row.storeCode);
-      const existing = grouped.get(row.storeCode) || {
-        storeCode: row.storeCode,
-        storeName: master?.name || row.storeName || row.storeCode,
-        manager: norm(row.manager || master?.manager).trim().toUpperCase() || "미지정",
-        storeType: normalizeStoreType(row.storeType || master?.storeType, row.channel || master?.channel) === "매장" ? "매장" : "비매장",
-        sales: 0,
-      };
-      existing.sales += Number(row.salesAmount || 0);
-      grouped.set(row.storeCode, existing);
-    });
+    fullMonthRows
+      .slice()
+      .sort((a, b) => a.saleDate.localeCompare(b.saleDate))
+      .forEach((row) => {
+        if (!newCodes.has(row.storeCode)) return;
+        const master = storesByCode.get(row.storeCode);
+        const rowManager = norm(row.manager).trim().toUpperCase();
+        const rowStoreType = normalizeStoreType(row.storeType, row.channel);
+        const existing = grouped.get(row.storeCode) || {
+          storeCode: row.storeCode,
+          storeName: row.storeName || master?.name || row.storeCode,
+          manager: "미지정",
+          storeType: normalizeStoreType(master?.storeType, master?.channel) === "매장" ? "매장" : "비매장",
+          sales: 0,
+        };
+
+        // 일별이익현황 값이 있으면 항상 최우선으로 최신값을 덮어씁니다.
+        if (norm(row.storeName)) existing.storeName = norm(row.storeName);
+        if (rowManager) existing.manager = rowManager;
+        if (row.storeType || row.channel) {
+          existing.storeType = rowStoreType === "매장" ? "매장" : "비매장";
+        }
+        existing.sales += Number(row.salesAmount || 0);
+        grouped.set(row.storeCode, existing);
+      });
     return Array.from(grouped.values()).sort((a, b) => b.sales - a.sales || a.storeName.localeCompare(b.storeName, "ko-KR"));
   }, [dashboardPriorKeys, currentRows, fullMonthRows, stores]);
 
