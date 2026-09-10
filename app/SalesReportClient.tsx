@@ -204,6 +204,12 @@ type TimeConfig = {
   holidays: string[];
 };
 
+type EstManagerUnlock = {
+  month: string;
+  until: string | null;
+  manual: boolean;
+};
+
 type EstAccessConfig = {
   startDay: number;
   endDay: number;
@@ -213,10 +219,23 @@ type EstAccessConfig = {
   temporaryUnlockMonth: string | null;
   temporaryUnlockUntil: string | null;
   manualUnlock: boolean;
+  managerUnlocks?: Record<string, EstManagerUnlock>;
   updatedAt?: string;
 };
 
+type ManagerAlias = {
+  koreanName: string;
+  initial: string;
+};
+
 const EST_ACCESS_CONFIG_KEY = "ablab_est_access_config_v1";
+const MANAGER_ALIAS_KEY = "ablab_manager_aliases_v1";
+const DEFAULT_MANAGER_ALIASES: ManagerAlias[] = [
+  { koreanName: "김세연", initial: "SY" },
+  { koreanName: "김광태", initial: "KT" },
+  { koreanName: "은수형", initial: "SH" },
+  { koreanName: "최낙현", initial: "NH" },
+];
 const DEFAULT_EST_ACCESS_CONFIG: EstAccessConfig = {
   startDay: 1,
   endDay: 10,
@@ -226,6 +245,7 @@ const DEFAULT_EST_ACCESS_CONFIG: EstAccessConfig = {
   temporaryUnlockMonth: null,
   temporaryUnlockUntil: null,
   manualUnlock: false,
+  managerUnlocks: {},
 };
 
 const CHANNELS: Channel[] = ["매장", "비매장"];
@@ -3662,6 +3682,8 @@ function makeSale(
   uploadedProfitRate?: number,
   sourceRowNumber?: number,
   remark?: string,
+  uploadedManager?: Manager,
+  uploadedStoreType?: StoreType,
 ): SalesRecord {
   const s = storeMap(stores).get(storeCode);
   const profitRate = Number.isFinite(uploadedProfitRate)
@@ -3678,9 +3700,9 @@ function makeSale(
     saleDate,
     storeCode,
     storeName: s?.name || storeName || storeCode,
-    channel: s?.channel || "매장",
-    manager: s?.manager || "",
-    storeType: s?.storeType || "매장",
+    channel: s?.channel || uploadedStoreType || "매장",
+    manager: uploadedManager || s?.manager || "",
+    storeType: uploadedStoreType || s?.storeType || "매장",
     brand: displayBrand(s?.brand),
     itemCode,
     itemName,
@@ -4746,6 +4768,34 @@ async function hashAdminPassword(value: string) {
     .join("");
 }
 
+function autoManagerInitial(koreanName: string) {
+  const clean = norm(koreanName).replace(/\s+/g, "");
+  const given = clean.length >= 2 ? clean.slice(1) : clean;
+  const choseong = ["G", "G", "N", "D", "D", "R", "M", "B", "B", "S", "S", "", "J", "J", "C", "K", "T", "P", "H"];
+  const jung = ["A", "A", "Y", "Y", "E", "E", "Y", "Y", "O", "W", "W", "O", "Y", "U", "W", "W", "W", "Y", "E", "E", "I"];
+  const letters = Array.from(given).map((char) => {
+    const code = char.charCodeAt(0);
+    if (code >= 0xac00 && code <= 0xd7a3) {
+      const syllable = code - 0xac00;
+      const initialIndex = Math.floor(syllable / 588);
+      const vowelIndex = Math.floor((syllable % 588) / 28);
+      return choseong[initialIndex] || jung[vowelIndex] || "X";
+    }
+    const ascii = char.normalize("NFD").replace(/[^A-Za-z]/g, "");
+    return ascii ? ascii[0].toUpperCase() : "X";
+  });
+  return letters.join("").replace(/[^A-Z]/g, "") || "NEW";
+}
+
+function uniqueManagerInitial(base: string, aliases: ManagerAlias[]) {
+  const normalized = (base || "NEW").toUpperCase();
+  const used = new Set(aliases.map((item) => item.initial.trim().toUpperCase()).filter(Boolean));
+  if (!used.has(normalized)) return normalized;
+  let suffix = 2;
+  while (used.has(`${normalized}${suffix}`)) suffix += 1;
+  return `${normalized}${suffix}`;
+}
+
 function clampEstDay(month: string, day: number) {
   const [year, monthNumber] = month.split("-").map(Number);
   const maxDay = new Date(year, monthNumber, 0).getDate();
@@ -4760,16 +4810,27 @@ function estLockAtMs(month: string, config: EstAccessConfig) {
   return new Date(dateText).getTime();
 }
 
-function isEstTemporaryUnlockOpen(month: string, config: EstAccessConfig, nowMs = Date.now()) {
-  if (config.temporaryUnlockMonth !== month) return false;
-  if (config.manualUnlock) return true;
-  if (!config.temporaryUnlockUntil) return false;
-  const untilMs = new Date(config.temporaryUnlockUntil).getTime();
+function isEstTemporaryUnlockOpen(month: string, config: EstAccessConfig, nowMs = Date.now(), manager?: string) {
+  if (config.temporaryUnlockMonth === month) {
+    if (config.manualUnlock) return true;
+    if (config.temporaryUnlockUntil) {
+      const untilMs = new Date(config.temporaryUnlockUntil).getTime();
+      if (Number.isFinite(untilMs) && nowMs < untilMs) return true;
+    }
+  }
+
+  const managerKey = norm(manager).trim().toUpperCase();
+  if (!managerKey) return false;
+  const unlock = config.managerUnlocks?.[managerKey];
+  if (!unlock || unlock.month !== month) return false;
+  if (unlock.manual) return true;
+  if (!unlock.until) return false;
+  const untilMs = new Date(unlock.until).getTime();
   return Number.isFinite(untilMs) && nowMs < untilMs;
 }
 
-function isEstEntryPeriodOpen(month: string, config: EstAccessConfig, nowMs = Date.now()) {
-  if (isEstTemporaryUnlockOpen(month, config, nowMs)) return true;
+function isEstEntryPeriodOpen(month: string, config: EstAccessConfig, nowMs = Date.now(), manager?: string) {
+  if (isEstTemporaryUnlockOpen(month, config, nowMs, manager)) return true;
 
   const seoulToday = todayInSeoul();
   if (seoulToday.slice(0, 7) !== month) return false;
@@ -4821,6 +4882,7 @@ export default function SalesReportClient() {
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
   const [estSettingsOpen, setEstSettingsOpen] = useState(false);
   const [estNowMs, setEstNowMs] = useState(() => Date.now());
+  const [estUnlockTargets, setEstUnlockTargets] = useState<string[]>(["ALL"]);
   const [menuVisibility, setMenuVisibility] = useLocal<Record<MainMenuLabel, boolean>>(
     "ablab_main_menu_visibility_v1",
     { "EST 입력": true, "대시보드": true, "매출현황": true, "거래처별 상세": true, "품목분석": true, "월초관리": true },
@@ -4832,6 +4894,10 @@ export default function SalesReportClient() {
   const [estAccessConfig, setEstAccessConfig] = useLocal<EstAccessConfig>(
     EST_ACCESS_CONFIG_KEY,
     DEFAULT_EST_ACCESS_CONFIG,
+  );
+  const [managerAliases, setManagerAliases] = useLocal<ManagerAlias[]>(
+    MANAGER_ALIAS_KEY,
+    DEFAULT_MANAGER_ALIASES,
   );
   const [dashMonth, setDashMonth] = useState(thisMonth());
   const [dashDate, setDashDate] = useState(today());
@@ -5212,6 +5278,7 @@ export default function SalesReportClient() {
 
   function openEstTemporarily(mode: "30m" | "1h" | "3h" | "today" | "manual") {
     if (!isAdmin) return;
+    if (estUnlockTargets.length === 0) return alert("잠금을 해제할 담당자를 선택해주세요.");
     const now = new Date();
     let until: string | null = null;
     let manualUnlock = false;
@@ -5224,20 +5291,39 @@ export default function SalesReportClient() {
       const minutes = mode === "30m" ? 30 : mode === "1h" ? 60 : 180;
       until = new Date(now.getTime() + minutes * 60_000).toISOString();
     }
-    updateEstAccessConfig({
-      temporaryUnlockMonth: dashMonth,
-      temporaryUnlockUntil: until,
-      manualUnlock,
+
+    setEstAccessConfig((prev) => {
+      const next: EstAccessConfig = { ...prev, managerUnlocks: { ...(prev.managerUnlocks || {}) }, updatedAt: new Date().toISOString() };
+      if (estUnlockTargets.includes("ALL")) {
+        next.temporaryUnlockMonth = dashMonth;
+        next.temporaryUnlockUntil = until;
+        next.manualUnlock = manualUnlock;
+      } else {
+        estUnlockTargets.forEach((manager) => {
+          next.managerUnlocks![manager] = { month: dashMonth, until, manual: manualUnlock };
+        });
+      }
+      return next;
     });
+    setEstNowMs(Date.now());
   }
 
-  function lockEstNow() {
+  function lockEstNow(manager?: string) {
     if (!isAdmin) return;
-    updateEstAccessConfig({
-      temporaryUnlockMonth: null,
-      temporaryUnlockUntil: null,
-      manualUnlock: false,
-    });
+    if (manager) {
+      setEstAccessConfig((prev) => {
+        const managerUnlocks = { ...(prev.managerUnlocks || {}) };
+        delete managerUnlocks[manager];
+        return { ...prev, managerUnlocks, updatedAt: new Date().toISOString() };
+      });
+    } else {
+      updateEstAccessConfig({
+        temporaryUnlockMonth: null,
+        temporaryUnlockUntil: null,
+        manualUnlock: false,
+      });
+    }
+    setEstNowMs(Date.now());
   }
 
   const canAccessEstEntry = true;
@@ -5546,12 +5632,63 @@ export default function SalesReportClient() {
             <div className="mt-4">
               <div className="text-sm font-extrabold text-slate-900">관리자 임시 잠금 해제</div>
               <p className="mt-1 text-[11px] font-semibold text-slate-500">선택한 기준월({dashMonth})에만 적용됩니다. 시간이 끝나면 자동으로 다시 잠깁니다.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {["ALL", ...managerConfigs.filter((item) => item.active).sort((a,b) => a.order-b.order).map((item) => item.name.trim().toUpperCase())].filter((value, index, list) => list.indexOf(value) === index).map((manager) => {
+                  const checked = estUnlockTargets.includes(manager);
+                  return (
+                    <label key={manager} className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-extrabold ${checked ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600"}`}>
+                      <input type="checkbox" checked={checked} onChange={(event) => {
+                        if (manager === "ALL") {
+                          setEstUnlockTargets(event.target.checked ? ["ALL"] : []);
+                          return;
+                        }
+                        setEstUnlockTargets((prev) => {
+                          const withoutAll = prev.filter((item) => item !== "ALL");
+                          return event.target.checked ? [...withoutAll, manager] : withoutAll.filter((item) => item !== manager);
+                        });
+                      }} className="h-3.5 w-3.5" />
+                      {manager === "ALL" ? "전체" : manager}
+                    </label>
+                  );
+                })}
+              </div>
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
                 <button type="button" onClick={() => openEstTemporarily("30m")} className="rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-xs font-extrabold text-emerald-800 hover:bg-emerald-100">30분</button>
                 <button type="button" onClick={() => openEstTemporarily("1h")} className="rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-xs font-extrabold text-emerald-800 hover:bg-emerald-100">1시간</button>
                 <button type="button" onClick={() => openEstTemporarily("3h")} className="rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-xs font-extrabold text-emerald-800 hover:bg-emerald-100">3시간</button>
                 <button type="button" onClick={() => openEstTemporarily("today")} className="rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-xs font-extrabold text-emerald-800 hover:bg-emerald-100">오늘까지</button>
                 <button type="button" onClick={() => openEstTemporarily("manual")} className="rounded-xl border border-blue-200 bg-blue-50 px-2 py-2 text-xs font-extrabold text-blue-800 hover:bg-blue-100">수동 해제</button>
+              </div>
+              {((Object.entries(estAccessConfig.managerUnlocks || {}) as [string, EstManagerUnlock][]).some(([, value]) => value.month === dashMonth)) && (
+                <div className="mt-3 space-y-1">
+                  {(Object.entries(estAccessConfig.managerUnlocks || {}) as [string, EstManagerUnlock][]).filter(([, value]) => value.month === dashMonth).map(([manager, unlock]) => (
+                    <div key={manager} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+                      <span className="font-extrabold text-slate-700">{manager} · {unlock.manual ? "수동 잠금 전까지" : unlock.until ? `${new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(unlock.until))}까지` : "잠금"}</span>
+                      <button type="button" onClick={() => lockEstNow(manager)} className="rounded-md border border-slate-300 px-2 py-1 font-bold text-slate-600 hover:bg-slate-50">다시 잠그기</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/50 p-4">
+              <div className="text-sm font-extrabold text-slate-900">담당자 이니셜 관리</div>
+              <p className="mt-1 text-[11px] font-semibold text-slate-500">이카운트의 한글 담당자명은 성을 제외한 이름으로 이니셜을 자동 생성합니다. 필요할 때만 관리자가 수정하면 됩니다.</p>
+              <div className="mt-3 max-h-44 space-y-2 overflow-auto pr-1">
+                {managerAliases.map((alias) => (
+                  <div key={alias.koreanName} className="grid grid-cols-[1fr_110px] items-center gap-2">
+                    <div className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-700">{alias.koreanName}</div>
+                    <input
+                      value={alias.initial}
+                      onChange={(event) => {
+                        const nextInitial = event.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 8);
+                        setManagerAliases((prev) => prev.map((item) => item.koreanName === alias.koreanName ? { ...item, initial: nextInitial } : item));
+                      }}
+                      className="h-9 rounded-lg border border-violet-200 bg-white px-2 text-center text-xs font-extrabold uppercase text-violet-700 outline-none focus:border-violet-500"
+                      aria-label={`${alias.koreanName} 담당자 이니셜`}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -6460,7 +6597,7 @@ export default function SalesReportClient() {
             targets={targets}
             setTargets={setTargets}
             month={dashMonth}
-            canEdit={estEntryOpen}
+            canEditManager={(manager) => isEstEntryPeriodOpen(dashMonth, estAccessConfig, estNowMs, manager)}
             isAdmin={isAdmin}
             managerConfigs={managerConfigs}
             pendingNewStoreEsts={pendingNewStoreEsts}
@@ -6531,6 +6668,8 @@ export default function SalesReportClient() {
             setItemMasters={setItemMasters}
             managerConfigs={managerConfigs}
             setManagerConfigs={setManagerConfigs}
+            managerAliases={managerAliases}
+            setManagerAliases={setManagerAliases}
             pendingNewStoreEsts={pendingNewStoreEsts}
             setPendingNewStoreEsts={setPendingNewStoreEsts}
             notificationBusy={notificationBusy}
@@ -7150,7 +7289,7 @@ function EstQuickEntry({
   targets,
   setTargets,
   month,
-  canEdit,
+  canEditManager,
   isAdmin,
   managerConfigs,
   pendingNewStoreEsts,
@@ -7165,7 +7304,7 @@ function EstQuickEntry({
   targets: TargetRecord[];
   setTargets: React.Dispatch<React.SetStateAction<TargetRecord[]>>;
   month: string;
-  canEdit: boolean;
+  canEditManager: (manager: string) => boolean;
   isAdmin: boolean;
   managerConfigs: ManagerConfig[];
   pendingNewStoreEsts: PendingNewStoreEst[];
@@ -7187,6 +7326,30 @@ function EstQuickEntry({
   const [newStoreModalOpen, setNewStoreModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [entryStatusView, setEntryStatusView] = useState<"all" | "entered" | "missing">("all");
+  const canEdit = Boolean(selectedManager) && canEditManager(selectedManager);
+  const [draftEsts, setDraftEsts] = useState<EstRecord[]>(ests);
+  const [hasUnsavedEstChanges, setHasUnsavedEstChanges] = useState(false);
+
+  useEffect(() => {
+    if (!hasUnsavedEstChanges) setDraftEsts(ests);
+  }, [ests, hasUnsavedEstChanges]);
+
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedEstChanges) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedEstChanges]);
+
+  const saveEstChanges = () => {
+    if (!hasUnsavedEstChanges) return;
+    setEsts(draftEsts);
+    setHasUnsavedEstChanges(false);
+    alert(`${month} EST 변경사항을 저장했습니다.`);
+  };
 
   const addPendingNewStoreEst = () => {
     const name = newStoreName.trim();
@@ -7253,11 +7416,11 @@ function EstQuickEntry({
 
   const estMap = useMemo(() => {
     const map = new Map<string, number>();
-    ests
+    draftEsts
       .filter((e) => e.month === month)
       .forEach((e) => map.set(e.storeCode, Number(e.amount || 0)));
     return map;
-  }, [ests, month]);
+  }, [draftEsts, month]);
 
   const targetByType = useMemo(() => {
     const totals = { store: 0, nonStore: 0 };
@@ -7275,11 +7438,11 @@ function EstQuickEntry({
 
   const prevEstMap = useMemo(() => {
     const map = new Map<string, number>();
-    ests
+    draftEsts
       .filter((e) => e.month === prevMonth)
       .forEach((e) => map.set(e.storeCode, Number(e.amount || 0)));
     return map;
-  }, [ests, prevMonth]);
+  }, [draftEsts, prevMonth]);
 
   const prevSalesMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -7491,7 +7654,7 @@ function EstQuickEntry({
     );
     const selectedCodes = new Set(selectedStores.map((store) => store.code));
     const totals = { storeEst: 0, nonStoreEst: 0 };
-    ests
+    draftEsts
       .filter((row) => row.month === month && selectedCodes.has(row.storeCode))
       .forEach((row) => {
         const store = selectedStores.find((item) => item.code === row.storeCode);
@@ -7499,7 +7662,7 @@ function EstQuickEntry({
         else totals.nonStoreEst += Number(row.amount || 0);
       });
     return totals;
-  }, [stores, ests, month, selectedManager]);
+  }, [stores, draftEsts, month, selectedManager]);
 
   const selectedChannelLabel =
     channelView === "store" ? "매장" : channelView === "nonStore" ? "비매장" : "전체 채널";
@@ -7538,13 +7701,13 @@ function EstQuickEntry({
 
   const selectedManagerEstInputCount = useMemo(
     () =>
-      ests.filter(
+      draftEsts.filter(
         (row) =>
           row.month === month &&
           selectedManagerStoreCodes.has(row.storeCode) &&
           Number(row.amount || 0) !== 0,
       ).length,
-    [ests, month, selectedManagerStoreCodes],
+    [draftEsts, month, selectedManagerStoreCodes],
   );
 
   const openBrandEstTotal = useMemo(
@@ -7578,7 +7741,7 @@ function EstQuickEntry({
 
     if (!confirmed) return;
 
-    setEsts((prev) =>
+    setDraftEsts((prev) =>
       prev.map((row) =>
         row.month === month && selectedManagerStoreCodes.has(row.storeCode)
           ? { ...row, amount: 0 }
@@ -7586,8 +7749,9 @@ function EstQuickEntry({
       ),
     );
 
+    setHasUnsavedEstChanges(true);
     alert(
-      `${selectedManager} 담당자의 ${month} 당월 EST ${selectedManagerEstInputCount}건을 초기화했습니다.`,
+      `${selectedManager} 담당자의 ${month} 당월 EST ${selectedManagerEstInputCount}건을 초기화했습니다. 저장 버튼을 눌러야 최종 반영됩니다.`,
     );
   };
 
@@ -7607,7 +7771,7 @@ function EstQuickEntry({
 
   const updateEst = (store: Store, amount: number) => {
     if (!canEdit || store.status !== "거래중") return;
-    setEsts((prev) => {
+    setDraftEsts((prev) => {
       const exists = prev.some((row) => row.month === month && row.storeCode === store.code);
       if (exists) {
         return prev.map((row) =>
@@ -7618,6 +7782,7 @@ function EstQuickEntry({
       }
       return [...prev, { storeCode: store.code, storeName: store.name, month, amount }];
     });
+    setHasUnsavedEstChanges(true);
   };
 
   const updateBrandEst = (groupedStores: Store[], amount: number) => {
@@ -7626,7 +7791,7 @@ function EstQuickEntry({
     if (!activeStores.length) return;
     const representative = activeStores[0];
     const groupedCodes = new Set(groupedStores.map((store) => store.code));
-    setEsts((prev) => {
+    setDraftEsts((prev) => {
       const next = prev.map((row) =>
         row.month === month && groupedCodes.has(row.storeCode)
           ? { ...row, amount: row.storeCode === representative.code ? amount : 0 }
@@ -7639,6 +7804,7 @@ function EstQuickEntry({
         ? next
         : [...next, { storeCode: representative.code, storeName: representative.name, month, amount }];
     });
+    setHasUnsavedEstChanges(true);
   };
 
   const updateStoreStatus = (store: Store, status: Store["status"]) => {
@@ -7704,6 +7870,10 @@ function EstQuickEntry({
             </select>
           </label>
 
+          <div className={`flex h-9 items-center rounded-lg border px-3 text-[11px] font-extrabold ${canEdit ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-600"}`}>
+            {canEdit ? `🔓 ${selectedManager} 입력 가능` : `🔒 ${selectedManager} 입력 잠금`}
+          </div>
+
           <div className="flex min-h-10 items-center gap-4 pb-0.5 text-[12px] font-bold text-slate-600">
             <span>
               거래처 <strong className="text-slate-900">{won(managerInfo.total)}개</strong>
@@ -7726,6 +7896,16 @@ function EstQuickEntry({
             title={`${selectedManager} 담당자의 ${month} 당월 EST만 초기화합니다.`}
           >
             당월 EST 초기화 ({selectedManagerEstInputCount}건)
+          </button>
+
+          <button
+            type="button"
+            onClick={saveEstChanges}
+            disabled={!hasUnsavedEstChanges}
+            className="h-9 rounded-lg bg-orange-500 px-4 text-[11px] font-extrabold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+            title="입력한 EST 변경사항을 저장합니다."
+          >
+            {hasUnsavedEstChanges ? "EST 저장 · 변경사항 있음" : "EST 저장 완료"}
           </button>
 
           <div className="ml-auto flex min-w-0 flex-wrap items-end justify-end gap-2">
@@ -14543,6 +14723,8 @@ function MonthStartManagement({
   setItemMasters,
   managerConfigs,
   setManagerConfigs,
+  managerAliases,
+  setManagerAliases,
   pendingNewStoreEsts,
   setPendingNewStoreEsts,
   notificationBusy,
@@ -14567,6 +14749,8 @@ function MonthStartManagement({
   setItemMasters: React.Dispatch<React.SetStateAction<ItemMasterRecord[]>>;
   managerConfigs: ManagerConfig[];
   setManagerConfigs: React.Dispatch<React.SetStateAction<ManagerConfig[]>>;
+  managerAliases: ManagerAlias[];
+  setManagerAliases: React.Dispatch<React.SetStateAction<ManagerAlias[]>>;
   pendingNewStoreEsts: PendingNewStoreEst[];
   setPendingNewStoreEsts: React.Dispatch<React.SetStateAction<PendingNewStoreEst[]>>;
   notificationBusy: boolean;
@@ -14669,6 +14853,10 @@ function MonthStartManagement({
             ests={ests}
             setEsts={setEsts}
             codeMappings={codeMappings}
+            managerAliases={managerAliases}
+            setManagerAliases={setManagerAliases}
+            managerConfigs={managerConfigs}
+            setManagerConfigs={setManagerConfigs}
           />
         </div>
       )}
@@ -17040,6 +17228,10 @@ function UploadPage({
   ests,
   setEsts,
   codeMappings,
+  managerAliases,
+  setManagerAliases,
+  managerConfigs,
+  setManagerConfigs,
 }: {
   stores: Store[];
   setStores: (v: Store[]) => void;
@@ -17055,6 +17247,10 @@ function UploadPage({
   ests: EstRecord[];
   setEsts: (v: EstRecord[]) => void;
   codeMappings: StoreCodeMapping[];
+  managerAliases: ManagerAlias[];
+  setManagerAliases: React.Dispatch<React.SetStateAction<ManagerAlias[]>>;
+  managerConfigs: ManagerConfig[];
+  setManagerConfigs: React.Dispatch<React.SetStateAction<ManagerConfig[]>>;
 }) {
   const [holidayText, setHolidayText] = useState("");
   const [deleteDate, setDeleteDate] = useState(today());
@@ -17062,6 +17258,20 @@ function UploadPage({
   async function uploadSales(file: File | null) {
     if (!file) return;
     const rows = await readFileRows(file);
+    const nextAliases = [...managerAliases];
+    const newlyCreatedAliases: ManagerAlias[] = [];
+    const resolveUploadedManager = (rawValue: unknown) => {
+      const raw = norm(rawValue).replace(/\s+/g, "");
+      if (!raw) return "";
+      const existing = nextAliases.find((item) => norm(item.koreanName).replace(/\s+/g, "") === raw);
+      if (existing) return existing.initial.trim().toUpperCase();
+      if (/^[A-Za-z][A-Za-z0-9_-]*$/.test(raw)) return raw.toUpperCase();
+      const initial = uniqueManagerInitial(autoManagerInitial(raw), nextAliases);
+      const alias = { koreanName: raw, initial };
+      nextAliases.push(alias);
+      newlyCreatedAliases.push(alias);
+      return initial;
+    };
     const parsed = rows
       .map((r, index) => {
         const saleDate = dateText(
@@ -17075,6 +17285,9 @@ function UploadPage({
           r["거래처 코드"] ?? r["거래처코드"] ?? r["매장코드"],
         );
         const storeName = norm(r["거래처명"] ?? r["매장명"]);
+        const uploadedManager = resolveUploadedManager(r["담당자"] ?? r["판매담당자"] ?? r["영업담당자"]);
+        const uploadedChannel = norm(r["채널"] ?? r["매장/비매장"] ?? r["구분"]);
+        const uploadedStoreType: StoreType | undefined = uploadedChannel === "매장" || uploadedChannel === "비매장" ? uploadedChannel : undefined;
         const itemCode = norm(r["품목 코드"] ?? r["품목코드"] ?? r["상품코드"]);
         const itemName = norm(r["품목명[규격]"] ?? r["품목명"] ?? r["상품명"]);
         const quantity = num(r["판매 수량"] ?? r["수량"]);
@@ -17140,6 +17353,8 @@ function UploadPage({
           uploadedProfitRate,
           index + 2,
           remark,
+          uploadedManager,
+          uploadedStoreType,
         );
       })
       .filter(
@@ -17152,6 +17367,16 @@ function UploadPage({
             r.quantity !== 0),
       );
 
+    if (newlyCreatedAliases.length > 0) {
+      setManagerAliases(nextAliases);
+      const existingConfigNames = new Set(managerConfigs.map((item) => item.name.trim().toUpperCase()));
+      const additions = newlyCreatedAliases
+        .map((item) => item.initial.trim().toUpperCase())
+        .filter((initial, index, list) => initial && list.indexOf(initial) === index && !existingConfigNames.has(initial))
+        .map((initial, index) => ({ name: initial, active: true, order: managerConfigs.length + index + 1, canTarget: false }));
+      if (additions.length) setManagerConfigs((prev) => [...prev, ...additions]);
+    }
+
     if (new Set(parsed.map((row) => row.id)).size !== parsed.length) {
       alert(
         "엑셀 행별 고유번호를 만들지 못해 업로드를 중단했습니다. 기존 데이터는 변경하지 않았습니다.",
@@ -17159,23 +17384,33 @@ function UploadPage({
       return;
     }
 
-    const missingStores = parsed
-            .filter((r) => !storeMap(stores).has(r.storeCode))
-            .map((r) => ({
-              code: r.storeCode,
-              name: r.storeName || r.storeCode,
-              channel: "매장" as Channel,
-              manager: "" as Manager,
-              storeType: "매장" as StoreType,
-              brand: displayBrand(r.brand),
-              status: "거래중" as const,
-            }));
-
-    if (missingStores.length) {
-      const map = new Map(stores.map((s) => [s.code, s]));
-      missingStores.forEach((s) => map.set(s.code, s));
-      setStores(Array.from(map.values()));
-    }
+    const parsedStoreInfo = new Map<string, { manager: Manager; storeType: StoreType; name: string }>();
+    parsed.forEach((row) => {
+      if (!row.storeCode) return;
+      parsedStoreInfo.set(row.storeCode, { manager: row.manager, storeType: row.storeType, name: row.storeName });
+    });
+    const storeByCode = new Map(stores.map((store) => [store.code, store]));
+    parsedStoreInfo.forEach((info, code) => {
+      const existing = storeByCode.get(code);
+      if (existing) {
+        storeByCode.set(code, {
+          ...existing,
+          manager: info.manager || existing.manager,
+          storeType: info.storeType || existing.storeType,
+        });
+      } else {
+        storeByCode.set(code, {
+          code,
+          name: info.name || code,
+          channel: (info.storeType || "매장") as Channel,
+          manager: info.manager || "",
+          storeType: info.storeType || "매장",
+          brand: info.name || code,
+          status: "거래중",
+        });
+      }
+    });
+    if (parsedStoreInfo.size) setStores(Array.from(storeByCode.values()));
 
     if (parsed.length === 0) {
       alert(
