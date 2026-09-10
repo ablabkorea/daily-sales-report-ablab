@@ -1,6 +1,6 @@
 name = "ablab-sales-api"
 main = "src/index.ts"
-compatibility_date = "2026-07-01"
+compatibility_date = "2026-09-09"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
@@ -10,3 +10,8 @@ VAPID_SUBJECT = "mailto:admin@ablab.co.kr"
 binding = "DB"
 database_name = "ablab-sales-db"
 database_id = "192aa78d-656b-421b-b18e-d68960d41abe"
+[[r2_buckets]]
+binding = "CACHE"
+bucket_name = "ablab-sales-cache"
+[cache]
+enabled = true

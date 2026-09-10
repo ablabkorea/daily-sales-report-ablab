@@ -204,6 +204,30 @@ type TimeConfig = {
   holidays: string[];
 };
 
+type EstAccessConfig = {
+  startDay: number;
+  endDay: number;
+  lockDay: number;
+  lockHour: number;
+  lockMinute: number;
+  temporaryUnlockMonth: string | null;
+  temporaryUnlockUntil: string | null;
+  manualUnlock: boolean;
+  updatedAt?: string;
+};
+
+const EST_ACCESS_CONFIG_KEY = "ablab_est_access_config_v1";
+const DEFAULT_EST_ACCESS_CONFIG: EstAccessConfig = {
+  startDay: 1,
+  endDay: 10,
+  lockDay: 11,
+  lockHour: 0,
+  lockMinute: 0,
+  temporaryUnlockMonth: null,
+  temporaryUnlockUntil: null,
+  manualUnlock: false,
+};
+
 const CHANNELS: Channel[] = ["매장", "비매장"];
 const MANAGERS: Manager[] = ["SY", "KT", "SW", "NH", "Bomi", "BM", "bomi"];
 const INITIAL_MANAGER_CONFIGS: ManagerConfig[] = [
@@ -4722,9 +4746,60 @@ async function hashAdminPassword(value: string) {
     .join("");
 }
 
-function isEstEntryPeriodOpen(month: string) {
+function clampEstDay(month: string, day: number) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const maxDay = new Date(year, monthNumber, 0).getDate();
+  return Math.max(1, Math.min(maxDay, Math.trunc(Number(day) || 1)));
+}
+
+function estLockAtMs(month: string, config: EstAccessConfig) {
+  const day = clampEstDay(month, config.lockDay);
+  const hour = Math.max(0, Math.min(23, Math.trunc(Number(config.lockHour) || 0)));
+  const minute = Math.max(0, Math.min(59, Math.trunc(Number(config.lockMinute) || 0)));
+  const dateText = `${month}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+09:00`;
+  return new Date(dateText).getTime();
+}
+
+function isEstTemporaryUnlockOpen(month: string, config: EstAccessConfig, nowMs = Date.now()) {
+  if (config.temporaryUnlockMonth !== month) return false;
+  if (config.manualUnlock) return true;
+  if (!config.temporaryUnlockUntil) return false;
+  const untilMs = new Date(config.temporaryUnlockUntil).getTime();
+  return Number.isFinite(untilMs) && nowMs < untilMs;
+}
+
+function isEstEntryPeriodOpen(month: string, config: EstAccessConfig, nowMs = Date.now()) {
+  if (isEstTemporaryUnlockOpen(month, config, nowMs)) return true;
+
   const seoulToday = todayInSeoul();
-  return seoulToday.slice(0, 7) === month && Number(seoulToday.slice(8, 10)) <= 5;
+  if (seoulToday.slice(0, 7) !== month) return false;
+
+  const currentDay = Number(seoulToday.slice(8, 10));
+  const startDay = clampEstDay(month, config.startDay);
+  const endDay = clampEstDay(month, config.endDay);
+  if (currentDay < Math.min(startDay, endDay) || currentDay > Math.max(startDay, endDay)) return false;
+
+  const lockAt = estLockAtMs(month, config);
+  return !Number.isFinite(lockAt) || nowMs < lockAt;
+}
+
+function estAccessStatusText(month: string, config: EstAccessConfig, nowMs = Date.now()) {
+  if (isEstTemporaryUnlockOpen(month, config, nowMs)) {
+    if (config.manualUnlock) return "관리자 임시 해제 중 · 수동 잠금 전까지 입력 가능";
+    if (config.temporaryUnlockUntil) {
+      const until = new Date(config.temporaryUnlockUntil);
+      const label = new Intl.DateTimeFormat("ko-KR", {
+        timeZone: "Asia/Seoul",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(until);
+      return `관리자 임시 해제 중 · ${label}까지`;
+    }
+  }
+  return isEstEntryPeriodOpen(month, config, nowMs) ? "EST 입력 가능" : "EST 입력 잠금";
 }
 
 export default function SalesReportClient() {
@@ -4744,6 +4819,8 @@ export default function SalesReportClient() {
   const [estHeaderSummary, setEstHeaderSummary] = useState<EstHeaderSummary | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
+  const [estSettingsOpen, setEstSettingsOpen] = useState(false);
+  const [estNowMs, setEstNowMs] = useState(() => Date.now());
   const [menuVisibility, setMenuVisibility] = useLocal<Record<MainMenuLabel, boolean>>(
     "ablab_main_menu_visibility_v1",
     { "EST 입력": true, "대시보드": true, "매출현황": true, "거래처별 상세": true, "품목분석": true, "월초관리": true },
@@ -4751,6 +4828,10 @@ export default function SalesReportClient() {
   const [adminPasswordHash, setAdminPasswordHash] = useLocal<string>(
     "ablab_admin_password_hash_v1",
     DEFAULT_ADMIN_PASSWORD_HASH,
+  );
+  const [estAccessConfig, setEstAccessConfig] = useLocal<EstAccessConfig>(
+    EST_ACCESS_CONFIG_KEY,
+    DEFAULT_EST_ACCESS_CONFIG,
   );
   const [dashMonth, setDashMonth] = useState(thisMonth());
   const [dashDate, setDashDate] = useState(today());
@@ -5112,6 +5193,53 @@ export default function SalesReportClient() {
     alert("브라우저 메뉴에서 ‘앱 설치’ 또는 ‘홈 화면에 추가’를 선택해주세요.");
   }
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setEstNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const estEntryOpen = isEstEntryPeriodOpen(dashMonth, estAccessConfig, estNowMs);
+  const estTemporaryUnlockOpen = isEstTemporaryUnlockOpen(dashMonth, estAccessConfig, estNowMs);
+
+  function updateEstAccessConfig(patch: Partial<EstAccessConfig>) {
+    setEstAccessConfig((prev) => ({
+      ...prev,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    }));
+    setEstNowMs(Date.now());
+  }
+
+  function openEstTemporarily(mode: "30m" | "1h" | "3h" | "today" | "manual") {
+    if (!isAdmin) return;
+    const now = new Date();
+    let until: string | null = null;
+    let manualUnlock = false;
+    if (mode === "manual") {
+      manualUnlock = true;
+    } else if (mode === "today") {
+      const seoulToday = todayInSeoul();
+      until = new Date(`${seoulToday}T23:59:59+09:00`).toISOString();
+    } else {
+      const minutes = mode === "30m" ? 30 : mode === "1h" ? 60 : 180;
+      until = new Date(now.getTime() + minutes * 60_000).toISOString();
+    }
+    updateEstAccessConfig({
+      temporaryUnlockMonth: dashMonth,
+      temporaryUnlockUntil: until,
+      manualUnlock,
+    });
+  }
+
+  function lockEstNow() {
+    if (!isAdmin) return;
+    updateEstAccessConfig({
+      temporaryUnlockMonth: null,
+      temporaryUnlockUntil: null,
+      manualUnlock: false,
+    });
+  }
+
   const canAccessEstEntry = true;
 
   const tg = useMemo(
@@ -5312,6 +5440,10 @@ export default function SalesReportClient() {
             <div className="mt-auto border-t border-slate-100 px-2 pt-3">
               {isAdmin ? (
                 <div className="space-y-1">
+                  <button type="button" onClick={() => setEstSettingsOpen(true)} className="flex h-9 w-full items-center rounded-xl px-2 text-slate-600 hover:bg-slate-50">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[15px]">🔐</span>
+                    <span className="ml-3 whitespace-nowrap text-[11px] font-black opacity-0 transition-opacity group-hover:opacity-100">EST 권한 설정</span>
+                  </button>
                   <button type="button" onClick={() => setMenuSettingsOpen(true)} className="flex h-9 w-full items-center rounded-xl px-2 text-slate-600 hover:bg-slate-50">
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[15px]">⚙</span>
                     <span className="ml-3 whitespace-nowrap text-[11px] font-black opacity-0 transition-opacity group-hover:opacity-100">공개 설정</span>
@@ -5347,6 +5479,86 @@ export default function SalesReportClient() {
               <button type="button" onClick={() => setShowIosInstallGuide(false)} className="min-h-11 min-w-11 rounded-xl text-xl font-bold text-slate-500 hover:bg-slate-100">×</button>
             </div>
             <button type="button" onClick={() => setShowIosInstallGuide(false)} className="mt-4 min-h-12 w-full rounded-xl bg-orange-500 px-4 py-3 text-sm font-extrabold text-white">확인</button>
+          </div>
+        </div>
+      )}
+
+      {estSettingsOpen && isAdmin && (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/40 p-4" onMouseDown={() => setEstSettingsOpen(false)}>
+          <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-extrabold text-slate-900">EST 입력 권한 설정</h2>
+                <p className="mt-1 text-xs font-semibold text-slate-500">이 설정은 Cloudflare D1에 공유되어 모든 PC에 동일하게 적용됩니다.</p>
+              </div>
+              <button type="button" onClick={() => setEstSettingsOpen(false)} className="rounded-lg px-2 py-1 text-lg font-bold text-slate-500 hover:bg-slate-100">×</button>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold text-slate-500">{dashMonth} 현재 상태</div>
+                  <div className={`mt-1 text-sm font-extrabold ${estEntryOpen ? "text-emerald-700" : "text-red-600"}`}>
+                    {estEntryOpen ? "🔓" : "🔒"} {estAccessStatusText(dashMonth, estAccessConfig, estNowMs)}
+                  </div>
+                </div>
+                {estTemporaryUnlockOpen && (
+                  <button type="button" onClick={lockEstNow} className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-extrabold text-white hover:bg-slate-900">지금 다시 잠그기</button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <label className="text-xs font-bold text-slate-600">입력 시작일
+                <select value={estAccessConfig.startDay} onChange={(e) => updateEstAccessConfig({ startDay: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold">
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => <option key={day} value={day}>{day}일</option>)}
+                </select>
+              </label>
+              <label className="text-xs font-bold text-slate-600">입력 종료일
+                <select value={estAccessConfig.endDay} onChange={(e) => updateEstAccessConfig({ endDay: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold">
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => <option key={day} value={day}>{day}일</option>)}
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <div className="text-sm font-extrabold text-slate-900">자동 잠금 시점</div>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <label className="text-xs font-bold text-slate-600">일
+                  <select value={estAccessConfig.lockDay} onChange={(e) => updateEstAccessConfig({ lockDay: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-amber-300 bg-white px-2 py-2 text-sm font-bold">
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => <option key={day} value={day}>{day}일</option>)}
+                  </select>
+                </label>
+                <label className="text-xs font-bold text-slate-600">시
+                  <select value={estAccessConfig.lockHour} onChange={(e) => updateEstAccessConfig({ lockHour: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-amber-300 bg-white px-2 py-2 text-sm font-bold">
+                    {Array.from({ length: 24 }, (_, i) => i).map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}시</option>)}
+                  </select>
+                </label>
+                <label className="text-xs font-bold text-slate-600">분
+                  <select value={estAccessConfig.lockMinute} onChange={(e) => updateEstAccessConfig({ lockMinute: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-amber-300 bg-white px-2 py-2 text-sm font-bold">
+                    {Array.from({ length: 60 }, (_, i) => i).map((minute) => <option key={minute} value={minute}>{String(minute).padStart(2, "0")}분</option>)}
+                  </select>
+                </label>
+              </div>
+              <p className="mt-2 text-[11px] font-semibold leading-5 text-amber-800">입력 가능 기간 안이더라도 자동 잠금 시점이 먼저 도래하면 EST 입력이 잠깁니다.</p>
+            </div>
+
+            <div className="mt-4">
+              <div className="text-sm font-extrabold text-slate-900">관리자 임시 잠금 해제</div>
+              <p className="mt-1 text-[11px] font-semibold text-slate-500">선택한 기준월({dashMonth})에만 적용됩니다. 시간이 끝나면 자동으로 다시 잠깁니다.</p>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                <button type="button" onClick={() => openEstTemporarily("30m")} className="rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-xs font-extrabold text-emerald-800 hover:bg-emerald-100">30분</button>
+                <button type="button" onClick={() => openEstTemporarily("1h")} className="rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-xs font-extrabold text-emerald-800 hover:bg-emerald-100">1시간</button>
+                <button type="button" onClick={() => openEstTemporarily("3h")} className="rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-xs font-extrabold text-emerald-800 hover:bg-emerald-100">3시간</button>
+                <button type="button" onClick={() => openEstTemporarily("today")} className="rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-xs font-extrabold text-emerald-800 hover:bg-emerald-100">오늘까지</button>
+                <button type="button" onClick={() => openEstTemporarily("manual")} className="rounded-xl border border-blue-200 bg-blue-50 px-2 py-2 text-xs font-extrabold text-blue-800 hover:bg-blue-100">수동 해제</button>
+              </div>
+            </div>
+
+            <div className="mt-5 flex gap-2">
+              <button type="button" onClick={() => { setEstAccessConfig(DEFAULT_EST_ACCESS_CONFIG); setEstNowMs(Date.now()); }} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50">기본값 복원</button>
+              <button type="button" onClick={() => setEstSettingsOpen(false)} className="flex-1 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-extrabold text-white hover:bg-orange-600">설정 완료</button>
+            </div>
           </div>
         </div>
       )}
@@ -6187,7 +6399,7 @@ export default function SalesReportClient() {
               <HeaderTimeInfo title="총일수" value={tg.totalDays} />
               <HeaderTimeInfo title="진행일수" value={tg.progressedDays} />
               <HeaderTimeInfo title="잔여일수" value={tg.remainingDays} />
-              {active === "EST 입력" && !isEstEntryPeriodOpen(dashMonth) && estHeaderSummary && (
+              {active === "EST 입력" && !estEntryOpen && estHeaderSummary && (
                 <div className="est-header-summary ml-auto rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-right text-[12px] font-extrabold text-slate-800 shadow-sm">
                   <div className="mb-0.5 text-[10px] text-orange-700">{estHeaderSummary.manager}</div>
                   <span>매장 EST 합계 : {won(estHeaderSummary.storeEst)}</span>
@@ -6229,6 +6441,16 @@ export default function SalesReportClient() {
         )}
 
         {!isMobile && active === "EST 입력" && (
+          <div className={`mb-3 flex items-center justify-between rounded-xl border px-4 py-2.5 text-xs font-extrabold ${estEntryOpen ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-700"}`}>
+            <div>
+              <span>{estEntryOpen ? "🔓" : "🔒"} {estAccessStatusText(dashMonth, estAccessConfig, estNowMs)}</span>
+              <span className="ml-2 font-semibold opacity-75">기본 입력 {estAccessConfig.startDay}일~{estAccessConfig.endDay}일 · 자동잠금 {estAccessConfig.lockDay}일 {String(estAccessConfig.lockHour).padStart(2, "0")}:{String(estAccessConfig.lockMinute).padStart(2, "0")}</span>
+            </div>
+            {isAdmin && <button type="button" onClick={() => setEstSettingsOpen(true)} className="rounded-lg border border-current bg-white/70 px-3 py-1.5 text-[11px] font-extrabold">EST 권한 설정</button>}
+          </div>
+        )}
+
+        {!isMobile && active === "EST 입력" && (
           <EstQuickEntry
             stores={stores}
             setStores={setStores}
@@ -6238,7 +6460,7 @@ export default function SalesReportClient() {
             targets={targets}
             setTargets={setTargets}
             month={dashMonth}
-            canEdit={isAdmin || isEstEntryPeriodOpen(dashMonth)}
+            canEdit={estEntryOpen}
             isAdmin={isAdmin}
             managerConfigs={managerConfigs}
             pendingNewStoreEsts={pendingNewStoreEsts}

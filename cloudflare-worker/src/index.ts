@@ -2,6 +2,7 @@ import webpush from "web-push";
 
 interface Env {
   DB: D1Database;
+  CACHE: R2Bucket;
   ABL_API_KEY: string;
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
@@ -39,8 +40,84 @@ type ReplacePayload = {
   rows: SalesRow[];
 };
 
+type CachePurgePayload = {
+  baseMonth: string;
+};
+
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: jsonHeaders });
+
+const SALES_EDGE_TTL_SECONDS = 60 * 60 * 24;
+const SALES_R2_PREFIX = "sales-cache/v1";
+
+function salesR2Key(baseMonth: string, requestedPeriod: string) {
+  return `${SALES_R2_PREFIX}/${baseMonth}/${requestedPeriod || "all"}.json`;
+}
+
+function salesCacheTag(baseMonth: string) {
+  return `sales-${baseMonth}`;
+}
+
+function cachedSalesResponse(body: string, source: "R2" | "D1", baseMonth: string) {
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": `public, max-age=${SALES_EDGE_TTL_SECONDS}`,
+      "Cache-Tag": salesCacheTag(baseMonth),
+      "X-ABL-Cache": source,
+    },
+  });
+}
+
+async function deleteR2SalesMonth(env: Env, baseMonth: string) {
+  let cursor: string | undefined;
+  do {
+    const listed = await env.CACHE.list({
+      prefix: `${SALES_R2_PREFIX}/${baseMonth}/`,
+      cursor,
+    });
+    if (listed.objects.length) {
+      await env.CACHE.delete(listed.objects.map((object) => object.key));
+    }
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+}
+
+async function invalidateSalesCaches(
+  env: Env,
+  ctx: ExecutionContext,
+  baseMonth: string,
+) {
+  if (!/^\d{4}-\d{2}$/.test(baseMonth)) {
+    return { r2: false, edge: false };
+  }
+
+  await deleteR2SalesMonth(env, baseMonth);
+
+  const workersCache = ctx.cache;
+
+  if (!workersCache) {
+    console.warn("Workers Cache is not available.");
+    return {
+      r2: true,
+      edge: false,
+    };
+  }
+
+  const purgeResult = await workersCache.purge({
+    tags: [salesCacheTag(baseMonth)],
+  });
+
+  if (!purgeResult.success) {
+    console.error("Workers Cache purge failed", purgeResult.errors);
+  }
+
+  return {
+    r2: true,
+    edge: purgeResult.success,
+  };
+}
 
 let salesIndexesReady: Promise<void> | null = null;
 
@@ -120,14 +197,24 @@ async function putSetting(request: Request, env: Env, key: string) {
   return json({ id: key, updated_at: updatedAt });
 }
 
-async function getSales(url: URL, env: Env) {
-  await ensureSalesIndexes(env);
+async function getSales(url: URL, env: Env, ctx: ExecutionContext) {
   const baseMonth = url.searchParams.get("baseMonth") || "";
   if (!/^\d{4}-\d{2}$/.test(baseMonth)) return json({ error: "Invalid baseMonth" }, 400);
   const requestedPeriod = url.searchParams.get("period") || "";
   if (requestedPeriod && !["current", "prevMonth", "prevYear"].includes(requestedPeriod)) {
     return json({ error: "Invalid period" }, 400);
   }
+
+  // Workers Caching HIT이면 이 함수 자체가 실행되지 않습니다.
+  // 여기까지 왔다는 것은 Edge MISS이므로 R2 -> D1 순서로 조회합니다.
+  const r2Key = salesR2Key(baseMonth, requestedPeriod);
+  const r2Hit = await env.CACHE.get(r2Key);
+  if (r2Hit) {
+    const body = await r2Hit.text();
+    return cachedSalesResponse(body, "R2", baseMonth);
+  }
+
+  await ensureSalesIndexes(env);
 
   const recordsSql =
     `SELECT r.id AS row_key, r.period_type AS period, r.base_month AS ref_month,
@@ -161,7 +248,22 @@ async function getSales(url: URL, env: Env) {
     ? await batchesStatement.bind(baseMonth, requestedPeriod).all()
     : await batchesStatement.bind(baseMonth).all();
 
-  return json({ available: true, records: result.results || [], batches: batches.results || [] });
+  const body = JSON.stringify({
+    available: true,
+    records: result.results || [],
+    batches: batches.results || [],
+  });
+
+  await env.CACHE.put(r2Key, body, {
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+    customMetadata: {
+      baseMonth,
+      period: requestedPeriod || "all",
+      createdAt: new Date().toISOString(),
+    },
+  });
+
+  return cachedSalesResponse(body, "D1", baseMonth);
 }
 
 async function getPriorYearStoreHistory(url: URL, env: Env) {
@@ -207,7 +309,7 @@ async function getPriorYearStoreHistory(url: URL, env: Env) {
   });
 }
 
-async function replaceSales(request: Request, env: Env) {
+async function replaceSales(request: Request, env: Env, ctx: ExecutionContext) {
   await ensureExactUnitPriceColumns(env);
   const payload = await request.json<ReplacePayload>();
   if (!payload || !["current", "prevMonth", "prevYear"].includes(payload.period) || !/^\d{4}-\d{2}$/.test(payload.refMonth) || !Array.isArray(payload.rows)) {
@@ -277,7 +379,16 @@ async function replaceSales(request: Request, env: Env) {
       }
     }
     await env.DB.batch(finalStatements);
-    return json({ ok: true, batchId: newBatchId, rowCount: payload.rows.length, completedAt });
+    const cacheInvalidation = await invalidateSalesCaches(env, ctx, payload.refMonth);
+    return json({
+      ok: true,
+      batchId: newBatchId,
+      rowCount: payload.rows.length,
+      completedAt,
+      cacheInvalidated: cacheInvalidation.r2 && cacheInvalidation.edge,
+      r2CacheInvalidated: cacheInvalidation.r2,
+      edgeCacheInvalidated: cacheInvalidation.edge,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await env.DB.prepare("UPDATE sales_upload_batches SET status = 'failed', error_message = ? WHERE id = ?").bind(message.slice(0, 1000), newBatchId).run();
@@ -285,7 +396,7 @@ async function replaceSales(request: Request, env: Env) {
   }
 }
 
-async function deleteSalesDate(request: Request, env: Env) {
+async function deleteSalesDate(request: Request, env: Env, ctx: ExecutionContext) {
   const payload = await request.json<{ refMonth: string; saleDate: string }>();
   if (!payload?.refMonth || !payload?.saleDate) return json({ error: "Invalid payload" }, 400);
   const batchRows = await env.DB.prepare(
@@ -296,7 +407,38 @@ async function deleteSalesDate(request: Request, env: Env) {
     statements.push(env.DB.prepare("DELETE FROM sales_records WHERE batch_id = ? AND sales_date = ?").bind(row.id, payload.saleDate));
   }
   if (statements.length) await env.DB.batch(statements);
-  return json({ ok: true, deletedDate: payload.saleDate });
+  const cacheInvalidation = await invalidateSalesCaches(env, ctx, payload.refMonth);
+  return json({
+    ok: true,
+    deletedDate: payload.saleDate,
+    cacheInvalidated: cacheInvalidation.r2 && cacheInvalidation.edge,
+    r2CacheInvalidated: cacheInvalidation.r2,
+    edgeCacheInvalidated: cacheInvalidation.edge,
+  });
+}
+
+async function purgeSalesCache(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+) {
+  const payload = await request.json<CachePurgePayload>();
+  const baseMonth = String(payload?.baseMonth || "").trim();
+
+  if (!/^\d{4}-\d{2}$/.test(baseMonth)) {
+    return json({ error: "Invalid baseMonth" }, 400);
+  }
+
+  const cacheInvalidation = await invalidateSalesCaches(env, ctx, baseMonth);
+
+  return json({
+    ok: true,
+    baseMonth,
+    cacheInvalidated: cacheInvalidation.r2 && cacheInvalidation.edge,
+    r2CacheInvalidated: cacheInvalidation.r2,
+    edgeCacheInvalidated: cacheInvalidation.edge,
+    note: "Sales source data in D1 was not changed.",
+  });
 }
 
 async function ensurePushTables(env: Env) {
@@ -477,7 +619,7 @@ async function sendUpdatePush(request: Request, env: Env) {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (!authorized(request, env)) return json({ error: "Unauthorized" }, 401);
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
@@ -492,10 +634,11 @@ export default {
         if (request.method === "GET") return getSetting(env, key);
         if (request.method === "PUT") return putSetting(request, env, key);
       }
-      if (request.method === "GET" && path === "/sales") return getSales(url, env);
+      if (request.method === "GET" && path === "/sales") return getSales(url, env, ctx);
       if (request.method === "GET" && path === "/sales/prior-year-store-history") return getPriorYearStoreHistory(url, env);
-      if (request.method === "POST" && path === "/sales/replace") return replaceSales(request, env);
-      if (request.method === "POST" && path === "/sales/delete-date") return deleteSalesDate(request, env);
+      if (request.method === "POST" && path === "/sales/replace") return replaceSales(request, env, ctx);
+      if (request.method === "POST" && path === "/sales/delete-date") return deleteSalesDate(request, env, ctx);
+      if (request.method === "POST" && path === "/sales/cache-purge") return purgeSalesCache(request, env, ctx);
       if (request.method === "GET" && path === "/push/public-key") {
         if (!env.VAPID_PUBLIC_KEY) return json({ error: "VAPID public key is not configured" }, 503);
         return json({ publicKey: env.VAPID_PUBLIC_KEY });

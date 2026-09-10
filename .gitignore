@@ -45,3 +45,6 @@ cloudflare-worker/node_modules/
 cloudflare-worker/.wrangler/
 public.zip
 *.zip
+/dist/
+.vinext/
+.wrangler/
