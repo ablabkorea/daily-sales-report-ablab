@@ -228,6 +228,62 @@ type ManagerAlias = {
   initial: string;
 };
 
+type ProfitAlertLocation = "dashboard" | "salesStatus" | "storeDetail" | "itemAnalysis";
+type ProfitAlertOperator = "lt" | "lte" | "gt" | "gte" | "between";
+type ProfitAlertTone = "red" | "amber" | "green";
+type ProfitAlertRule = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  operator: ProfitAlertOperator;
+  threshold: number;
+  thresholdMax?: number;
+  locations: ProfitAlertLocation[];
+  tone: ProfitAlertTone;
+};
+
+const PROFIT_ALERT_RULES_KEY = "ablab_profit_alert_rules_v1";
+const PROFIT_ALERT_LOCATION_LABELS: Record<ProfitAlertLocation, string> = {
+  dashboard: "대시보드",
+  salesStatus: "매출현황",
+  storeDetail: "거래처별 상세",
+  itemAnalysis: "품목분석",
+};
+const DEFAULT_PROFIT_ALERT_RULES: ProfitAlertRule[] = [];
+let runtimeProfitAlertRules: ProfitAlertRule[] = [];
+
+function profitAlertMatches(rule: ProfitAlertRule, value: number) {
+  if (!rule.enabled || !Number.isFinite(value)) return false;
+  switch (rule.operator) {
+    case "lt": return value < Number(rule.threshold || 0);
+    case "lte": return value <= Number(rule.threshold || 0);
+    case "gt": return value > Number(rule.threshold || 0);
+    case "gte": return value >= Number(rule.threshold || 0);
+    case "between": {
+      const a = Number(rule.threshold || 0);
+      const b = Number(rule.thresholdMax ?? rule.threshold ?? 0);
+      return value >= Math.min(a, b) && value <= Math.max(a, b);
+    }
+    default: return false;
+  }
+}
+
+function matchedProfitAlert(location: ProfitAlertLocation, value: number) {
+  return runtimeProfitAlertRules.find((rule) => rule.locations.includes(location) && profitAlertMatches(rule, value));
+}
+
+function profitAlertClass(location: ProfitAlertLocation, value: number) {
+  const rule = matchedProfitAlert(location, value);
+  if (!rule) return "";
+  if (rule.tone === "amber") return "!bg-amber-50 !text-amber-800 ring-1 ring-inset ring-amber-300 font-black";
+  if (rule.tone === "green") return "!bg-emerald-50 !text-emerald-800 ring-1 ring-inset ring-emerald-300 font-black";
+  return "!bg-red-50 !text-red-700 ring-1 ring-inset ring-red-300 font-black";
+}
+
+function profitAlertPrefix(location: ProfitAlertLocation, value: number) {
+  return matchedProfitAlert(location, value) ? "⚠ " : "";
+}
+
 const EST_ACCESS_CONFIG_KEY = "ablab_est_access_config_v1";
 const MANAGER_ALIAS_KEY = "ablab_manager_aliases_v1";
 const DEFAULT_MANAGER_ALIASES: ManagerAlias[] = [
@@ -4883,6 +4939,7 @@ export default function SalesReportClient() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
   const [estSettingsOpen, setEstSettingsOpen] = useState(false);
+  const [profitAlertSettingsOpen, setProfitAlertSettingsOpen] = useState(false);
   const [estNowMs, setEstNowMs] = useState(() => Date.now());
   const [estUnlockTargets, setEstUnlockTargets] = useState<string[]>(["ALL"]);
   const [menuVisibility, setMenuVisibility] = useLocal<Record<MainMenuLabel, boolean>>(
@@ -4901,6 +4958,11 @@ export default function SalesReportClient() {
     MANAGER_ALIAS_KEY,
     DEFAULT_MANAGER_ALIASES,
   );
+  const [profitAlertRules, setProfitAlertRules] = useLocal<ProfitAlertRule[]>(
+    PROFIT_ALERT_RULES_KEY,
+    DEFAULT_PROFIT_ALERT_RULES,
+  );
+  runtimeProfitAlertRules = profitAlertRules || [];
   const [dashMonth, setDashMonth] = useState(thisMonth());
   const [dashDate, setDashDate] = useState(today());
   const [stores, setStores] = useLocal<Store[]>(
@@ -5532,6 +5594,10 @@ export default function SalesReportClient() {
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[15px]">🔐</span>
                     <span className="ml-3 whitespace-nowrap text-[11px] font-black opacity-0 transition-opacity group-hover:opacity-100">EST 권한 설정</span>
                   </button>
+                  <button type="button" onClick={() => setProfitAlertSettingsOpen(true)} className="flex h-9 w-full items-center rounded-xl px-2 text-slate-600 hover:bg-slate-50">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[15px]">⚠</span>
+                    <span className="ml-3 whitespace-nowrap text-[11px] font-black opacity-0 transition-opacity group-hover:opacity-100">이익률 알림 설정</span>
+                  </button>
                   <button type="button" onClick={() => setMenuSettingsOpen(true)} className="flex h-9 w-full items-center rounded-xl px-2 text-slate-600 hover:bg-slate-50">
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[15px]">⚙</span>
                     <span className="ml-3 whitespace-nowrap text-[11px] font-black opacity-0 transition-opacity group-hover:opacity-100">공개 설정</span>
@@ -5697,6 +5763,120 @@ export default function SalesReportClient() {
             <div className="mt-5 flex gap-2">
               <button type="button" onClick={() => { setEstAccessConfig(DEFAULT_EST_ACCESS_CONFIG); setEstNowMs(Date.now()); }} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50">기본값 복원</button>
               <button type="button" onClick={() => setEstSettingsOpen(false)} className="flex-1 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-extrabold text-white hover:bg-orange-600">설정 완료</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {profitAlertSettingsOpen && isAdmin && (
+        <div className="fixed inset-0 z-[215] flex items-center justify-center bg-black/40 p-4" onMouseDown={() => setProfitAlertSettingsOpen(false)}>
+          <div className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-extrabold text-slate-900">이익률 알림 설정</h2>
+                <p className="mt-1 text-xs font-semibold text-slate-500">규칙별로 기준 이익률과 표시할 화면을 선택할 수 있습니다. 설정은 D1에 공유되어 모든 PC에 동일하게 적용됩니다.</p>
+              </div>
+              <button type="button" onClick={() => setProfitAlertSettingsOpen(false)} className="rounded-lg px-2 py-1 text-lg font-bold text-slate-500 hover:bg-slate-100">×</button>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <div className="text-xs font-bold text-slate-500">등록된 규칙 {profitAlertRules.length}개</div>
+              <button
+                type="button"
+                onClick={() => setProfitAlertRules((prev) => [...prev, {
+                  id: `profit-alert-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                  name: `이익률 알림 ${prev.length + 1}`,
+                  enabled: true,
+                  operator: "lt",
+                  threshold: 10,
+                  locations: ["salesStatus"],
+                  tone: "red",
+                }])}
+                className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-blue-700"
+              >
+                + 알림 규칙 추가
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-3">
+              {profitAlertRules.length === 0 && (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500">
+                  아직 이익률 알림 규칙이 없습니다. 필요한 규칙만 추가해서 사용하세요.
+                </div>
+              )}
+              {profitAlertRules.map((rule, index) => (
+                <div key={rule.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      value={rule.name}
+                      onChange={(event) => setProfitAlertRules((prev) => prev.map((item) => item.id === rule.id ? { ...item, name: event.target.value } : item))}
+                      className="min-w-[180px] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-extrabold text-slate-800"
+                      aria-label={`이익률 알림 ${index + 1} 규칙명`}
+                    />
+                    <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                      <input type="checkbox" checked={rule.enabled} onChange={(event) => setProfitAlertRules((prev) => prev.map((item) => item.id === rule.id ? { ...item, enabled: event.target.checked } : item))} />
+                      사용
+                    </label>
+                    <button type="button" onClick={() => setProfitAlertRules((prev) => prev.filter((item) => item.id !== rule.id))} className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-extrabold text-red-600 hover:bg-red-50">삭제</button>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[150px_1fr_120px]">
+                    <select value={rule.operator} onChange={(event) => setProfitAlertRules((prev) => prev.map((item) => item.id === rule.id ? { ...item, operator: event.target.value as ProfitAlertOperator } : item))} className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-bold">
+                      <option value="lt">미만</option>
+                      <option value="lte">이하</option>
+                      <option value="gt">초과</option>
+                      <option value="gte">이상</option>
+                      <option value="between">구간</option>
+                    </select>
+                    <div className="flex items-center gap-2">
+                      <input type="number" step="0.1" value={rule.threshold} onChange={(event) => setProfitAlertRules((prev) => prev.map((item) => item.id === rule.id ? { ...item, threshold: Number(event.target.value) } : item))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-right text-xs font-bold" />
+                      <span className="text-xs font-bold text-slate-500">%</span>
+                      {rule.operator === "between" && (
+                        <>
+                          <span className="text-xs font-bold text-slate-400">~</span>
+                          <input type="number" step="0.1" value={rule.thresholdMax ?? rule.threshold} onChange={(event) => setProfitAlertRules((prev) => prev.map((item) => item.id === rule.id ? { ...item, thresholdMax: Number(event.target.value) } : item))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-right text-xs font-bold" />
+                          <span className="text-xs font-bold text-slate-500">%</span>
+                        </>
+                      )}
+                    </div>
+                    <select value={rule.tone} onChange={(event) => setProfitAlertRules((prev) => prev.map((item) => item.id === rule.id ? { ...item, tone: event.target.value as ProfitAlertTone } : item))} className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-bold">
+                      <option value="red">빨강 경고</option>
+                      <option value="amber">주황 주의</option>
+                      <option value="green">초록 강조</option>
+                    </select>
+                  </div>
+
+                  <div className="mt-3">
+                    <div className="mb-2 text-[11px] font-extrabold text-slate-500">표시 위치</div>
+                    <div className="flex flex-wrap gap-2">
+                      {(Object.keys(PROFIT_ALERT_LOCATION_LABELS) as ProfitAlertLocation[]).map((location) => {
+                        const checked = rule.locations.includes(location);
+                        return (
+                          <label key={location} className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-extrabold ${checked ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600"}`}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) => setProfitAlertRules((prev) => prev.map((item) => {
+                                if (item.id !== rule.id) return item;
+                                const nextLocations = event.target.checked
+                                  ? Array.from(new Set([...item.locations, location]))
+                                  : item.locations.filter((value) => value !== location);
+                                return { ...item, locations: nextLocations };
+                              }))}
+                            />
+                            {PROFIT_ALERT_LOCATION_LABELS[location]}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 flex gap-2">
+              <button type="button" onClick={() => setProfitAlertRules([])} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50">전체 규칙 초기화</button>
+              <button type="button" onClick={() => setProfitAlertSettingsOpen(false)} className="flex-1 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-extrabold text-white hover:bg-orange-600">설정 완료</button>
             </div>
           </div>
         </div>
@@ -6884,7 +7064,7 @@ function MobileDashboard({
         </div>
         <div className="flex flex-col justify-center pl-3">
           <div className="text-[9px] font-bold text-slate-500">이익률</div>
-          <div className="mt-0.5 text-[16px] font-black text-emerald-600">{pct(data.profitRate)}</div>
+          <div className={`mt-0.5 text-[16px] font-black text-emerald-600 ${profitAlertClass("dashboard", data.profitRate)}`}>{profitAlertPrefix("dashboard", data.profitRate)}{pct(data.profitRate)}</div>
         </div>
       </section>
 
@@ -9185,7 +9365,7 @@ function DashboardTopKpis({
           </div>
           <div className="grid grid-cols-[72px_1fr] items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
             <span className="text-[11px] font-bold text-slate-600">이익률</span>
-            <span className="text-right text-[14px] font-black text-emerald-600">{pct(profitRate)}</span>
+            <span className={`text-right text-[14px] font-black text-emerald-600 ${profitAlertClass("dashboard", profitRate)}`}>{profitAlertPrefix("dashboard", profitRate)}{pct(profitRate)}</span>
           </div>
         </div>
       </div>
@@ -9499,7 +9679,7 @@ function Dashboard({
                   <td className="border-b border-r border-slate-200 px-3 py-3 font-bold">{won(row.target)}</td>
                   <td className="border-b border-r border-slate-200 px-3 py-3 font-black text-blue-600">{pct(row.targetRate)}</td>
                   <td className="border-b border-r border-slate-200 px-3 py-3 font-bold">{won(row.profit)}</td>
-                  <td className="border-b border-slate-200 px-3 py-3 font-bold">{pct(row.profitRate)}</td>
+                  <td className={`border-b border-slate-200 px-3 py-3 font-bold ${profitAlertClass("dashboard", row.profitRate)}`}>{profitAlertPrefix("dashboard", row.profitRate)}{pct(row.profitRate)}</td>
                 </tr>
               ))}
               <tr className="bg-slate-50">
@@ -9514,7 +9694,7 @@ function Dashboard({
                 <td className="border-r border-slate-200 px-3 py-3 font-black">{won(comparisonTotal.target)}</td>
                 <td className="border-r border-slate-200 px-3 py-3 font-black text-blue-600">{pct(comparisonTotal.target ? (comparisonTotal.currentSales / comparisonTotal.target) * 100 : 0)}</td>
                 <td className="border-r border-slate-200 px-3 py-3 font-black">{won(comparisonTotal.profit)}</td>
-                <td className="px-3 py-3 font-black text-emerald-600">{pct(comparisonTotal.profitRate)}</td>
+                <td className={`px-3 py-3 font-black text-emerald-600 ${profitAlertClass("dashboard", comparisonTotal.profitRate)}`}>{profitAlertPrefix("dashboard", comparisonTotal.profitRate)}{pct(comparisonTotal.profitRate)}</td>
               </tr>
             </tbody>
           </table>
@@ -10983,8 +11163,8 @@ function ItemAnalysis({
                         <td className="border border-gray-300 p-2 text-right">
                           {won(r.profitAmount)}
                         </td>
-                        <td className="border border-gray-300 p-2 text-right">
-                          {pct(r.profitRate)}
+                        <td className={`border border-gray-300 p-2 text-right ${profitAlertClass("storeDetail", r.profitRate)}`}>
+                          {profitAlertPrefix("storeDetail", r.profitRate)}{pct(r.profitRate)}
                         </td>
                       </tr>
                     ))}
@@ -11602,7 +11782,7 @@ function ItemShipmentAnalysis({
                       <td className="item-profit-number-cell sales-value-cell p-2 font-extrabold">{won(r.current.sales)}</td>
                       <td className="item-profit-number-cell p-2">{won(r.currentUnitCost)}</td>
                       <td className="item-profit-number-cell p-2 font-bold">{won(r.current.profit)}</td>
-                      <td className="item-profit-number-cell p-2 font-extrabold">{pct(r.currentProfitRate)}</td>
+                      <td className={`item-profit-number-cell p-2 font-extrabold ${profitAlertClass("itemAnalysis", r.currentProfitRate)}`}>{profitAlertPrefix("itemAnalysis", r.currentProfitRate)}{pct(r.currentProfitRate)}</td>
                       <td className={`item-profit-number-cell p-2 font-extrabold ${r.profitRateChange > 0 ? "text-emerald-700" : r.profitRateChange < 0 ? "text-red-600" : "text-black"}`}>
                         {itemSignedPct(r.profitRateChange)}
                       </td>
@@ -13187,8 +13367,8 @@ function SalesStatus({
                         <TdCompact right amount>
                           {won(r.profitAmount)}
                         </TdCompact>
-                        <TdCompact right amount>
-                          {pct(r.profitRate)}
+                        <TdCompact right amount color={profitAlertClass("salesStatus", r.profitRate)}>
+                          {profitAlertPrefix("salesStatus", r.profitRate)}{pct(r.profitRate)}
                         </TdCompact>
                       </tr>
                       {false &&
@@ -14205,7 +14385,7 @@ function OrderDrillModal({
                     <td className="border border-gray-300 px-2 py-2 text-right">{won(r.costUnitPrice)}</td>
                     <td className="border border-gray-300 px-2 py-2 text-right">{won(r.costAmount)}</td>
                     <td className="border border-gray-300 px-2 py-2 text-right font-semibold">{won(r.profitAmount)}</td>
-                    <td className="border border-gray-300 px-2 py-2 text-right">{pct(r.profitRate)}</td>
+                    <td className={`border border-gray-300 px-2 py-2 text-right ${profitAlertClass("itemAnalysis", r.profitRate)}`}>{profitAlertPrefix("itemAnalysis", r.profitRate)}{pct(r.profitRate)}</td>
                     <td className="border border-gray-300 px-2 py-2" title={r.remark || ""}>{r.remark || ""}</td>
                   </tr>
                 ))
