@@ -239,6 +239,8 @@ type ProfitAlertRule = {
   threshold: number;
   thresholdMax?: number;
   locations: ProfitAlertLocation[];
+  // 비어 있거나 없는 경우 전체 채널에 적용됩니다.
+  channels?: string[];
   tone: ProfitAlertTone;
 };
 
@@ -268,20 +270,32 @@ function profitAlertMatches(rule: ProfitAlertRule, value: number) {
   }
 }
 
-function matchedProfitAlert(location: ProfitAlertLocation, value: number) {
-  return runtimeProfitAlertRules.find((rule) => rule.locations.includes(location) && profitAlertMatches(rule, value));
+function profitAlertChannelMatches(rule: ProfitAlertRule, channel?: string) {
+  const channels = (rule.channels || []).map((value) => norm(value)).filter(Boolean);
+  if (!channels.length) return true;
+  const normalizedChannel = norm(channel);
+  if (!normalizedChannel) return false;
+  return channels.includes(normalizedChannel);
 }
 
-function profitAlertClass(location: ProfitAlertLocation, value: number) {
-  const rule = matchedProfitAlert(location, value);
+function matchedProfitAlert(location: ProfitAlertLocation, value: number, channel?: string) {
+  return runtimeProfitAlertRules.find((rule) =>
+    rule.locations.includes(location) &&
+    profitAlertChannelMatches(rule, channel) &&
+    profitAlertMatches(rule, value),
+  );
+}
+
+function profitAlertClass(location: ProfitAlertLocation, value: number, channel?: string) {
+  const rule = matchedProfitAlert(location, value, channel);
   if (!rule) return "";
   if (rule.tone === "amber") return "!bg-amber-50 !text-amber-800 ring-1 ring-inset ring-amber-300 font-black";
   if (rule.tone === "green") return "!bg-emerald-50 !text-emerald-800 ring-1 ring-inset ring-emerald-300 font-black";
   return "!bg-red-50 !text-red-700 ring-1 ring-inset ring-red-300 font-black";
 }
 
-function profitAlertPrefix(location: ProfitAlertLocation, value: number) {
-  return matchedProfitAlert(location, value) ? "⚠ " : "";
+function profitAlertPrefix(location: ProfitAlertLocation, value: number, channel?: string) {
+  return matchedProfitAlert(location, value, channel) ? "⚠ " : "";
 }
 
 const EST_ACCESS_CONFIG_KEY = "ablab_est_access_config_v1";
@@ -5774,7 +5788,7 @@ export default function SalesReportClient() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-extrabold text-slate-900">이익률 알림 설정</h2>
-                <p className="mt-1 text-xs font-semibold text-slate-500">규칙별로 기준 이익률과 표시할 화면을 선택할 수 있습니다. 설정은 D1에 공유되어 모든 PC에 동일하게 적용됩니다.</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">규칙별로 기준 이익률, 적용 채널, 표시할 화면을 선택할 수 있습니다. 채널을 선택하지 않으면 전체 채널에 적용되며 설정은 D1에 공유되어 모든 PC에 동일하게 적용됩니다.</p>
               </div>
               <button type="button" onClick={() => setProfitAlertSettingsOpen(false)} className="rounded-lg px-2 py-1 text-lg font-bold text-slate-500 hover:bg-slate-100">×</button>
             </div>
@@ -5790,6 +5804,7 @@ export default function SalesReportClient() {
                   operator: "lt",
                   threshold: 10,
                   locations: ["salesStatus"],
+                  channels: [],
                   tone: "red",
                 }])}
                 className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-blue-700"
@@ -5844,6 +5859,42 @@ export default function SalesReportClient() {
                       <option value="amber">주황 주의</option>
                       <option value="green">초록 강조</option>
                     </select>
+                  </div>
+
+                  <div className="mt-3">
+                    <div className="mb-2 flex items-center gap-2 text-[11px] font-extrabold text-slate-500">
+                      <span>적용 채널</span>
+                      <span className="font-semibold text-slate-400">선택 없음 = 전체</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {["매장", "비매장"].map((channel) => {
+                        const checked = (rule.channels || []).includes(channel);
+                        return (
+                          <label key={channel} className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-extrabold ${checked ? "border-violet-300 bg-violet-50 text-violet-700" : "border-slate-200 bg-white text-slate-600"}`}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) => setProfitAlertRules((prev) => prev.map((item) => {
+                                if (item.id !== rule.id) return item;
+                                const currentChannels = item.channels || [];
+                                const nextChannels = event.target.checked
+                                  ? Array.from(new Set([...currentChannels, channel]))
+                                  : currentChannels.filter((value) => value !== channel);
+                                return { ...item, channels: nextChannels };
+                              }))}
+                            />
+                            {channel}
+                          </label>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => setProfitAlertRules((prev) => prev.map((item) => item.id === rule.id ? { ...item, channels: [] } : item))}
+                        className={`rounded-lg border px-2.5 py-1.5 text-xs font-extrabold ${(rule.channels || []).length === 0 ? "border-slate-500 bg-slate-800 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                      >
+                        전체 채널
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-3">
@@ -7009,7 +7060,7 @@ function MobileDashboard({
 
     currentRows.forEach((row) => {
       const store = storesByCode.get(row.storeCode);
-      const manager = store?.manager || row.manager || "미지정";
+      const manager = row.manager || store?.manager || "미지정";
       const item = managerMap.get(manager) || { sales: 0, est: 0 };
       item.sales += Number(row.salesAmount || 0);
       managerMap.set(manager, item);
@@ -7191,7 +7242,7 @@ function MobileSalesStatus({
       const item = map.get(key) || {
         code: row.storeCode,
         name: row.storeName,
-        manager: store?.manager || row.manager || "미지정",
+        manager: row.manager || store?.manager || "미지정",
         channel: store?.storeType || row.storeType || "-",
         fullMonthSales: 0,
         currentSales: 0,
@@ -9422,13 +9473,13 @@ function Dashboard({
 
   const storeTypeOf = (row: SalesRecord) => {
     const master = storesByCode.get(row.storeCode);
-    return normalizeStoreType(master?.storeType || row.storeType, master?.channel || row.channel) === "매장"
+    return normalizeStoreType(row.storeType || master?.storeType, row.channel || master?.channel) === "매장"
       ? "매장"
       : "비매장";
   };
   const managerOf = (row: SalesRecord) => {
     const master = storesByCode.get(row.storeCode);
-    return norm(master?.manager || row.manager).trim().toUpperCase() || "미지정";
+    return norm(row.manager || master?.manager).trim().toUpperCase() || "미지정";
   };
   const brandOf = (row: SalesRecord) => {
     const master = storesByCode.get(row.storeCode);
@@ -9595,8 +9646,8 @@ function Dashboard({
       const existing = grouped.get(row.storeCode) || {
         storeCode: row.storeCode,
         storeName: master?.name || row.storeName || row.storeCode,
-        manager: norm(master?.manager || row.manager).trim().toUpperCase() || "미지정",
-        storeType: normalizeStoreType(master?.storeType || row.storeType, master?.channel || row.channel) === "매장" ? "매장" : "비매장",
+        manager: norm(row.manager || master?.manager).trim().toUpperCase() || "미지정",
+        storeType: normalizeStoreType(row.storeType || master?.storeType, row.channel || master?.channel) === "매장" ? "매장" : "비매장",
         sales: 0,
       };
       existing.sales += Number(row.salesAmount || 0);
@@ -9679,7 +9730,7 @@ function Dashboard({
                   <td className="border-b border-r border-slate-200 px-3 py-3 font-bold">{won(row.target)}</td>
                   <td className="border-b border-r border-slate-200 px-3 py-3 font-black text-blue-600">{pct(row.targetRate)}</td>
                   <td className="border-b border-r border-slate-200 px-3 py-3 font-bold">{won(row.profit)}</td>
-                  <td className={`border-b border-slate-200 px-3 py-3 font-bold ${profitAlertClass("dashboard", row.profitRate)}`}>{profitAlertPrefix("dashboard", row.profitRate)}{pct(row.profitRate)}</td>
+                  <td className={`border-b border-slate-200 px-3 py-3 font-bold ${profitAlertClass("dashboard", row.profitRate, row.type)}`}>{profitAlertPrefix("dashboard", row.profitRate, row.type)}{pct(row.profitRate)}</td>
                 </tr>
               ))}
               <tr className="bg-slate-50">
@@ -11163,8 +11214,8 @@ function ItemAnalysis({
                         <td className="border border-gray-300 p-2 text-right">
                           {won(r.profitAmount)}
                         </td>
-                        <td className={`border border-gray-300 p-2 text-right ${profitAlertClass("storeDetail", r.profitRate)}`}>
-                          {profitAlertPrefix("storeDetail", r.profitRate)}{pct(r.profitRate)}
+                        <td className={`border border-gray-300 p-2 text-right ${profitAlertClass("storeDetail", r.profitRate, r.channel)}`}>
+                          {profitAlertPrefix("storeDetail", r.profitRate, r.channel)}{pct(r.profitRate)}
                         </td>
                       </tr>
                     ))}
@@ -11508,9 +11559,9 @@ function ItemShipmentAnalysis({
       if (!map.has(key)) {
         map.set(key, {
           storeCode: row.storeCode || "-",
-          storeName: store?.name || row.storeName || "미지정",
-          manager: store?.manager || row.manager || "미지정",
-          channel: store?.channel || row.channel || "미지정",
+          storeName: row.storeName || store?.name || "미지정",
+          manager: row.manager || store?.manager || "미지정",
+          channel: row.channel || store?.channel || "미지정",
           currentSalePricePoints: [],
           prevMonthSalePricePoints: [],
           currentCostPricePoints: [],
@@ -13367,8 +13418,8 @@ function SalesStatus({
                         <TdCompact right amount>
                           {won(r.profitAmount)}
                         </TdCompact>
-                        <TdCompact right amount color={profitAlertClass("salesStatus", r.profitRate)}>
-                          {profitAlertPrefix("salesStatus", r.profitRate)}{pct(r.profitRate)}
+                        <TdCompact right amount color={profitAlertClass("salesStatus", r.profitRate, r.channel)}>
+                          {profitAlertPrefix("salesStatus", r.profitRate, r.channel)}{pct(r.profitRate)}
                         </TdCompact>
                       </tr>
                       {false &&
@@ -14385,7 +14436,7 @@ function OrderDrillModal({
                     <td className="border border-gray-300 px-2 py-2 text-right">{won(r.costUnitPrice)}</td>
                     <td className="border border-gray-300 px-2 py-2 text-right">{won(r.costAmount)}</td>
                     <td className="border border-gray-300 px-2 py-2 text-right font-semibold">{won(r.profitAmount)}</td>
-                    <td className={`border border-gray-300 px-2 py-2 text-right ${profitAlertClass("itemAnalysis", r.profitRate)}`}>{profitAlertPrefix("itemAnalysis", r.profitRate)}{pct(r.profitRate)}</td>
+                    <td className={`border border-gray-300 px-2 py-2 text-right ${profitAlertClass("itemAnalysis", r.profitRate, r.channel)}`}>{profitAlertPrefix("itemAnalysis", r.profitRate, r.channel)}{pct(r.profitRate)}</td>
                     <td className="border border-gray-300 px-2 py-2" title={r.remark || ""}>{r.remark || ""}</td>
                   </tr>
                 ))
@@ -15361,9 +15412,9 @@ function StoreListManagement({
       const previous = map.get(key) || {
         code: row.storeCode || "-",
         name: row.storeName || row.storeCode || "미지정",
-        channel: saved?.channel || row.channel || "미지정",
-        manager: saved?.manager || row.manager || "",
-        storeType: saved?.storeType || row.storeType || "비매장",
+        channel: row.channel || saved?.channel || "미지정",
+        manager: row.manager || saved?.manager || "",
+        storeType: row.storeType || saved?.storeType || "비매장",
         brand: displayBrand(saved?.brand || row.brand),
         amount: 0,
       };
@@ -15528,9 +15579,9 @@ function StoreListManagement({
       map.set(row.code, {
         code: row.code,
         name: row.name,
-        channel: saved?.channel || row.channel || "미지정",
-        manager: saved?.manager || row.manager || "",
-        storeType: saved?.storeType || row.storeType || "비매장",
+        channel: row.channel || saved?.channel || "미지정",
+        manager: row.manager || saved?.manager || "",
+        storeType: row.storeType || saved?.storeType || "비매장",
         brand: displayBrand(saved?.brand || row.brand),
         status: "거래중",
       });
@@ -15544,9 +15595,9 @@ function StoreListManagement({
       map.set(targetCode, {
         code: targetCode,
         name: targetName,
-        channel: saved?.channel || row.channel || "미지정",
-        manager: saved?.manager || row.manager || "",
-        storeType: saved?.storeType || row.storeType || "비매장",
+        channel: row.channel || saved?.channel || "미지정",
+        manager: row.manager || saved?.manager || "",
+        storeType: row.storeType || saved?.storeType || "비매장",
         brand: displayBrand(saved?.brand || row.brand),
         status: "거래종료",
       });
