@@ -3699,8 +3699,10 @@ function makeSale(
     refMonth,
     saleDate,
     storeCode,
-    storeName: s?.name || storeName || storeCode,
-    channel: s?.channel || uploadedStoreType || "매장",
+    // 일별이익현황 업로드값을 거래처명/담당자/채널의 최신 원본으로 사용합니다.
+    // 브랜드/거래상태는 관리자 기준정보를 유지합니다.
+    storeName: storeName || s?.name || storeCode,
+    channel: uploadedStoreType || s?.channel || "매장",
     manager: uploadedManager || s?.manager || "",
     storeType: uploadedStoreType || s?.storeType || "매장",
     brand: displayBrand(s?.brand),
@@ -17384,27 +17386,48 @@ function UploadPage({
       return;
     }
 
-    const parsedStoreInfo = new Map<string, { manager: Manager; storeType: StoreType; name: string }>();
+    // 일별이익현황에 있는 거래처 기본값을 거래처 코드별 최신 기준으로 반영합니다.
+    // 같은 파일 안에서 동일 거래처가 여러 행이면 마지막으로 읽힌 값을 사용합니다.
+    // 브랜드와 거래상태는 일별이익현황에 없는 관리 항목이므로 기존 값을 유지합니다.
+    const parsedStoreInfo = new Map<string, {
+      manager: Manager;
+      channel: Channel;
+      storeType: StoreType;
+      name: string;
+    }>();
     parsed.forEach((row) => {
       if (!row.storeCode) return;
-      parsedStoreInfo.set(row.storeCode, { manager: row.manager, storeType: row.storeType, name: row.storeName });
+      parsedStoreInfo.set(row.storeCode, {
+        manager: row.manager,
+        channel: row.channel || row.storeType,
+        storeType: row.storeType,
+        name: row.storeName,
+      });
     });
     const storeByCode = new Map(stores.map((store) => [store.code, store]));
     parsedStoreInfo.forEach((info, code) => {
       const existing = storeByCode.get(code);
+      const nextChannel = info.channel === "매장" || info.channel === "비매장"
+        ? info.channel
+        : info.storeType || existing?.channel || "비매장";
+      const nextStoreType = normalizeStoreType(info.storeType, nextChannel);
       if (existing) {
         storeByCode.set(code, {
           ...existing,
+          // 아래 4개 값은 일별이익현황을 기준 원본으로 사용합니다.
+          name: info.name || existing.name,
           manager: info.manager || existing.manager,
-          storeType: info.storeType || existing.storeType,
+          channel: nextChannel,
+          storeType: nextStoreType,
+          // brand/status는 기존 관리자 설정을 그대로 보존합니다.
         });
       } else {
         storeByCode.set(code, {
           code,
           name: info.name || code,
-          channel: (info.storeType || "매장") as Channel,
+          channel: nextChannel,
           manager: info.manager || "",
-          storeType: info.storeType || "매장",
+          storeType: nextStoreType,
           brand: info.name || code,
           status: "거래중",
         });
