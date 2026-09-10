@@ -4993,6 +4993,94 @@ export default function SalesReportClient() {
     salesRefreshRef.current = salesActions.refresh;
   }, [salesActions.refresh]);
 
+  // 현재 업로드되어 있는 일별이익현황의 최신 담당자/채널을 거래처 공통 기준값으로 승격합니다.
+  // 과거(전월/전년동월) 매출 행 자체를 다시 저장하지 않고, 화면에서 거래처 코드를 기준으로
+  // 이 최신 마스터를 우선 참조하게 하므로 과거 파일을 재업로드할 필요가 없습니다.
+  useEffect(() => {
+    const latestByCode = new Map<string, {
+      name: string;
+      manager: string;
+      channel: string;
+      storeType: string;
+      brand: string;
+    }>();
+
+    sales
+      .filter((row) => row.period === "current" && row.saleDate.slice(0, 7) === thisMonth() && Boolean(norm(row.storeCode)))
+      .slice()
+      .sort((a, b) => String(a.saleDate || "").localeCompare(String(b.saleDate || "")))
+      .forEach((row) => {
+        const code = norm(row.storeCode);
+        const previous = latestByCode.get(code) || {
+          name: "",
+          manager: "",
+          channel: "",
+          storeType: "",
+          brand: "",
+        };
+        const manager = norm(row.manager).trim().toUpperCase();
+        const rowChannel = norm(row.channel).trim();
+        const rowStoreType = norm(row.storeType).trim();
+        const resolvedChannel =
+          rowStoreType === "매장" || rowStoreType === "비매장"
+            ? rowStoreType
+            : rowChannel === "매장" || rowChannel === "비매장"
+              ? rowChannel
+              : "";
+
+        latestByCode.set(code, {
+          name: norm(row.storeName) || previous.name,
+          manager: manager && manager !== "미지정" ? manager : previous.manager,
+          channel: resolvedChannel || previous.channel,
+          storeType: resolvedChannel || previous.storeType,
+          brand: norm(row.brand) || previous.brand,
+        });
+      });
+
+    if (!latestByCode.size) return;
+
+    const existingByCode = new Map(stores.map((store) => [norm(store.code), store]));
+    let changed = false;
+    const nextStores = stores.map((store) => {
+      const latest = latestByCode.get(norm(store.code));
+      if (!latest) return store;
+
+      const nextManager = latest.manager || store.manager;
+      const nextChannel = latest.channel || store.channel;
+      const nextStoreType = latest.storeType || store.storeType;
+      if (
+        nextManager === store.manager &&
+        nextChannel === store.channel &&
+        nextStoreType === store.storeType
+      ) return store;
+
+      changed = true;
+      return {
+        ...store,
+        manager: nextManager,
+        channel: nextChannel,
+        storeType: nextStoreType,
+      };
+    });
+
+    latestByCode.forEach((latest, code) => {
+      if (existingByCode.has(code)) return;
+      if (!latest.manager && !latest.channel) return;
+      changed = true;
+      nextStores.push({
+        code,
+        name: latest.name || code,
+        manager: latest.manager || "",
+        channel: latest.channel || "비매장",
+        storeType: latest.storeType || latest.channel || "비매장",
+        brand: displayBrand(latest.brand || latest.name || code),
+        status: "거래중",
+      });
+    });
+
+    if (changed) setStores(nextStores);
+  }, [sales, stores]);
+
   async function requestLatestEcountSync() {
     if (ecountSyncRequesting || ecountSyncBusy(ecountSyncState)) return;
 
@@ -7060,7 +7148,7 @@ function MobileDashboard({
 
     currentRows.forEach((row) => {
       const store = storesByCode.get(row.storeCode);
-      const manager = row.manager || store?.manager || "미지정";
+      const manager = store?.manager || row.manager || "미지정";
       const item = managerMap.get(manager) || { sales: 0, est: 0 };
       item.sales += Number(row.salesAmount || 0);
       managerMap.set(manager, item);
@@ -7242,7 +7330,7 @@ function MobileSalesStatus({
       const item = map.get(key) || {
         code: row.storeCode,
         name: row.storeName,
-        manager: row.manager || store?.manager || "미지정",
+        manager: store?.manager || row.manager || "미지정",
         channel: store?.storeType || row.storeType || "-",
         fullMonthSales: 0,
         currentSales: 0,
@@ -9473,13 +9561,13 @@ function Dashboard({
 
   const storeTypeOf = (row: SalesRecord) => {
     const master = storesByCode.get(row.storeCode);
-    return normalizeStoreType(row.storeType || master?.storeType, row.channel || master?.channel) === "매장"
+    return normalizeStoreType(master?.storeType || row.storeType, master?.channel || row.channel) === "매장"
       ? "매장"
       : "비매장";
   };
   const managerOf = (row: SalesRecord) => {
     const master = storesByCode.get(row.storeCode);
-    return norm(row.manager || master?.manager).trim().toUpperCase() || "미지정";
+    return norm(master?.manager || row.manager).trim().toUpperCase() || "미지정";
   };
   const brandOf = (row: SalesRecord) => {
     const master = storesByCode.get(row.storeCode);
@@ -11572,8 +11660,8 @@ function ItemShipmentAnalysis({
         map.set(key, {
           storeCode: row.storeCode || "-",
           storeName: row.storeName || store?.name || "미지정",
-          manager: row.manager || store?.manager || "미지정",
-          channel: row.channel || store?.channel || "미지정",
+          manager: store?.manager || row.manager || "미지정",
+          channel: store?.channel || row.channel || "미지정",
           currentSalePricePoints: [],
           prevMonthSalePricePoints: [],
           currentCostPricePoints: [],
@@ -15424,9 +15512,9 @@ function StoreListManagement({
       const previous = map.get(key) || {
         code: row.storeCode || "-",
         name: row.storeName || row.storeCode || "미지정",
-        channel: row.channel || saved?.channel || "미지정",
-        manager: row.manager || saved?.manager || "",
-        storeType: row.storeType || saved?.storeType || "비매장",
+        channel: saved?.channel || row.channel || "미지정",
+        manager: saved?.manager || row.manager || "",
+        storeType: saved?.storeType || row.storeType || "비매장",
         brand: displayBrand(saved?.brand || row.brand),
         amount: 0,
       };
@@ -15591,9 +15679,9 @@ function StoreListManagement({
       map.set(row.code, {
         code: row.code,
         name: row.name,
-        channel: row.channel || saved?.channel || "미지정",
-        manager: row.manager || saved?.manager || "",
-        storeType: row.storeType || saved?.storeType || "비매장",
+        channel: saved?.channel || row.channel || "미지정",
+        manager: saved?.manager || row.manager || "",
+        storeType: saved?.storeType || row.storeType || "비매장",
         brand: displayBrand(saved?.brand || row.brand),
         status: "거래중",
       });
@@ -15607,9 +15695,9 @@ function StoreListManagement({
       map.set(targetCode, {
         code: targetCode,
         name: targetName,
-        channel: row.channel || saved?.channel || "미지정",
-        manager: row.manager || saved?.manager || "",
-        storeType: row.storeType || saved?.storeType || "비매장",
+        channel: saved?.channel || row.channel || "미지정",
+        manager: saved?.manager || row.manager || "",
+        storeType: saved?.storeType || row.storeType || "비매장",
         brand: displayBrand(saved?.brand || row.brand),
         status: "거래종료",
       });
